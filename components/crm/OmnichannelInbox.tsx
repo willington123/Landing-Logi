@@ -624,44 +624,44 @@ export default function OmnichannelInbox({
     switch (status) {
       case 'confirmed_by_voice':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
             <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Confirmado por voz
           </span>
         );
       case 'calling':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
             <PhoneCall className="w-3 h-3 text-indigo-600 animate-pulse" /> En llamada
           </span>
         );
       case 'pending_call':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
             <Clock className="w-3 h-3 text-amber-600" /> Pendiente llamada
           </span>
         );
       case 'shipped':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800 border border-sky-200">
             <Package className="w-3 h-3 text-sky-600" /> En camino
           </span>
         );
       case 'delivered':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200">
             <Check className="w-3 h-3 text-green-600" /> Entregado
           </span>
         );
       case 'unanswered':
       case 'retry_scheduled':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-100 text-orange-800 border border-orange-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-200">
             <RotateCcw className="w-3 h-3 text-orange-600" /> Reintento en cola
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
             {status}
           </span>
         );
@@ -697,7 +697,7 @@ export default function OmnichannelInbox({
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-[#FF252B] border border-red-200">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-[#FF252B] border border-red-200">
                 Live Sync
               </span>
             </div>
@@ -727,7 +727,7 @@ export default function OmnichannelInbox({
 
           {/* Channels Filter Tabs */}
           <div className="px-3 py-2 border-b border-slate-100">
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-xs [&>button]:shrink-0">
               <button
                 onClick={() => setSelectedChannel('all')}
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
@@ -737,7 +737,7 @@ export default function OmnichannelInbox({
                 }`}
               >
                 <span>Todos</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
                   selectedChannel === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                 }`}>
                   {channelCounts.all}
@@ -754,7 +754,7 @@ export default function OmnichannelInbox({
               >
                 <WhatsAppIcon className="w-3.5 h-3.5" />
                 <span>WhatsApp</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
                   selectedChannel === 'whatsapp' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
                 }`}>
                   {channelCounts.whatsapp}
@@ -800,14 +800,14 @@ export default function OmnichannelInbox({
           </div>
 
           {/* Subfilters: Status & Agent */}
-          <div className="px-3 py-2 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs">
+          <div className="px-3 py-2 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
             {/* Status Tabs */}
             <div className="flex items-center gap-1">
               {(['all', 'open', 'pending', 'resolved'] as const).map((st) => (
                 <button
                   key={st}
                   onClick={() => setSelectedStatus(st)}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold capitalize transition ${
+                  className={`px-2 py-1 rounded text-xs font-semibold capitalize transition ${
                     selectedStatus === st
                       ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
                       : 'text-slate-500 hover:text-slate-800'
@@ -829,7 +829,7 @@ export default function OmnichannelInbox({
               <select
                 value={selectedAgentFilter}
                 onChange={(e) => setSelectedAgentFilter(e.target.value)}
-                className="text-[11px] bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 font-medium focus:outline-none focus:border-[#FF252B]"
+                className="text-xs bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 font-medium focus:outline-none focus:border-[#FF252B]"
               >
                 <option value="all">Todos los agentes</option>
                 {AVAILABLE_AGENTS.map((agent) => (
@@ -847,7 +847,7 @@ export default function OmnichannelInbox({
               <div className="p-8 text-center text-slate-400">
                 <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-xs font-semibold text-slate-600">No se encontraron conversaciones</p>
-                <p className="text-[11px] mt-1 text-slate-400">Prueba ajustando los filtros o la búsqueda</p>
+                <p className="text-xs mt-1 text-slate-400">Prueba ajustando los filtros o la búsqueda</p>
               </div>
             ) : (
               filteredConversations.map((conv) => {
@@ -887,7 +887,7 @@ export default function OmnichannelInbox({
                         }`}>
                           {conv.contactName}
                         </h4>
-                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                        <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
                           {conv.lastMessageAt}
                         </span>
                       </div>
@@ -908,18 +908,18 @@ export default function OmnichannelInbox({
                       <div className="flex items-center justify-between gap-2 mt-1">
                         <div className="flex items-center gap-1.5 flex-wrap truncate">
                           {conv.assignedAgent.includes('IA') ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
                               <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
                               IA
                             </span>
                           ) : (
-                            <span className="text-[10px] font-medium text-slate-500 truncate max-w-[90px]">
+                            <span className="text-[11px] font-medium text-slate-500 truncate max-w-[90px]">
                               {conv.assignedAgent.split(' ')[0]}
                             </span>
                           )}
 
                           {conv.tags && conv.tags[0] && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 truncate max-w-[85px]">
+                            <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 truncate max-w-[85px]">
                               {conv.tags[0]}
                             </span>
                           )}
@@ -928,11 +928,11 @@ export default function OmnichannelInbox({
                         {/* Status / Unread Badge */}
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {conv.status === 'resolved' ? (
-                            <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+                            <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-0.5">
                               <CheckCircle2 className="w-3 h-3" />
                             </span>
                           ) : conv.unreadCount > 0 ? (
-                            <span className="w-4 h-4 rounded-full bg-[#FF252B] text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                            <span className="w-4 h-4 rounded-full bg-[#FF252B] text-white text-[11px] font-bold flex items-center justify-center animate-pulse">
                               {conv.unreadCount}
                             </span>
                           ) : null}
@@ -975,7 +975,7 @@ export default function OmnichannelInbox({
                         {(() => {
                           const pill = getChannelPillInfo(activeConversation.channel);
                           return (
-                            <div className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${pill.bg}`}>
+                            <div className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${pill.bg}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${pill.dot} animate-pulse`} />
                               <span>{pill.label}</span>
                             </div>
@@ -1046,7 +1046,7 @@ export default function OmnichannelInbox({
                       onClick={() => setIsDossierOpen(!isDossierOpen)}
                       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition shadow-xs ${
                         isDossierOpen
-                          ? 'bg-brand-navy text-white border-brand-navy'
+                          ? 'bg-slate-900 text-white border-brand-navy'
                           : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                       title={isDossierOpen ? 'Ocultar expediente 360°' : 'Ver expediente 360°'}
@@ -1063,7 +1063,7 @@ export default function OmnichannelInbox({
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                 {/* Channel banner info */}
                 <div className="text-center my-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-xs">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-xs">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                     Conversación cifrada de extremo a extremo vía {activeConversation.channel.toUpperCase()} Oficial
                   </span>
@@ -1073,7 +1073,7 @@ export default function OmnichannelInbox({
                   <div className="py-12 text-center text-slate-400">
                     <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-30 text-slate-500" />
                     <p className="text-xs font-medium">No hay mensajes previos en esta conversación.</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       Envía un mensaje o plantilla de WhatsApp para iniciar.
                     </p>
                   </div>
@@ -1091,7 +1091,7 @@ export default function OmnichannelInbox({
                               <Lock className="w-3.5 h-3.5 text-amber-600" />
                               Nota Interna del Equipo (Solo visible para asesores)
                             </span>
-                            <span className="text-[10px] text-amber-600 font-normal">
+                            <span className="text-[11px] text-amber-600 font-normal">
                               {msg.senderName} • {msg.timestamp}
                             </span>
                           </div>
@@ -1105,11 +1105,11 @@ export default function OmnichannelInbox({
                       return (
                         <div key={msg.id} className="flex flex-col items-start max-w-lg">
                           <div className="flex items-center gap-1.5 mb-1 px-1">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
                               <Sparkles className="w-3 h-3 text-indigo-500" />
                               Valentina IA Bot (Automático)
                             </span>
-                            <span className="text-[10px] text-slate-400">{msg.timestamp}</span>
+                            <span className="text-[11px] text-slate-400">{msg.timestamp}</span>
                           </div>
                           <div className="bg-white border border-indigo-200 text-slate-800 p-3.5 rounded-2xl rounded-tl-sm shadow-xs text-xs whitespace-pre-wrap leading-relaxed">
                             {msg.text}
@@ -1123,13 +1123,13 @@ export default function OmnichannelInbox({
                       return (
                         <div key={msg.id} className="flex flex-col items-end ml-auto max-w-lg">
                           <div className="flex items-center gap-1.5 mb-1 px-1">
-                            <span className="text-[10px] font-semibold text-slate-600">{msg.senderName}</span>
-                            <span className="text-[10px] text-slate-400">{msg.timestamp}</span>
+                            <span className="text-[11px] font-semibold text-slate-600">{msg.senderName}</span>
+                            <span className="text-[11px] text-slate-400">{msg.timestamp}</span>
                           </div>
-                          <div className="bg-[#172C8A] text-white p-3.5 rounded-2xl rounded-tr-sm shadow-sm text-xs whitespace-pre-wrap leading-relaxed">
+                          <div className="bg-slate-900 text-white p-3.5 rounded-2xl rounded-tr-sm shadow-sm text-xs whitespace-pre-wrap leading-relaxed">
                             {msg.text}
                           </div>
-                          <div className="flex items-center gap-1 mt-1 pr-1 text-[10px] text-slate-400">
+                          <div className="flex items-center gap-1 mt-1 pr-1 text-[11px] text-slate-400">
                             <span>Entregado</span>
                             <CheckCheck className="w-3 h-3 text-emerald-600" />
                           </div>
@@ -1141,8 +1141,8 @@ export default function OmnichannelInbox({
                     return (
                       <div key={msg.id} className="flex flex-col items-start max-w-lg">
                         <div className="flex items-center gap-1.5 mb-1 px-1">
-                          <span className="text-[10px] font-bold text-slate-800">{msg.senderName}</span>
-                          <span className="text-[10px] text-slate-400">{msg.timestamp}</span>
+                          <span className="text-[11px] font-bold text-slate-800">{msg.senderName}</span>
+                          <span className="text-[11px] text-slate-400">{msg.timestamp}</span>
                         </div>
                         <div className="bg-white border border-slate-200/90 text-slate-900 p-3.5 rounded-2xl rounded-tl-sm shadow-xs text-xs whitespace-pre-wrap leading-relaxed">
                           {msg.text}
@@ -1165,7 +1165,7 @@ export default function OmnichannelInbox({
                     </span>
                     <button
                       onClick={() => setIsInternalNoteMode(false)}
-                      className="text-amber-700 hover:text-amber-900 underline text-[11px]"
+                      className="text-amber-700 hover:text-amber-900 underline text-xs"
                     >
                       Desactivar
                     </button>
@@ -1221,14 +1221,14 @@ export default function OmnichannelInbox({
                               >
                                 <div className="flex items-center justify-between">
                                   <span className="font-bold text-[#FF252B]">{qr.code}</span>
-                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
                                     {qr.category}
                                   </span>
                                 </div>
-                                <span className="font-medium text-slate-700 text-[11px] truncate">
+                                <span className="font-medium text-slate-700 text-xs truncate">
                                   {qr.label}
                                 </span>
-                                <span className="text-slate-400 text-[10px] line-clamp-1">
+                                <span className="text-slate-400 text-[11px] line-clamp-1">
                                   {qr.text}
                                 </span>
                               </button>
@@ -1249,7 +1249,7 @@ export default function OmnichannelInbox({
                     </button>
                   </div>
 
-                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  <span className="text-xs text-slate-400 hidden sm:inline">
                     Enter para enviar • Shift+Enter nueva línea
                   </span>
                 </div>
@@ -1327,7 +1327,7 @@ export default function OmnichannelInbox({
                     <X className="w-4 h-4" />
                   </button>
                   <div className="relative inline-block mb-2">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#172C8A] via-[#FF5A16] to-[#FF252B] text-white font-black text-lg flex items-center justify-center shadow-md mx-auto">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#172C8A] via-[#FF5A16] to-[#FF252B] text-white font-bold text-lg flex items-center justify-center shadow-md mx-auto">
                       {activeContact.name.substring(0, 2).toUpperCase()}
                     </div>
                     <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full border border-slate-200 shadow-xs">
@@ -1375,18 +1375,18 @@ export default function OmnichannelInbox({
                 {/* Key Metrics Cards */}
                 <div className="grid grid-cols-2 gap-2 mt-4 text-left">
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-bold text-slate-400 block">
                       LTV Total Comprado
                     </span>
-                    <span className="text-xs font-extrabold text-[#172C8A] mt-0.5 block">
+                    <span className="text-xs font-bold text-[#172C8A] mt-0.5 block">
                       ${activeContact.lifetimeValue.toLocaleString()} COP
                     </span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-bold text-slate-400 block">
                       Historial Pedidos
                     </span>
-                    <span className="text-xs font-extrabold text-slate-800 mt-0.5 block">
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">
                       {activeContact.ordersCount} pedido(s)
                     </span>
                   </div>
@@ -1396,12 +1396,12 @@ export default function OmnichannelInbox({
               {/* Linked Orders Section */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <ShoppingBag className="w-3.5 h-3.5 text-[#FF252B]" />
                     Pedido Vinculado
                   </h4>
                   {linkedOrder && (
-                    <span className="text-[10px] font-bold text-slate-500 font-mono">
+                    <span className="text-[11px] font-bold text-slate-500 font-mono">
                       #{linkedOrder.orderNumber}
                     </span>
                   )}
@@ -1414,21 +1414,21 @@ export default function OmnichannelInbox({
                         <span className="font-bold text-slate-900 block">
                           {linkedOrder.productName}
                         </span>
-                        <span className="text-slate-500 text-[11px]">
+                        <span className="text-slate-500 text-xs">
                           {linkedOrder.comboName} ({linkedOrder.units} un.)
                         </span>
                       </div>
-                      <span className="font-extrabold text-[#FF252B] whitespace-nowrap">
+                      <span className="font-bold text-[#FF252B] whitespace-nowrap">
                         ${linkedOrder.totalAmount.toLocaleString()}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px]">
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs">
                       <span className="text-slate-500">Estado de Envío:</span>
                       {renderOrderStatusBadge(linkedOrder.status)}
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200/60">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-white p-2 rounded-lg border border-slate-200/60">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       <span className="truncate">
                         {linkedOrder.address}, {linkedOrder.city}
@@ -1438,7 +1438,7 @@ export default function OmnichannelInbox({
                     {onSelectOrder && (
                       <button
                         onClick={() => onSelectOrder(linkedOrder.id)}
-                        className="w-full text-center py-1.5 rounded-lg text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition"
+                        className="w-full text-center py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition"
                       >
                         Ver Detalle del Pedido →
                       </button>
@@ -1454,13 +1454,13 @@ export default function OmnichannelInbox({
               {/* Voice AI Call History Section */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <Headphones className="w-3.5 h-3.5 text-indigo-600" />
                     Llamadas de Valentina IA
                   </h4>
                   <button
                     onClick={() => handleOpenSimulator(linkedVoiceCalls[0] || null)}
-                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline"
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline"
                   >
                     Simular
                   </button>
@@ -1478,12 +1478,12 @@ export default function OmnichannelInbox({
                             <PhoneCall className="w-3 h-3 text-indigo-600" />
                             Llamada Saliente IA
                           </span>
-                          <span className="text-[10px] font-semibold text-slate-500">
+                          <span className="text-[11px] font-semibold text-slate-500">
                             {call.durationSeconds > 0 ? `${call.durationSeconds}s` : 'Sin duración'}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center justify-between text-xs">
                           <span className="text-slate-500">
                             Intentos: {call.attempts}/{call.maxAttempts}
                           </span>
@@ -1491,7 +1491,7 @@ export default function OmnichannelInbox({
                         </div>
 
                         {call.structuredResult?.customerSentiment && (
-                          <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-indigo-100/60 flex items-center justify-between">
+                          <div className="text-[11px] text-slate-600 bg-white p-1.5 rounded border border-indigo-100/60 flex items-center justify-between">
                             <span>Sentimiento:</span>
                             <span className="font-bold text-emerald-700 capitalize">
                               {call.structuredResult.customerSentiment}
@@ -1501,7 +1501,7 @@ export default function OmnichannelInbox({
 
                         <button
                           onClick={() => setViewTranscriptCall(call)}
-                          className="w-full text-center py-1 rounded bg-white hover:bg-indigo-100/60 text-indigo-700 font-bold text-[10px] transition border border-indigo-200"
+                          className="w-full text-center py-1 rounded bg-white hover:bg-indigo-100/60 text-indigo-700 font-bold text-[11px] transition border border-indigo-200"
                         >
                           Ver Transcripción Completa ({call.transcript?.length || 0} mensajes)
                         </button>
@@ -1513,7 +1513,7 @@ export default function OmnichannelInbox({
                     <p>No se registran llamadas con IA aún.</p>
                     <button
                       onClick={() => handleOpenSimulator(null)}
-                      className="mt-2 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-[11px] transition inline-flex items-center gap-1"
+                      className="mt-2 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-xs transition inline-flex items-center gap-1"
                     >
                       <Sparkles className="w-3 h-3 text-indigo-600" />
                       Disparar Prueba con Valentina
@@ -1525,13 +1525,13 @@ export default function OmnichannelInbox({
               {/* Tags Manager Section */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-2.5">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <Tag className="w-3.5 h-3.5 text-slate-600" />
                     Etiquetas del Cliente
                   </h4>
                   <button
                     onClick={() => setIsAddingTag(!isAddingTag)}
-                    className="text-[11px] font-bold text-[#FF252B] hover:opacity-80 flex items-center gap-0.5"
+                    className="text-xs font-bold text-[#FF252B] hover:opacity-80 flex items-center gap-0.5"
                   >
                     <Plus className="w-3 h-3" />
                     Nueva
@@ -1543,7 +1543,7 @@ export default function OmnichannelInbox({
                   {activeContact.tags?.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
                     >
                       <span>{tag}</span>
                       <button
@@ -1590,7 +1590,7 @@ export default function OmnichannelInbox({
                         <button
                           key={suggested}
                           onClick={() => handleAddTag(suggested)}
-                          className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/80 transition"
+                          className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/80 transition"
                         >
                           + {suggested}
                         </button>
@@ -1603,11 +1603,11 @@ export default function OmnichannelInbox({
               {/* Internal Notes Timeline Section */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-2.5">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-600" />
                     Notas Internas del Expediente
                   </h4>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[11px] text-slate-400">
                     {activeContact.internalNotes?.length || 0}
                   </span>
                 </div>
@@ -1645,7 +1645,7 @@ export default function OmnichannelInbox({
                         key={idx}
                         className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200 text-xs text-amber-950 space-y-1"
                       >
-                        <div className="flex items-center justify-between text-[10px] text-amber-700 font-semibold">
+                        <div className="flex items-center justify-between text-[11px] text-amber-700 font-semibold">
                           <span>Nota de Equipo</span>
                           <span>Hace poco</span>
                         </div>
@@ -1662,7 +1662,7 @@ export default function OmnichannelInbox({
             <div className="p-8 text-center text-slate-400">
               <User className="w-10 h-10 opacity-30 mx-auto mb-2" />
               <p className="text-xs font-semibold text-slate-600">Expediente 360°</p>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Selecciona una conversación para cargar la ficha del cliente y sus órdenes.
               </p>
             </div>
@@ -1685,7 +1685,7 @@ export default function OmnichannelInbox({
                   <WhatsAppIcon className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 className="text-[15px] font-semibold text-slate-900">
                     Plantillas Oficiales WhatsApp (Meta HSM)
                   </h3>
                   <p className="text-xs text-slate-500">
@@ -1726,11 +1726,11 @@ export default function OmnichannelInbox({
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-bold text-xs text-slate-900">{tmpl.name}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                         {tmpl.category}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mb-2">{tmpl.description}</p>
+                    <p className="text-xs text-slate-500 mb-2">{tmpl.description}</p>
 
                     {/* Preview box */}
                     <div className="p-3 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs font-mono whitespace-pre-wrap leading-relaxed">
@@ -1743,7 +1743,7 @@ export default function OmnichannelInbox({
 
             {/* Modal Footer */}
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">
+              <span className="text-xs text-slate-500">
                 Se enviará a través de Meta Cloud API al número {activeContact.phone}
               </span>
               <div className="flex items-center gap-2">
@@ -1779,7 +1779,7 @@ export default function OmnichannelInbox({
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
                 <Headphones className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <h3 className="text-[15px] font-semibold text-slate-900">
                   Transcripción de Llamada IA Valentina
                 </h3>
               </div>
@@ -1792,7 +1792,7 @@ export default function OmnichannelInbox({
             </div>
 
             <div className="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
-              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 grid grid-cols-2 gap-2 text-[11px]">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-slate-400 block">Cliente:</span>
                   <span className="font-bold text-slate-800">{viewTranscriptCall.customerName}</span>
@@ -1816,7 +1816,7 @@ export default function OmnichannelInbox({
               </div>
 
               <div className="space-y-2 mt-3">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-slate-500 block">
                   Diálogo Registrado en Tiempo Real
                 </span>
                 {viewTranscriptCall.transcript && viewTranscriptCall.transcript.length > 0 ? (
@@ -1828,10 +1828,10 @@ export default function OmnichannelInbox({
                           ? 'bg-indigo-50 border border-indigo-100 text-indigo-950 ml-4'
                           : line.speaker === 'customer'
                           ? 'bg-slate-100 border border-slate-200 text-slate-900 mr-4'
-                          : 'bg-amber-50 text-amber-800 text-[10px] text-center'
+                          : 'bg-amber-50 text-amber-800 text-[11px] text-center'
                       }`}
                     >
-                      <div className="flex items-center justify-between text-[10px] font-bold opacity-70 mb-0.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold opacity-70 mb-0.5">
                         <span>
                           {line.speaker === 'agent'
                             ? 'Valentina (Voz IA)'

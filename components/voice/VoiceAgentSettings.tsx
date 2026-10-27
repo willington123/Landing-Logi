@@ -187,7 +187,7 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
       {/* Top Banner & Main Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-[#172C8A] p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden">
         {/* Glow accent */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#FF252B]/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -197,14 +197,14 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                 Configuración del Agente de Voz IA
               </h2>
-              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
+              <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
                 {settings.isActive ? 'Activo 24/7' : 'Pausado'}
               </span>
             </div>
-            <p className="text-sm text-slate-300 mt-0.5">
+            <p className="text-sm text-slate-600 mt-0.5">
               Automatiza la confirmación telefónica de pedidos contraentrega antes de despachar.
             </p>
           </div>
@@ -214,9 +214,9 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
           <button
             type="button"
             onClick={() => setIsTestModalOpen(true)}
-            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition border border-white/15 flex items-center justify-center gap-2 shadow-sm"
+            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold text-xs transition border border-slate-200 flex items-center justify-center gap-2 shadow-sm"
           >
-            <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+            <Play className="w-4 h-4 text-emerald-600 fill-emerald-400" />
             Simular Llamada en Vivo
           </button>
 
@@ -233,23 +233,23 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
 
       {/* Success Notification Alert */}
       {savedSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 flex items-center gap-3 animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center gap-3 animate-fadeIn">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           <div className="text-sm">
-            <strong className="text-white">¡Ajustes guardados con éxito!</strong> Los parámetros
+            <strong className="text-slate-900">¡Ajustes guardados con éxito!</strong> Los parámetros
             del agente de voz y las reglas de confirmación han sido actualizadas.
           </div>
         </div>
       )}
 
       {/* Master Toggle Card */}
-      <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 flex items-center justify-between">
+      <div className="p-5 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-between">
         <div className="space-y-0.5">
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Zap className="w-4 h-4 text-[#FF5A16]" />
             Llamadas Automáticas al Crear Pedido
           </h4>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Disparar llamada de voz por IA tan pronto el cliente envía el formulario en la landing
             page.
           </p>
@@ -261,18 +261,18 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
             onChange={(e) => setSettings({ ...settings, isActive: e.target.checked })}
             className="sr-only peer"
           />
-          <div className="w-12 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#FF252B] peer-checked:to-[#FF5A16]"></div>
+          <div className="w-12 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#FF252B] peer-checked:to-[#FF5A16]"></div>
         </label>
       </div>
 
       {/* SECTION 1: Provider & Telephony Engine */}
-      <div className="p-6 rounded-3xl bg-slate-900/40 border border-white/10 space-y-6">
+      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-6">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Layers className="w-5 h-5 text-[#FF252B]" />
             1. Proveedor de Telefonía e Inteligencia de Voz
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Selecciona el motor que procesará las llamadas telefónicas hacia los clientes.
           </p>
         </div>
@@ -287,31 +287,31 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                 onClick={() => setSettings({ ...settings, provider: prov.id })}
                 className={`cursor-pointer p-4 rounded-2xl border transition-all relative flex flex-col justify-between ${
                   isSelected
-                    ? 'bg-slate-800/90 border-[#FF252B] shadow-glow-red'
-                    : 'bg-slate-900/30 border-white/10 hover:border-white/20 hover:bg-slate-900/50'
+                    ? 'bg-red-50/50 border-[#FF252B] ring-1 ring-[#FF252B]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-white'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2.5">
                       <span className="text-2xl">{prov.icon}</span>
-                      <span className="text-sm font-bold text-white">{prov.name}</span>
+                      <span className="text-[15px] font-semibold text-slate-900">{prov.name}</span>
                     </div>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                         isSelected
                           ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                          : 'bg-slate-800 text-slate-400'
+                          : 'bg-slate-50 text-slate-500'
                       }`}
                     >
                       {prov.badge}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{prov.description}</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">{prov.description}</p>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
+                <div className="mt-3 pt-2 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
                     {isSelected ? '✓ Seleccionado' : 'Hacer clic para activar'}
                   </span>
                   <div
@@ -321,7 +321,7 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                         : 'border-slate-600'
                     }`}
                   >
-                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                    {isSelected && <Check className="w-3 h-3 text-slate-900" />}
                   </div>
                 </div>
               </div>
@@ -331,15 +331,15 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
 
         {/* External Provider Credentials (if not internal simulator) */}
         {settings.provider !== 'internal_simulator' && (
-          <div className="p-4 rounded-2xl bg-slate-950/60 border border-white/10 space-y-4 animate-fadeIn">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-              <Key className="w-4 h-4 text-amber-400" />
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-4 animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <Key className="w-4 h-4 text-amber-600" />
               Credenciales de Conexión ({settings.provider.toUpperCase()}):
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
                   API Key / Secret Token
                 </label>
                 <div className="relative">
@@ -348,12 +348,12 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                     value={settings.apiKey || ''}
                     onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
                     placeholder="sk_live_..."
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
                   >
                     {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
@@ -361,7 +361,7 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
                   Agent ID / Assistant ID
                 </label>
                 <input
@@ -369,12 +369,12 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                   value={settings.agentId || ''}
                   onChange={(e) => setSettings({ ...settings, agentId: e.target.value })}
                   placeholder="asst_903820..."
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
                   Número Telefónico Saliente (Caller ID con código de país)
                 </label>
                 <input
@@ -382,9 +382,9 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                   value={settings.phoneNumber || ''}
                   onChange={(e) => setSettings({ ...settings, phoneNumber: e.target.value })}
                   placeholder="+57 601 794 8800"
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
                 />
-                <span className="text-[11px] text-slate-400 mt-1 block">
+                <span className="text-xs text-slate-500 mt-1 block">
                   El cliente verá este número en el identificador de llamadas de su celular.
                 </span>
               </div>
@@ -394,20 +394,20 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
       </div>
 
       {/* SECTION 2: Agent Identity, Language, Accent & Tone */}
-      <div className="p-6 rounded-3xl bg-slate-900/40 border border-white/10 space-y-6">
+      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-6">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Volume2 className="w-5 h-5 text-[#FF5A16]" />
             2. Identidad del Asistente, Idioma y Personalidad
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Personaliza cómo suena tu asistente para conectar culturalmente con tu audiencia.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Nombre Público del Asistente
             </label>
             <input
@@ -415,21 +415,21 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
               value={settings.name}
               onChange={(e) => setSettings({ ...settings, name: e.target.value })}
               placeholder="Valentina — Despachos LogiPages"
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             />
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-xs text-slate-500 mt-1 block">
               Se presentará al cliente diciendo: "Hola, te habla [Nombre]..."
             </span>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Código de Idioma Base
             </label>
             <select
               value={settings.language}
               onChange={(e) => setSettings({ ...settings, language: e.target.value })}
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             >
               <option value="es-CO">Español - Colombia (es-CO)</option>
               <option value="es-MX">Español - México (es-MX)</option>
@@ -441,8 +441,8 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
 
         {/* Accent Selector with Flag Badges */}
         <div>
-          <label className="block text-xs font-medium text-slate-300 mb-2 flex items-center gap-1.5">
-            <Globe className="w-4 h-4 text-blue-400" />
+          <label className="block text-xs font-medium text-slate-600 mb-2 flex items-center gap-1.5">
+            <Globe className="w-4 h-4 text-blue-600" />
             Acento Regional y Entonación
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
@@ -455,13 +455,13 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                   onClick={() => setSettings({ ...settings, accent: acc.id })}
                   className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-[#172C8A]/40 border-blue-400 text-white shadow-glow-navy'
-                      : 'bg-slate-950/50 border-white/10 text-slate-300 hover:border-white/20'
+                      ? 'bg-blue-50/60 border-blue-500 ring-1 ring-blue-500 text-slate-900'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                   }`}
                 >
                   <div className="text-2xl mb-1">{acc.flag}</div>
                   <div className="font-bold text-xs">{acc.label}</div>
-                  <div className="text-[10px] text-slate-400 mt-1 leading-tight">{acc.desc}</div>
+                  <div className="text-[11px] text-slate-500 mt-1 leading-tight">{acc.desc}</div>
                 </button>
               );
             })}
@@ -470,7 +470,7 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
 
         {/* Voice Personality / Tone Selector */}
         <div>
-          <label className="block text-xs font-medium text-slate-300 mb-2">
+          <label className="block text-xs font-medium text-slate-600 mb-2">
             Personalidad y Tono de la Conversación
           </label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -482,18 +482,18 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
                   onClick={() => setSettings({ ...settings, tone: tone.id })}
                   className={`cursor-pointer p-4 rounded-2xl border transition flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-slate-800 border-[#FF5A16] shadow-glow-orange'
-                      : 'bg-slate-950/40 border-white/10 hover:border-white/20'
+                      ? 'bg-orange-50/50 border-[#FF5A16] ring-1 ring-[#FF5A16]'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-bold text-xs text-white">{tone.title}</span>
-                      <span className="text-[9px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                      <span className="font-bold text-xs text-slate-900">{tone.title}</span>
+                      <span className="text-[10.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                         {tone.tag}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">{tone.description}</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">{tone.description}</p>
                   </div>
                   <div className="mt-3 flex items-center justify-end">
                     <div
@@ -510,14 +510,14 @@ export const VoiceAgentSettings: React.FC<VoiceAgentSettingsProps> = ({ onOpenSi
       </div>
 
       {/* SECTION 3: Interactive Prompt Script Editor */}
-      <div className="p-6 rounded-3xl bg-slate-900/40 border border-white/10 space-y-4">
+      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-400" />
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-600" />
               3. Guion Conversacional e Instrucciones del Sistema (Prompt)
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Haz clic en cualquier etiqueta dinámica para insertarla en la posición del cursor.
             </p>
           </div>
@@ -536,15 +536,15 @@ Tu objetivo es:
 6. Si dice que no lo pidió, cancelas cortésmente sin insistir.`,
               }));
             }}
-            className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 self-start sm:self-auto"
+            className="text-xs text-slate-500 hover:text-white flex items-center gap-1 self-start sm:self-auto"
           >
             <RotateCcw className="w-3 h-3" /> Restaurar Guion Estándar
           </button>
         </div>
 
         {/* Dynamic Placeholder Chips Bar */}
-        <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-2xl bg-slate-950/70 border border-white/10">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+        <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-2xl bg-white border border-slate-200">
+          <span className="text-xs font-bold text-slate-500 mr-1">
             Tags Dinámicos:
           </span>
           {PLACEHOLDER_TAGS.map((item) => (
@@ -553,10 +553,10 @@ Tu objetivo es:
               type="button"
               onClick={() => insertTagIntoScript(item.tag)}
               title={item.desc}
-              className="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-[#FF252B]/20 border border-white/10 hover:border-[#FF252B]/40 text-xs font-mono text-slate-200 hover:text-white transition flex items-center gap-1 group"
+              className="px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-[#FF252B]/20 border border-slate-200 hover:border-[#FF252B]/40 text-xs font-mono text-slate-700 hover:text-white transition flex items-center gap-1 group"
             >
               <span>{item.tag}</span>
-              <span className="text-[10px] text-slate-400 group-hover:text-slate-300">
+              <span className="text-[11px] text-slate-500 group-hover:text-slate-300">
                 ({item.desc})
               </span>
             </button>
@@ -571,22 +571,22 @@ Tu objetivo es:
             value={settings.promptScript}
             onChange={(e) => setSettings({ ...settings, promptScript: e.target.value })}
             placeholder="Escribe aquí las instrucciones del agente de voz..."
-            className="w-full bg-slate-950/80 border border-white/10 rounded-2xl p-4 text-xs font-mono leading-relaxed text-slate-100 focus:outline-none focus:border-[#FF252B] selection:bg-[#FF252B]/40"
+            className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs font-mono leading-relaxed text-slate-800 focus:outline-none focus:border-[#FF252B] selection:bg-[#FF252B]/40"
           />
-          <div className="absolute right-3 bottom-3 text-[10px] text-slate-400 bg-slate-900/90 px-2 py-0.5 rounded border border-white/10">
+          <div className="absolute right-3 bottom-3 text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
             {settings.promptScript.length} caracteres
           </div>
         </div>
       </div>
 
       {/* SECTION 4: Horarios Operativos y Políticas de Reintento */}
-      <div className="p-6 rounded-3xl bg-slate-900/40 border border-white/10 space-y-6">
+      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-6">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Clock className="w-5 h-5 text-emerald-400" />
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-emerald-600" />
             4. Ventana de Horario Permitido y Políticas de Llamada
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Evita molestar a tus clientes en horarios nocturnos cumpliendo las buenas prácticas de eCommerce.
           </p>
         </div>
@@ -595,8 +595,8 @@ Tu objetivo es:
         <div
           className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
             isOperating
-              ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
-              : 'bg-amber-950/40 border-amber-500/30 text-amber-300'
+              ? 'bg-emerald-950/40 border-emerald-200 text-emerald-700'
+              : 'bg-amber-950/40 border-amber-200 text-amber-700'
           }`}
         >
           <div className="flex items-center gap-3">
@@ -611,7 +611,7 @@ Tu objetivo es:
                   ? '🟢 En horario permitido para llamadas'
                   : '🟡 Fuera de horario comercial'}
               </div>
-              <div className="text-xs text-slate-300 mt-0.5">
+              <div className="text-xs text-slate-600 mt-0.5">
                 Hora actual del sistema: <strong>{currentTimeStr || '00:00'}</strong>.
                 {isOperating
                   ? ' Las llamadas se despachan inmediatamente al registrarse órdenes.'
@@ -619,44 +619,44 @@ Tu objetivo es:
               </div>
             </div>
           </div>
-          <span className="text-xs font-mono px-3 py-1 rounded-xl bg-black/30 border border-white/10 self-start sm:self-auto">
+          <span className="text-xs font-mono px-3 py-1 rounded-xl bg-slate-100 border border-slate-200 self-start sm:self-auto">
             {settings.allowedHoursStart} - {settings.allowedHoursEnd}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Hora Inicio Permitida
             </label>
             <input
               type="time"
               value={settings.allowedHoursStart}
               onChange={(e) => setSettings({ ...settings, allowedHoursStart: e.target.value })}
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Hora Límite Nocturna
             </label>
             <input
               type="time"
               value={settings.allowedHoursEnd}
               onChange={(e) => setSettings({ ...settings, allowedHoursEnd: e.target.value })}
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Máximo de Intentos si no contesta
             </label>
             <select
               value={settings.maxAttempts}
               onChange={(e) => setSettings({ ...settings, maxAttempts: Number(e.target.value) })}
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             >
               <option value={1}>1 intento único</option>
               <option value={2}>2 intentos</option>
@@ -667,7 +667,7 @@ Tu objetivo es:
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Intervalo entre Reintentos
             </label>
             <select
@@ -675,7 +675,7 @@ Tu objetivo es:
               onChange={(e) =>
                 setSettings({ ...settings, retryIntervalMinutes: Number(e.target.value) })
               }
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             >
               <option value={15}>Cada 15 minutos</option>
               <option value={30}>Cada 30 minutos</option>
@@ -687,10 +687,10 @@ Tu objetivo es:
         </div>
 
         {/* Human Transfer & Guardrails */}
-        <div className="pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
-              <PhoneForwarded className="w-4 h-4 text-amber-400" />
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <PhoneForwarded className="w-4 h-4 text-amber-600" />
               Teléfono de Escalación a Asesor Humano
             </label>
             <input
@@ -700,9 +700,9 @@ Tu objetivo es:
                 setSettings({ ...settings, operatorTransferPhone: e.target.value })
               }
               placeholder="+57 300 999 8877"
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF252B]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#FF252B]"
             />
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-xs text-slate-500 mt-1 block">
               Si el comprador solicita hablar con una persona o tiene dudas complejas, se transferirá a este número.
             </span>
           </div>
@@ -715,13 +715,13 @@ Tu objetivo es:
                 onChange={(e) =>
                   setSettings({ ...settings, confirmAddressStrict: e.target.checked })
                 }
-                className="mt-0.5 rounded border-slate-700 bg-slate-900 text-[#FF252B] focus:ring-0"
+                className="mt-0.5 rounded border-slate-200 bg-white text-[#FF252B] focus:ring-0"
               />
               <div>
-                <span className="text-xs font-semibold text-white block">
+                <span className="text-xs font-semibold text-slate-900 block">
                   Exigir confirmación estricta de nomenclatura
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-500">
                   La IA preguntará por casa, piso o apto si detecta una dirección genérica.
                 </span>
               </div>
@@ -734,13 +734,13 @@ Tu objetivo es:
                 onChange={(e) =>
                   setSettings({ ...settings, askForSecondaryPhone: e.target.checked })
                 }
-                className="mt-0.5 rounded border-slate-700 bg-slate-900 text-[#FF252B] focus:ring-0"
+                className="mt-0.5 rounded border-slate-200 bg-white text-[#FF252B] focus:ring-0"
               />
               <div>
-                <span className="text-xs font-semibold text-white block">
+                <span className="text-xs font-semibold text-slate-900 block">
                   Solicitar teléfono alternativo o de WhatsApp
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-500">
                   Pide un número secundario para asegurar la entrega si el principal está apagado.
                 </span>
               </div>
@@ -750,9 +750,9 @@ Tu objetivo es:
       </div>
 
       {/* Bottom Sticky Floating Save Bar */}
-      <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl">
-        <div className="flex items-center gap-2 text-xs text-slate-300">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+      <div className="flex items-center justify-between p-4 rounded-2xl bg-white backdrop-blur-md border border-slate-200 shadow-2xl">
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>Configuración protegida y sincronizada en tiempo real</span>
         </div>
 
@@ -760,7 +760,7 @@ Tu objetivo es:
           <button
             type="button"
             onClick={() => setIsTestModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs transition"
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold text-xs transition"
           >
             Probar Agente
           </button>

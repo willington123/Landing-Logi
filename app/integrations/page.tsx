@@ -147,22 +147,22 @@ export default function IntegrationsPage() {
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Centro de Conectores & Integraciones" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Integraciones" />
 
-        <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           {/* Header Description */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                Integraciones Oficiales & Capa de Telefonía
+              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
+                Integraciones
               </h2>
-              <p className="text-xs text-slate-500">
-                Conecta tus proveedores externos de voz IA, telefonía, mensajería oficial y plataformas de pauta.
+              <p className="text-sm text-slate-500 mt-0.5">
+                Conecta voz IA, WhatsApp, píxeles de anuncios y transportadoras.
               </p>
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl text-xs font-bold text-slate-600">
+            <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600 overflow-x-auto max-w-full whitespace-nowrap">
               <button
                 onClick={() => setSelectedCategory('all')}
                 className={`px-3 py-1.5 rounded-lg transition ${
@@ -217,33 +217,33 @@ export default function IntegrationsPage() {
                   {/* Top Row: Icon + Title + Status */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-xl ${item.iconBg} text-white flex items-center justify-center font-black shadow-md`}>
+                      <div className={`w-11 h-11 rounded-xl ${item.iconBg} text-white flex items-center justify-center font-bold shadow-md`}>
                         {item.category === 'voice' && <PhoneCall className="w-5 h-5" />}
                         {item.category === 'crm' && <MessageSquare className="w-5 h-5" />}
                         {item.category === 'tracking' && <BarChart3 className="w-5 h-5" />}
                         {item.category === 'logistics' && <Truck className="w-5 h-5" />}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900">{item.name}</h3>
-                        <span className="text-[10px] text-slate-400 capitalize">{item.category}</span>
+                        <h3 className="text-[15px] font-semibold text-slate-900">{item.name}</h3>
+                        <span className="text-[11px] text-slate-400 capitalize">{item.category}</span>
                       </div>
                     </div>
 
                     <div>
                       {item.status === 'connected' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           <span>Conectado</span>
                         </span>
                       )}
                       {item.status === 'configured_simulator' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-brand-navy border border-blue-200">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-brand-navy border border-blue-200">
                           <Sparkles className="w-3 h-3 text-brand-navy" />
                           <span>Simulador Activo</span>
                         </span>
                       )}
                       {item.status === 'requires_keys' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                           <Key className="w-3 h-3 text-amber-600" />
                           <span>Faltan Credenciales</span>
                         </span>
@@ -263,7 +263,7 @@ export default function IntegrationsPage() {
 
                       return (
                         <div key={field.name}>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">
                             {field.label}:
                           </label>
                           <div className="relative">
@@ -295,7 +295,7 @@ export default function IntegrationsPage() {
                     href={item.docUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] font-semibold text-brand-navy hover:underline flex items-center gap-1"
+                    className="text-xs font-semibold text-brand-navy hover:underline flex items-center gap-1"
                   >
                     <span>Ver documentación</span>
                     <ExternalLink className="w-3 h-3" />
@@ -303,7 +303,7 @@ export default function IntegrationsPage() {
 
                   <button
                     onClick={() => handleSaveIntegration(item.id)}
-                    className="px-4 py-1.5 bg-brand-navy hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
                   >
                     {savedFeedback === item.id ? (
                       <>

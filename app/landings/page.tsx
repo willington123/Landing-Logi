@@ -54,134 +54,128 @@ export default function LandingsPage() {
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Mis Landing Pages" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Landing pages" />
 
-        <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
-          {/* Top Bar Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+          {/* Intro */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                Landing Pages Generadas
-              </h2>
-              <p className="text-xs text-slate-500">
-                Páginas públicas optimizadas para conversiones de ecommerce y pago contraentrega.
+              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Tus landing pages</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {landings.length} {landings.length === 1 ? 'página publicada' : 'páginas publicadas'} con pago contraentrega.
               </p>
             </div>
-
             <button
               onClick={() => setIsWizardOpen(true)}
-              className="px-5 py-2.5 bg-brand-gradient hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-glow-orange flex items-center justify-center gap-2 transition transform active:scale-95"
+              className="h-10 px-4 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(255,37,43,0.6)] hover:brightness-105 active:scale-[0.98] transition"
             >
-              <Sparkles className="w-4 h-4 text-amber-200" />
-              <span>Crear Nueva Landing con IA</span>
+              <Plus className="w-4 h-4" />
+              Nueva landing
             </button>
           </div>
 
-          {/* Landings Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {landings.map((landing) => (
-              <div
-                key={landing.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col group"
+          {landings.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-brand-red/[0.07] text-brand-red flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900">Crea tu primera landing</h3>
+              <p className="text-sm text-slate-500 mt-1 mb-5">Sube una foto de tu producto y la IA hace el resto.</p>
+              <button
+                onClick={() => setIsWizardOpen(true)}
+                className="h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-slate-800 transition"
               >
-                {/* Image & Badges */}
-                <div className="relative h-48 bg-slate-900 overflow-hidden">
-                  <img
-                    src={landing.mainImage}
-                    alt={landing.productName}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                  <div className="absolute top-3 left-3 flex gap-1.5">
-                    <span className="text-[10px] font-black bg-brand-red text-white px-2 py-0.5 rounded shadow">
-                      {landing.discountBadge || 'OFERTA ACTIVA'}
-                    </span>
-                    <span className="text-[10px] font-bold bg-brand-navy text-white px-2 py-0.5 rounded shadow">
-                      {landing.themeStyle}
-                    </span>
-                  </div>
-
-                  <div className="absolute bottom-3 right-3">
-                    <span className="text-[11px] font-black bg-black/75 text-white backdrop-blur-sm px-2.5 py-1 rounded-lg">
-                      ${landing.promoPrice.toLocaleString()} {landing.currency}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-1.5">
-                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-red transition line-clamp-1">
-                      {landing.productName}
-                    </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2">
-                      {landing.headline}
-                    </p>
-                  </div>
-
-                  {/* Metrics */}
-                  <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-100 text-center">
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Visitas</p>
-                      <p className="text-xs font-black text-slate-800">{landing.viewsCount}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Pedidos</p>
-                      <p className="text-xs font-black text-emerald-600">{landing.ordersCount}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Conv.</p>
-                      <p className="text-xs font-black text-brand-navy">
-                        {landing.viewsCount > 0
-                          ? ((landing.ordersCount / landing.viewsCount) * 100).toFixed(1)
-                          : '0'}%
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Actions Bar */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Link
-                      href={`/landings/editor/${landing.id}`}
-                      className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      <span>Editar</span>
+                <Sparkles className="w-4 h-4" /> Crear con IA
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+              {landings.map((landing) => {
+                const conv = landing.viewsCount > 0 ? ((landing.ordersCount / landing.viewsCount) * 100).toFixed(1) : '0';
+                return (
+                  <div
+                    key={landing.id}
+                    className="group bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.18)] hover:-translate-y-0.5 transition flex flex-col"
+                  >
+                    <Link href={`/landings/editor/${landing.id}`} className="relative aspect-[16/10] bg-slate-100 overflow-hidden block">
+                      <img
+                        src={landing.sales?.heroImage || landing.mainImage}
+                        alt={landing.productName}
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition duration-500"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
+                      <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 text-xs font-medium bg-white/95 text-slate-700 px-2 py-1 rounded-full">
+                        <span className={`w-1.5 h-1.5 rounded-full ${landing.isPublished ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                        {landing.isPublished ? 'Publicada' : 'Borrador'}
+                      </span>
+                      {landing.layout === 'sales-v2' && (
+                        <span className="absolute top-3 right-3 inline-flex items-center gap-1 text-xs font-medium bg-slate-900/80 text-white px-2 py-1 rounded-full backdrop-blur">
+                          <Sparkles className="w-3 h-3" /> IA
+                        </span>
+                      )}
+                      <span className="absolute bottom-3 left-3 text-sm font-semibold text-white">
+                        ${landing.promoPrice.toLocaleString('es-CO')} {landing.currency}
+                      </span>
                     </Link>
 
-                    <button
-                      onClick={() => handleCopyUrl(landing)}
-                      title="Copiar URL Pública"
-                      className="p-2 border border-slate-200 hover:border-slate-300 text-slate-600 rounded-xl transition"
-                    >
-                      {copiedId === landing.id ? (
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
+                    <div className="p-4 flex-1 flex flex-col">
+                      <h3 className="text-[15px] font-semibold text-slate-900 truncate">{landing.productName}</h3>
+                      <p className="text-sm text-slate-500 line-clamp-2 mt-1 min-h-[40px]">{landing.headline}</p>
 
-                    <a
-                      href={landing.publishedUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Abrir Landing Pública"
-                      className="p-2 bg-brand-red hover:bg-red-700 text-white rounded-xl shadow-sm transition"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                      <dl className="grid grid-cols-3 gap-2 mt-4 mb-4">
+                        {[
+                          ['Visitas', landing.viewsCount.toLocaleString('es-CO')],
+                          ['Pedidos', landing.ordersCount.toLocaleString('es-CO')],
+                          ['Conversión', `${conv}%`],
+                        ].map(([k, v]) => (
+                          <div key={k} className="rounded-xl bg-slate-50 px-3 py-2">
+                            <dt className="text-xs text-slate-500">{k}</dt>
+                            <dd className="text-sm font-semibold text-slate-900 tabular-nums">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
 
-                    <button
-                      onClick={() => handleDelete(landing.id)}
-                      title="Eliminar"
-                      className="p-2 border border-slate-200 hover:border-red-200 text-slate-400 hover:text-red-600 rounded-xl transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <div className="mt-auto flex items-center gap-1.5">
+                        <Link
+                          href={`/landings/editor/${landing.id}`}
+                          className="flex-1 h-9 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 transition"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          Editar
+                        </Link>
+                        <a
+                          href={landing.publishedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Ver landing"
+                          aria-label="Ver landing"
+                          className="w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 flex items-center justify-center transition"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </a>
+                        <button
+                          onClick={() => handleCopyUrl(landing)}
+                          title="Copiar enlace"
+                          aria-label="Copiar enlace"
+                          className="w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 flex items-center justify-center transition"
+                        >
+                          {copiedId === landing.id ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(landing.id)}
+                          title="Eliminar"
+                          aria-label="Eliminar"
+                          className="w-9 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </main>
       </div>
 

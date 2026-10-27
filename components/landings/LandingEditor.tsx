@@ -271,7 +271,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="bg-white px-2 py-1 rounded-md hidden sm:flex items-center shadow-sm">
-            <img src="/brand/logipages-logo.png" alt="LogiPages" className="h-4 w-auto object-contain" />
+            <img src="/brand/logipages-logo-darkmode.png" alt="LogiPages" className="h-4 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">

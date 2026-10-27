@@ -14,9 +14,9 @@ export default function AnalyticsPage() {
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Analíticas, Embudo & Atribución UTM" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Analíticas" />
 
-        <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           <AnalyticsDashboard />
         </main>
       </div>

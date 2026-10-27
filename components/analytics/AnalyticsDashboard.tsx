@@ -186,15 +186,11 @@ export default function AnalyticsDashboard() {
       {/* Top Banner & Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-red/10 text-brand-red text-xs font-bold mb-2">
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Métricas de Rendimiento & Atribución E-commerce COD</span>
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Dashboard de Analíticas & Atribución UTM
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Rendimiento de tus ventas
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Visualiza conversiones de landing pages, efectividad de confirmación por IA y retorno de inversión por pauta publicitaria.
+            Conversión de tus landings, confirmaciones por IA y resultados por campaña.
           </p>
         </div>
 
@@ -250,13 +246,13 @@ export default function AnalyticsDashboard() {
         {/* Card 1: Total Pedidos */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Pedidos</span>
+            <span className="text-xs font-bold">Total Pedidos</span>
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900">1,482</div>
-          <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 mt-2">
+          <div className="text-2xl font-bold text-slate-900">1,482</div>
+          <div className="flex items-center gap-1 text-xs font-semibold text-emerald-600 mt-2">
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>+18.4% vs mes ant.</span>
           </div>
@@ -265,13 +261,13 @@ export default function AnalyticsDashboard() {
         {/* Card 2: Pedidos Confirmados por IA */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Confirmados IA</span>
+            <span className="text-xs font-bold">Confirmados IA</span>
             <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900">1,254</div>
-          <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 mt-2">
+          <div className="text-2xl font-bold text-slate-900">1,254</div>
+          <div className="flex items-center gap-1 text-xs font-semibold text-emerald-600 mt-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>84.6% de efectividad</span>
           </div>
@@ -280,15 +276,15 @@ export default function AnalyticsDashboard() {
         {/* Card 3: Tasa de Confirmación */}
         <div className="bg-gradient-to-br from-white to-orange-50/40 rounded-2xl p-5 border border-orange-200/60 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-orange-950">
+            <span className="text-xs font-bold text-orange-950">
               Tasa Confirmación
             </span>
             <div className="p-2 rounded-lg bg-orange-100 text-brand-orange">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-brand-orange">84.6%</div>
-          <div className="text-[11px] font-semibold text-slate-600 mt-2">
+          <div className="text-2xl font-bold text-brand-orange">84.6%</div>
+          <div className="text-xs font-semibold text-slate-600 mt-2">
             +14.2% vs llamadas manuales
           </div>
         </div>
@@ -296,13 +292,13 @@ export default function AnalyticsDashboard() {
         {/* Card 4: Ingresos Proyectados */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Ingresos Facturados</span>
+            <span className="text-xs font-bold">Ingresos Facturados</span>
             <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-xl font-black text-slate-900">$179.8M</div>
-          <div className="text-[11px] font-semibold text-slate-500 mt-2">
+          <div className="text-xl font-bold text-slate-900">$179.8M</div>
+          <div className="text-xs font-semibold text-slate-500 mt-2">
             Ticket prom: $121,340
           </div>
         </div>
@@ -310,13 +306,13 @@ export default function AnalyticsDashboard() {
         {/* Card 5: Llamadas IA Realizadas */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Llamadas IA</span>
+            <span className="text-xs font-bold">Llamadas IA</span>
             <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
               <PhoneCall className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900">1,620</div>
-          <div className="text-[11px] font-semibold text-purple-700 mt-2">
+          <div className="text-2xl font-bold text-slate-900">1,620</div>
+          <div className="text-xs font-semibold text-purple-700 mt-2">
             Duración prom: 48s
           </div>
         </div>
@@ -324,13 +320,13 @@ export default function AnalyticsDashboard() {
         {/* Card 6: Tiempo Promedio de Respuesta */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Tiempo Respuesta</span>
+            <span className="text-xs font-bold">Tiempo Respuesta</span>
             <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900">1.8 min</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-2">
+          <div className="text-2xl font-bold text-slate-900">1.8 min</div>
+          <div className="text-xs font-semibold text-emerald-600 mt-2">
             Instantáneo post-checkout
           </div>
         </div>
@@ -361,12 +357,12 @@ export default function AnalyticsDashboard() {
               <div>
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">
                       1
                     </span>
                     Visitas a Landing Pages
                   </span>
-                  <span className="text-slate-900 font-black">48,250 (100%)</span>
+                  <span className="text-slate-900 font-bold">48,250 (100%)</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
                   <div
@@ -380,12 +376,12 @@ export default function AnalyticsDashboard() {
               <div>
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">
                       2
                     </span>
                     Formulario / Checkout Iniciado
                   </span>
-                  <span className="text-slate-900 font-black">
+                  <span className="text-slate-900 font-bold">
                     3,860 <span className="text-slate-400 font-normal">(8.0% visitas)</span>
                   </span>
                 </div>
@@ -401,12 +397,12 @@ export default function AnalyticsDashboard() {
               <div>
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">
                       3
                     </span>
                     Pedido Creado en Sistema (COD)
                   </span>
-                  <span className="text-slate-900 font-black">
+                  <span className="text-slate-900 font-bold">
                     1,482 <span className="text-slate-400 font-normal">(38.4% formularios)</span>
                   </span>
                 </div>
@@ -421,13 +417,13 @@ export default function AnalyticsDashboard() {
               {/* Step 4: Confirmado por Voz IA */}
               <div>
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
-                  <span className="text-emerald-700 flex items-center gap-2 font-black">
-                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px]">
+                  <span className="text-emerald-700 flex items-center gap-2 font-bold">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[11px]">
                       4
                     </span>
                     Confirmado por Valentina IA (Voz)
                   </span>
-                  <span className="text-emerald-700 font-black">
+                  <span className="text-emerald-700 font-bold">
                     1,254 <span className="text-emerald-600 font-medium">(84.6% confirmación)</span>
                   </span>
                 </div>
@@ -443,18 +439,18 @@ export default function AnalyticsDashboard() {
               <div>
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">
                       5
                     </span>
                     Guía Generada & Despacho Efectivo
                   </span>
-                  <span className="text-slate-900 font-black">
+                  <span className="text-slate-900 font-bold">
                     1,192 <span className="text-slate-400 font-normal">(95.1% de confirmados)</span>
                   </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-brand-navy h-full rounded-full transition-all duration-500"
+                    className="bg-slate-900 h-full rounded-full transition-all duration-500"
                     style={{ width: '30%' }}
                   />
                 </div>
@@ -494,31 +490,31 @@ export default function AnalyticsDashboard() {
             {/* Metrics Breakdown */}
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="text-[11px] font-semibold text-slate-500">Llamadas Contestadas</div>
-                <div className="text-2xl font-black text-slate-900 mt-0.5">88%</div>
-                <div className="text-[10px] text-emerald-600 font-medium">1,425 llamadas</div>
+                <div className="text-xs font-semibold text-slate-500">Llamadas Contestadas</div>
+                <div className="text-2xl font-bold text-slate-900 mt-0.5">88%</div>
+                <div className="text-[11px] text-emerald-600 font-medium">1,425 llamadas</div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                <div className="text-[11px] font-semibold text-emerald-800">
+                <div className="text-xs font-semibold text-emerald-800">
                   Confirmada en 1er Intento
                 </div>
-                <div className="text-2xl font-black text-emerald-700 mt-0.5">72%</div>
-                <div className="text-[10px] text-emerald-700 font-medium">Sin esperas</div>
+                <div className="text-2xl font-bold text-emerald-700 mt-0.5">72%</div>
+                <div className="text-[11px] text-emerald-700 font-medium">Sin esperas</div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
-                <div className="text-[11px] font-semibold text-amber-800">
+                <div className="text-xs font-semibold text-amber-800">
                   Rescatadas en Reintento
                 </div>
-                <div className="text-2xl font-black text-amber-700 mt-0.5">18%</div>
-                <div className="text-[10px] text-amber-700 font-medium">+45 min post-fallo</div>
+                <div className="text-2xl font-bold text-amber-700 mt-0.5">18%</div>
+                <div className="text-[11px] text-amber-700 font-medium">+45 min post-fallo</div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="text-[11px] font-semibold text-slate-500">Canceladas / Descarte</div>
-                <div className="text-2xl font-black text-slate-700 mt-0.5">6%</div>
-                <div className="text-[10px] text-slate-500 font-medium">Cliente se arrepintió</div>
+                <div className="text-xs font-semibold text-slate-500">Canceladas / Descarte</div>
+                <div className="text-2xl font-bold text-slate-700 mt-0.5">6%</div>
+                <div className="text-[11px] text-slate-500 font-medium">Cliente se arrepintió</div>
               </div>
             </div>
 
@@ -544,7 +540,7 @@ export default function AnalyticsDashboard() {
                   title="Rechazo (5%)"
                 />
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 font-medium">
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1 font-medium">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span> 86% Aceptación Total
                 </span>
@@ -576,7 +572,7 @@ export default function AnalyticsDashboard() {
               <h3 className="text-base font-bold text-slate-900">
                 Atribución de Ventas por Campañas & Canales UTM
               </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-red/10 text-brand-red">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-brand-red/10 text-brand-red">
                 Pixel + CAPI Server
               </span>
             </div>
@@ -613,7 +609,7 @@ export default function AnalyticsDashboard() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-bold text-slate-500">
                 <th className="py-3 px-5">Canal / Fuente</th>
                 <th className="py-3 px-4">Campaña UTM</th>
                 <th className="py-3 px-4 text-right">Clics</th>
@@ -644,7 +640,7 @@ export default function AnalyticsDashboard() {
                       <span>{row.source}</span>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
+                  <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
                     {row.campaign}
                   </td>
                   <td className="py-3.5 px-4 text-right font-medium text-slate-600">
@@ -666,7 +662,7 @@ export default function AnalyticsDashboard() {
                     {formatCOP(row.revenue)}
                   </td>
                   <td className="py-3.5 px-5 text-right">
-                    <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       {row.roas}
                     </span>
                   </td>
@@ -683,8 +679,8 @@ export default function AnalyticsDashboard() {
                 <td className="py-3.5 px-4 text-right text-emerald-600">{totalConfirmed}</td>
                 <td className="py-3.5 px-4 text-right">3.07%</td>
                 <td className="py-3.5 px-4 text-right">{formatCOP(33500000)}</td>
-                <td className="py-3.5 px-4 text-right font-black">{formatCOP(totalRevenue)}</td>
-                <td className="py-3.5 px-5 text-right font-black text-emerald-700">5.36x</td>
+                <td className="py-3.5 px-4 text-right font-bold">{formatCOP(totalRevenue)}</td>
+                <td className="py-3.5 px-5 text-right font-bold text-emerald-700">5.36x</td>
               </tr>
             </tfoot>
           </table>
@@ -692,7 +688,7 @@ export default function AnalyticsDashboard() {
       </div>
 
       {/* Meta Pixel & CAPI & GA4 Real-time Status Monitor Cards */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6">
+      <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -700,11 +696,11 @@ export default function AnalyticsDashboard() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              <h3 className="text-lg font-bold text-white tracking-tight">
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
                 Monitor en Tiempo Real: Meta CAPI, Browser Pixel & GA4
               </h3>
             </div>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Doble capa de rastreo (Server-side + Client-side) para evadir bloqueadores de anuncios y garantizar 100% de match de compra.
             </p>
           </div>
@@ -712,7 +708,7 @@ export default function AnalyticsDashboard() {
           <button
             onClick={handleSimulateCAPI}
             disabled={isSimulatingEvent}
-            className="flex items-center gap-2 px-4 py-2.5 bg-brand-gradient hover:opacity-95 text-white font-bold rounded-xl text-xs shadow-glow-orange transition transform active:scale-95 disabled:opacity-50 self-start md:self-auto"
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-gradient hover:opacity-95 text-white font-bold rounded-xl text-xs transition transform active:scale-95 disabled:opacity-50 self-start md:self-auto"
           >
             {isSimulatingEvent ? (
               <>
@@ -731,79 +727,79 @@ export default function AnalyticsDashboard() {
         {/* 4 Integration Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Meta CAPI */}
-          <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-700/80">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-300">Meta Conversions API</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-xs font-bold text-slate-600">Meta Conversions API</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
                 ACTIVO
               </span>
             </div>
-            <div className="text-lg font-black text-white">9.4 / 10 EMQ</div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <div className="text-lg font-bold text-slate-900">9.4 / 10 EMQ</div>
+            <p className="text-xs text-slate-500 mt-1">
               Event Match Quality excelente con SHA-256 de teléfono y correo.
             </p>
           </div>
 
           {/* Meta Browser Pixel */}
-          <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-700/80">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-300">Meta Browser Pixel</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-xs font-bold text-slate-600">Meta Browser Pixel</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
                 SINCRONIZADO
               </span>
             </div>
-            <div className="text-lg font-black text-white">Deduplicación OK</div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Usa <code className="text-amber-400">event_id</code> idéntico para evitar duplicidad de compras.
+            <div className="text-lg font-bold text-slate-900">Deduplicación OK</div>
+            <p className="text-xs text-slate-500 mt-1">
+              Usa <code className="text-amber-600">event_id</code> idéntico para evitar duplicidad de compras.
             </p>
           </div>
 
           {/* Google Analytics 4 */}
-          <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-700/80">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-300">GA4 Measurement Protocol</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-xs font-bold text-slate-600">GA4 Measurement Protocol</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
                 CONECTADO
               </span>
             </div>
-            <div className="text-lg font-black text-white">Enhanced Ecommerce</div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <div className="text-lg font-bold text-slate-900">Enhanced Ecommerce</div>
+            <p className="text-xs text-slate-500 mt-1">
               Stream web y compras registradas con valor en COP.
             </p>
           </div>
 
           {/* TikTok Events API */}
-          <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-700/80">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-300">TikTok Events API</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <span className="text-xs font-bold text-slate-600">TikTok Events API</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-600 border border-blue-500/30">
                 EN LÍNEA
               </span>
             </div>
-            <div className="text-lg font-black text-white">PlaceAnOrder</div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <div className="text-lg font-bold text-slate-900">PlaceAnOrder</div>
+            <p className="text-xs text-slate-500 mt-1">
               Optimización de Spark Ads con webhook de servidor.
             </p>
           </div>
         </div>
 
         {/* Live Payload Viewer / Simulation Result Drawer */}
-        <div className="bg-black/50 rounded-xl p-4 border border-slate-800 font-mono text-xs">
-          <div className="flex items-center justify-between mb-3 text-slate-400 border-b border-slate-800 pb-2">
+        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 font-mono text-xs">
+          <div className="flex items-center justify-between mb-3 text-slate-500 border-b border-slate-200 pb-2">
             <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-amber-400" />
-              <span className="text-slate-200 font-bold">
+              <Terminal className="w-4 h-4 text-amber-600" />
+              <span className="text-slate-700 font-bold">
                 Payload de Ejemplo CAPI (Server-Side Verified Event)
               </span>
             </div>
             <button
               onClick={handleCopyPayload}
-              className="flex items-center gap-1 text-[11px] hover:text-white transition"
+              className="flex items-center gap-1 text-xs hover:text-slate-900 transition"
             >
               {copiedPayload ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400">Copiado</span>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-600">Copiado</span>
                 </>
               ) : (
                 <>
@@ -814,37 +810,37 @@ export default function AnalyticsDashboard() {
             </button>
           </div>
 
-          <pre className="text-emerald-400 overflow-x-auto p-2 bg-black/40 rounded text-[11px] leading-relaxed">
+          <pre className="text-slate-700 overflow-x-auto p-3 bg-white border border-slate-200 rounded-lg text-xs leading-relaxed">
             {JSON.stringify(sampleCapiPayload, null, 2)}
           </pre>
 
           {/* Simulation Response Result */}
           {simulationResponse && (
-            <div className="mt-4 p-3 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 animate-in fade-in slide-in-from-top-1">
+            <div className="mt-4 p-3 rounded-lg bg-emerald-950/50 border border-emerald-200 text-emerald-700 animate-in fade-in slide-in-from-top-1">
               <div className="flex items-center justify-between font-bold text-xs">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Respuesta Servidor Meta
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Respuesta Servidor Meta
                   Graph API ({simulationResponse.status})
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-500">
                   {simulationResponse.timestamp}
                 </span>
               </div>
-              <div className="mt-2 text-[11px] space-y-1 text-slate-300">
+              <div className="mt-2 text-xs space-y-1 text-slate-600">
                 <div>
-                  <strong className="text-white">Trace ID:</strong> {simulationResponse.fbtrace_id}
+                  <strong className="text-slate-900">Trace ID:</strong> {simulationResponse.fbtrace_id}
                 </div>
                 <div>
-                  <strong className="text-white">Eventos Recibidos:</strong>{' '}
+                  <strong className="text-slate-900">Eventos Recibidos:</strong>{' '}
                   {simulationResponse.events_received}
                 </div>
                 <div>
-                  <strong className="text-white">Deduplicación:</strong>{' '}
+                  <strong className="text-slate-900">Deduplicación:</strong>{' '}
                   {simulationResponse.deduplication_status}
                 </div>
                 <div>
-                  <strong className="text-white">Calidad Atribución:</strong>{' '}
-                  <span className="text-emerald-400 font-bold">
+                  <strong className="text-slate-900">Calidad Atribución:</strong>{' '}
+                  <span className="text-emerald-600 font-bold">
                     {simulationResponse.emq_score}
                   </span>
                 </div>

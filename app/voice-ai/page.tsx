@@ -45,39 +45,14 @@ export default function VoiceAiPage() {
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Agente de Llamadas con IA (Voice)" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Llamadas IA" />
 
-        <main className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto w-full">
-          {/* Top Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>Confirmación Automatizada de Pedidos Contraentrega</span>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase">
-                  Vapi / Retell / Web Audio
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500">
-                Tu asistente virtual llama a cada comprador, verifica dirección y valida intención real de pago contraentrega.
-              </p>
-            </div>
-
-            <button
-              onClick={() => handleTestCall()}
-              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition transform active:scale-95"
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>Lanzar Prueba de Voz en Vivo</span>
-            </button>
-          </div>
-
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           {/* Voice Agent Settings Panel */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <VoiceAgentSettings onOpenSimulator={() => handleTestCall()} />
-          </div>
+          <VoiceAgentSettings onOpenSimulator={() => handleTestCall()} />
 
           {/* Call Logs & Transcripts */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-brand-navy" />
@@ -94,18 +69,18 @@ export default function VoiceAiPage() {
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-brand-navyDark text-white flex items-center justify-center font-bold text-xs">
+                      <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
                         {task.customerName.charAt(0)}
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-900">{task.customerName}</p>
-                        <p className="text-[11px] text-slate-500">{task.phone} • {task.durationSeconds}s duración</p>
+                        <p className="text-xs text-slate-500">{task.phone} • {task.durationSeconds}s duración</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
                           task.status === 'confirmed_by_voice'
                             ? 'bg-emerald-100 text-emerald-800'
                             : task.status === 'needs_review'
@@ -137,12 +112,12 @@ export default function VoiceAiPage() {
                   {/* Transcript Preview */}
                   {task.transcript && task.transcript.length > 0 && (
                     <div className="p-3 bg-white border border-slate-200 rounded-lg text-xs space-y-1.5 max-h-36 overflow-y-auto">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <p className="text-[11px] font-bold text-slate-400">
                         Fragmento de Audio / Transcripción:
                       </p>
                       {task.transcript.slice(0, 3).map((m, idx) => (
                         <div key={idx} className="flex gap-2">
-                          <span className={`font-bold text-[11px] ${m.speaker === 'agent' ? 'text-brand-red' : 'text-slate-800'}`}>
+                          <span className={`font-bold text-xs ${m.speaker === 'agent' ? 'text-brand-red' : 'text-slate-800'}`}>
                             {m.speaker === 'agent' ? 'Valentina IA:' : `${task.customerName.split(' ')[0]}:`}
                           </span>
                           <span className="text-slate-600">{m.text}</span>
@@ -152,7 +127,7 @@ export default function VoiceAiPage() {
                   )}
 
                   {task.structuredResult && (
-                    <div className="text-[11px] text-slate-500 flex items-center gap-4">
+                    <div className="text-xs text-slate-500 flex items-center gap-4">
                       <span>
                         Sentimiento:{' '}
                         <strong className="text-slate-700 capitalize">

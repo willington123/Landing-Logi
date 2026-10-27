@@ -35,14 +35,14 @@ export default function SettingsPage() {
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Configuración de la Cuenta" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Configuración" />
 
-        <main className="p-6 md:p-8 space-y-6 max-w-4xl mx-auto w-full">
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-4xl mx-auto w-full">
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
-              Ajustes de Empresa & Parámetros Globales
+            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
+              Ajustes de la tienda
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm text-slate-500 mt-0.5">
               Configura los valores por defecto que heredarán todas tus landing pages y agentes de voz.
             </p>
           </div>
@@ -52,12 +52,12 @@ export default function SettingsPage() {
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <Store className="w-4 h-4 text-brand-navy" />
-                <h3 className="text-sm font-bold text-slate-900">Identidad del Negocio</h3>
+                <h3 className="text-[15px] font-semibold text-slate-900">Identidad del Negocio</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Nombre del Negocio / Tienda:
                   </label>
                   <input
@@ -69,7 +69,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Moneda Principal de Venta:
                   </label>
                   <select
@@ -87,7 +87,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Teléfono Oficial de Soporte (WhatsApp):
                   </label>
                   <input
@@ -99,7 +99,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Correo Electrónico de Contacto:
                   </label>
                   <input
@@ -116,12 +116,12 @@ export default function SettingsPage() {
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <ShieldCheck className="w-4 h-4 text-brand-red" />
-                <h3 className="text-sm font-bold text-slate-900">Políticas por Defecto para Contraentrega</h3>
+                <h3 className="text-[15px] font-semibold text-slate-900">Políticas por Defecto para Contraentrega</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Días de Garantía por Defecto:
                   </label>
                   <input
@@ -133,7 +133,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
                     Transportadoras Autorizadas en Colombia:
                   </label>
                   <p className="p-2.5 bg-slate-50 rounded-lg text-slate-700 font-medium">
@@ -155,7 +155,7 @@ export default function SettingsPage() {
 
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-brand-gradient hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-glow-orange transition flex items-center gap-2"
+                className="px-6 py-2.5 bg-brand-gradient hover:opacity-95 text-white font-bold text-xs rounded-xl transition flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
                 <span>Guardar Ajustes</span>

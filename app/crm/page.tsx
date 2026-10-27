@@ -17,7 +17,7 @@ export default function CRMPage() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <Header
-          title="CRM & Bandeja Omnicanal 360°"
+          title="Mensajes"
           onOpenWizard={() => setWizardOpen(true)}
         />
 

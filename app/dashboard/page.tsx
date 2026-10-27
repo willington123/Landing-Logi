@@ -26,6 +26,7 @@ import {
   Flame,
   ShieldCheck,
   Plus,
+  PenSquare,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -74,344 +75,253 @@ export default function DashboardPage() {
     setIsSimulatorOpen(true);
   };
 
+  const money = (v: number) => `$${v.toLocaleString('es-CO')}`;
+  const statusChip: Record<string, { label: string; cls: string; Icon: typeof Clock }> = {
+    confirmed_by_voice: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15', Icon: CheckCircle2 },
+    pending_call: { label: 'Por llamar', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15', Icon: Clock },
+    needs_review: { label: 'Revisar', cls: 'bg-blue-50 text-blue-700 ring-blue-600/15', Icon: AlertCircle },
+    cancelled: { label: 'Cancelado', cls: 'bg-slate-100 text-slate-600 ring-slate-500/15', Icon: AlertCircle },
+  };
+
+  const stats = [
+    { label: 'Pedidos', value: orders.length.toString(), hint: 'Capturados en tus landings', Icon: ShoppingBag, tone: 'text-brand-navy bg-brand-navy/[0.07]' },
+    { label: 'Confirmados por IA', value: confirmedOrdersCount.toString(), hint: `${confirmationRate}% de confirmación`, Icon: PhoneCall, tone: 'text-emerald-600 bg-emerald-50' },
+    { label: 'Ventas contraentrega', value: money(totalRevenue), hint: 'COP en pedidos activos', Icon: TrendingUp, tone: 'text-brand-red bg-brand-red/[0.07]' },
+    { label: 'Llamadas en cola', value: pendingCallsCount.toString(), hint: 'Dentro del horario permitido', Icon: Clock, tone: 'text-amber-600 bg-amber-50' },
+  ];
+
+  const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
+
   return (
     <div className="flex min-h-screen bg-slate-50">
-      {/* Sidebar */}
       <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Panel de Control General" />
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Inicio" />
 
-        <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
-          {/* Welcome & Primary CTA Hero Banner */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-navyDark via-[#152777] to-brand-navy p-6 md:p-8 text-white shadow-xl">
-            {/* Background Glow Spheres */}
-            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-brand-red/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute right-40 -top-10 w-48 h-48 bg-brand-orange/25 rounded-full blur-2xl pointer-events-none" />
-
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="space-y-2 max-w-2xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-amber-300 backdrop-blur-sm border border-white/10">
-                  <Flame className="w-3.5 h-3.5 text-orange-400" />
-                  <span>Plataforma Inteligente de Ventas con IA</span>
-                </div>
-                <h2 className="text-2xl md:text-3xl font-black tracking-tight">
-                  Crea Landings Persuasivas y Confirma Ventas en Piloto Automático
+        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+          {/* Welcome */}
+          <section className={`${card} relative overflow-hidden p-6 sm:p-8`}>
+            <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-orange/10 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-32 right-40 w-72 h-72 rounded-full bg-brand-navy/10 blur-3xl pointer-events-none" />
+            <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="max-w-2xl">
+                <p className="text-sm font-medium text-slate-500 mb-1">Bienvenido de nuevo 👋</p>
+                <h2 className="text-2xl sm:text-[28px] font-bold tracking-tight text-slate-900 leading-tight">
+                  Sube una foto y ten tu próxima landing lista en minutos
                 </h2>
-                <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
-                  Genera una página completa en 30 segundos a partir de una foto, activa agentes de voz para confirmar tus pedidos contraentrega y gestiona todos tus mensajes en un CRM omnicanal.
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  La IA escribe los textos, elige los colores y crea las imágenes. Los pedidos llegan aquí y el agente de voz los confirma.
                 </p>
               </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex flex-col sm:flex-row gap-2.5 flex-shrink-0">
                 <button
                   onClick={() => setIsWizardOpen(true)}
-                  className="px-6 py-3.5 bg-brand-gradient hover:opacity-95 text-white font-bold text-xs md:text-sm rounded-xl shadow-glow-orange flex items-center justify-center gap-2.5 transition transform hover:scale-[1.02] active:scale-95"
+                  className="h-11 px-5 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_10px_24px_-10px_rgba(255,37,43,0.7)] hover:brightness-105 active:scale-[0.98] transition"
                 >
-                  <Sparkles className="w-4 h-4 text-amber-200" />
-                  <span>Crear Landing con IA</span>
+                  <Sparkles className="w-4 h-4" />
+                  Crear landing con IA
                 </button>
-
                 <button
                   onClick={() => handleTestCall()}
-                  className="px-5 py-3.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs md:text-sm rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center gap-2 transition"
+                  className="h-11 px-5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-300 hover:bg-slate-50 transition"
                 >
-                  <PhoneCall className="w-4 h-4 text-emerald-400" />
-                  <span>Probar Llamada IA</span>
+                  <Play className="w-4 h-4 text-emerald-600" />
+                  Probar llamada IA
                 </button>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Key Metrics Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Stat 1: Total Orders */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition">
-              <div className="flex items-center justify-between text-slate-500 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Pedidos Registrados</span>
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-brand-navy flex items-center justify-center">
-                  <ShoppingBag className="w-4 h-4" />
+          {/* Stats */}
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {stats.map(({ label, value, hint, Icon, tone }) => (
+              <div key={label} className={`${card} p-4 sm:p-5`}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[13px] font-medium text-slate-500">{label}</span>
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone}`}>
+                    <Icon className="w-4 h-4" />
+                  </span>
                 </div>
+                <div className="text-2xl sm:text-[28px] font-bold tracking-tight text-slate-900 tabular-nums">{value}</div>
+                <p className="text-xs text-slate-400 mt-1">{hint}</p>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900">{orders.length}</span>
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-0.5" /> +18.4%
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Capturados desde tus landing pages</p>
-            </div>
+            ))}
+          </section>
 
-            {/* Stat 2: Voice Confirmed */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition">
-              <div className="flex items-center justify-between text-slate-500 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Confirmados por Voz IA</span>
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <PhoneCall className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-emerald-600">{confirmedOrdersCount}</span>
-                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {confirmationRate}% efectividad
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Verificación telefónica de datos COD</p>
-            </div>
-
-            {/* Stat 3: Total Revenue */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition">
-              <div className="flex items-center justify-between text-slate-500 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Facturación Bruta (COD)</span>
-                <div className="w-8 h-8 rounded-lg bg-red-50 text-brand-red flex items-center justify-center">
-                  <Flame className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900">
-                  ${totalRevenue.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">COP</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Monto en órdenes activas y despachadas</p>
-            </div>
-
-            {/* Stat 4: Active CRM Chats */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition">
-              <div className="flex items-center justify-between text-slate-500 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Llamadas Pendientes</span>
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-amber-600">{pendingCallsCount}</span>
-                <span className="text-[11px] text-slate-500">en cola para marcar</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Disparo según horario permitido</p>
-            </div>
-          </div>
-
-          {/* Operational Sections: Two Columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Columns: Landing Pages & Orders */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Landings Showcase */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-brand-navy" />
-                    <h3 className="text-sm font-bold text-slate-900">Tus Landing Pages Activas</h3>
-                  </div>
-                  <Link
-                    href="/landings"
-                    className="text-xs font-semibold text-brand-navy hover:underline flex items-center gap-1"
-                  >
-                    <span>Ver todas ({landings.length})</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="xl:col-span-2 space-y-6">
+              {/* Landings */}
+              <section className={card}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                  <h3 className="text-[15px] font-semibold text-slate-900">Tus landing pages</h3>
+                  <Link href="/landings" className="text-[13px] font-medium text-brand-navy hover:underline flex items-center gap-0.5">
+                    Ver todas ({landings.length}) <ChevronRight className="w-4 h-4" />
                   </Link>
                 </div>
-
-                <div className="space-y-3">
-                  {landings.slice(0, 3).map((landing) => (
-                    <div
-                      key={landing.id}
-                      className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/50 hover:bg-white transition group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
+                {landings.length === 0 ? (
+                  <div className="px-5 pb-6 text-center">
+                    <p className="text-sm text-slate-500 mb-3">Aún no tienes landings.</p>
+                    <button onClick={() => setIsWizardOpen(true)} className="text-sm font-semibold text-brand-red">
+                      Crear la primera
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {landings.slice(0, 4).map((landing) => (
+                      <li key={landing.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/70 transition">
                         <img
                           src={landing.mainImage}
-                          alt={landing.productName}
-                          className="w-12 h-12 object-cover rounded-lg border border-slate-200 flex-shrink-0"
+                          alt=""
+                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-slate-100 flex-shrink-0"
                         />
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate group-hover:text-brand-red transition">
-                            {landing.productName}
-                          </p>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                            <span className="font-semibold text-emerald-600">
-                              ${landing.promoPrice.toLocaleString()} {landing.currency}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{landing.productName}</p>
+                          <p className="text-xs text-slate-500 mt-0.5 truncate">
+                            <span className="font-medium text-slate-700">
+                              {money(landing.promoPrice)} {landing.currency}
                             </span>
-                            <span>•</span>
-                            <span>{landing.viewsCount} visitas</span>
-                            <span>•</span>
-                            <span className="font-bold text-slate-700">{landing.ordersCount} pedidos</span>
-                          </div>
+                            {' · '}
+                            {landing.viewsCount} visitas · {landing.ordersCount} pedidos
+                          </p>
                         </div>
-                      </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <Link
+                            href={`/landings/editor/${landing.id}`}
+                            className="h-8 px-3 rounded-lg border border-slate-200 text-[13px] font-medium text-slate-700 hover:bg-white hover:border-slate-300 flex items-center gap-1.5 transition"
+                          >
+                            <PenSquare className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Editar</span>
+                          </Link>
+                          <a
+                            href={landing.publishedUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="h-8 w-8 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 flex items-center justify-center transition"
+                            aria-label="Ver landing publicada"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                        <Link
-                          href={`/landings/editor/${landing.id}`}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Editor</span>
-                        </Link>
-
-                        <a
-                          href={landing.publishedUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-1.5 bg-brand-navyDark hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Pública</span>
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recent Orders Table Snapshot */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShoppingBag className="w-4 h-4 text-brand-navy" />
-                    <h3 className="text-sm font-bold text-slate-900">Últimos Pedidos Capturados</h3>
-                  </div>
-                  <Link
-                    href="/orders"
-                    className="text-xs font-semibold text-brand-navy hover:underline flex items-center gap-1"
-                  >
-                    <span>Ir a gestión de pedidos</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+              {/* Orders */}
+              <section className={card}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                  <h3 className="text-[15px] font-semibold text-slate-900">Últimos pedidos</h3>
+                  <Link href="/orders" className="text-[13px] font-medium text-brand-navy hover:underline flex items-center gap-0.5">
+                    Ver pedidos <ChevronRight className="w-4 h-4" />
                   </Link>
                 </div>
-
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                        <th className="pb-2.5">Pedido</th>
-                        <th className="pb-2.5">Cliente</th>
-                        <th className="pb-2.5">Ciudad</th>
-                        <th className="pb-2.5">Total</th>
-                        <th className="pb-2.5">Estado Llamada</th>
-                        <th className="pb-2.5 text-right">Acción</th>
+                      <tr className="text-xs font-medium text-slate-400 border-y border-slate-100 bg-slate-50/60">
+                        <th className="px-5 py-2.5 font-medium">Pedido</th>
+                        <th className="px-3 py-2.5 font-medium">Cliente</th>
+                        <th className="px-3 py-2.5 font-medium hidden md:table-cell">Ciudad</th>
+                        <th className="px-3 py-2.5 font-medium text-right">Total</th>
+                        <th className="px-3 py-2.5 font-medium">Estado</th>
+                        <th className="px-5 py-2.5" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {orders.slice(0, 4).map((order) => (
-                        <tr key={order.id} className="hover:bg-slate-50/70 transition">
-                          <td className="py-3 font-mono font-bold text-slate-800">{order.orderNumber}</td>
-                          <td className="py-3">
-                            <p className="font-semibold text-slate-900">{order.customerName}</p>
-                            <p className="text-[10px] text-slate-400">{order.phone}</p>
-                          </td>
-                          <td className="py-3 text-slate-600">{order.city}</td>
-                          <td className="py-3 font-bold text-slate-900">
-                            ${order.totalAmount.toLocaleString()}
-                          </td>
-                          <td className="py-3">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                order.status === 'confirmed_by_voice'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : order.status === 'pending_call'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : order.status === 'needs_review'
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {order.status === 'confirmed_by_voice' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                              {order.status === 'pending_call' && <Clock className="w-3 h-3 text-amber-600" />}
-                              {order.status === 'needs_review' && <AlertCircle className="w-3 h-3 text-blue-600" />}
-                              {order.status === 'confirmed_by_voice'
-                                ? 'Confirmado Voz'
-                                : order.status === 'pending_call'
-                                ? 'Pendiente Llamada'
-                                : order.status === 'needs_review'
-                                ? 'Revisión Humana'
-                                : order.status}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            <button
-                              onClick={() => handleTestCall(order)}
-                              className="px-2.5 py-1 bg-brand-navy hover:bg-slate-800 text-white rounded text-[11px] font-bold transition inline-flex items-center gap-1"
-                            >
-                              <PhoneCall className="w-3 h-3" />
-                              <span>Llamar</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {orders.slice(0, 5).map((order) => {
+                        const chip = statusChip[order.status] || { label: order.status, cls: 'bg-slate-100 text-slate-600 ring-slate-500/15', Icon: Clock };
+                        return (
+                          <tr key={order.id} className="hover:bg-slate-50/70 transition">
+                            <td className="px-5 py-3 font-mono text-[13px] text-slate-500">{order.orderNumber}</td>
+                            <td className="px-3 py-3">
+                              <p className="font-medium text-slate-900 whitespace-nowrap">{order.customerName}</p>
+                              <p className="text-xs text-slate-400">{order.phone}</p>
+                            </td>
+                            <td className="px-3 py-3 text-slate-600 hidden md:table-cell">{order.city}</td>
+                            <td className="px-3 py-3 text-right font-semibold text-slate-900 tabular-nums">{money(order.totalAmount)}</td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ring-1 ring-inset whitespace-nowrap ${chip.cls}`}>
+                                <chip.Icon className="w-3 h-3" />
+                                {chip.label}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              <button
+                                onClick={() => handleTestCall(order)}
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                                aria-label={`Llamar a ${order.customerName}`}
+                              >
+                                <PhoneCall className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </section>
             </div>
 
-            {/* Right Column: Voice AI & CRM Live Feeds */}
+            {/* Right column */}
             <div className="space-y-6">
-              {/* Voice Agent Status Card */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <PhoneCall className="w-4 h-4 text-emerald-600" />
-                    <h3 className="text-sm font-bold text-slate-900">Agente de Voz Activo</h3>
-                  </div>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              <section className={`${card} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[15px] font-semibold text-slate-900">Agente de voz</h3>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Activo
                   </span>
                 </div>
-
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Nombre del Agente:</span>
-                    <span className="font-bold text-slate-900">Valentina IA (Bogotá)</span>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center font-semibold">
+                    V
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Proveedor:</span>
-                    <span className="font-semibold text-brand-navy">Simulador / Vapi / Retell</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Horario Permitido:</span>
-                    <span className="font-semibold text-slate-700">08:30 - 19:30</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Llamadas Realizadas:</span>
-                    <span className="font-bold text-emerald-600">{callTasks.length} llamadas</span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Valentina</p>
+                    <p className="text-xs text-slate-500">Acento colombiano · Simulador</p>
                   </div>
                 </div>
-
+                <dl className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <dt className="text-xs text-slate-500">Horario</dt>
+                    <dd className="text-sm font-semibold text-slate-900 mt-0.5">08:30 – 19:30</dd>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <dt className="text-xs text-slate-500">Llamadas</dt>
+                    <dd className="text-sm font-semibold text-slate-900 mt-0.5 tabular-nums">{callTasks.length}</dd>
+                  </div>
+                </dl>
                 <button
                   onClick={() => handleTestCall()}
-                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                  className="w-full h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Probar Llamada en Vivo</span>
+                  <Play className="w-4 h-4 fill-current" />
+                  Probar llamada en vivo
                 </button>
-              </div>
+              </section>
 
-              {/* Quick CRM Messaging Snapshot */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-brand-red" />
-                    <h3 className="text-sm font-bold text-slate-900">Bandeja CRM Omnicanal</h3>
-                  </div>
-                  <span className="text-[10px] font-bold bg-brand-red text-white px-2 py-0.5 rounded-full">
-                    WhatsApp API
+              <section className={`${card} p-5`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="w-9 h-9 rounded-xl bg-[#25D366]/10 text-[#128C4B] flex items-center justify-center">
+                    <MessageSquare className="w-[18px] h-[18px]" />
                   </span>
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-slate-900">Mensajes</h3>
+                    <p className="text-xs text-slate-500">WhatsApp, Instagram y Messenger</p>
+                  </div>
                 </div>
-
-                <p className="text-xs text-slate-500">
-                  Centraliza conversaciones de WhatsApp oficial, notas internas de tu equipo y consultas pre-despacho.
+                <p className="text-sm text-slate-500 leading-relaxed mb-4">
+                  Responde a tus clientes desde una sola bandeja, con notas internas para tu equipo.
                 </p>
-
                 <Link
                   href="/crm"
-                  className="block w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-center font-bold text-xs rounded-xl transition"
+                  className="w-full h-10 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition"
                 >
-                  Abrir Bandeja de Mensajes
+                  Abrir bandeja <ArrowUpRight className="w-4 h-4" />
                 </Link>
-              </div>
+              </section>
             </div>
           </div>
         </main>
