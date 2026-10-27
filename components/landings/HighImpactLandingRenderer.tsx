@@ -27,6 +27,7 @@ import confetti from 'canvas-confetti';
 import { LandingPageConfig, ProductCombo, BenefitItem, PaymentMethodType } from '@/lib/types';
 import { logiStore } from '@/lib/store';
 import ProductCreativeCard from '@/components/landings/ProductCreativeCard';
+import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
 
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
@@ -73,7 +74,15 @@ const RECENT_BUYERS = [
   { name: 'Diego Salazar', city: 'Bucaramanga, Santander', timeAgo: 'hace 4 minutos', combo: 'Combo 2x' },
 ];
 
-export default function HighImpactLandingRenderer({
+// AI-generated landings use the long-form sales layout; older ones keep the classic one.
+export default function HighImpactLandingRenderer(props: HighImpactLandingRendererProps) {
+  if (props.config.layout === 'sales-v2' && props.config.sales) {
+    return <SalesPageRenderer {...props} />;
+  }
+  return <ClassicLandingRenderer {...props} />;
+}
+
+function ClassicLandingRenderer({
   config,
   previewMode = false,
   onOrderSubmit,
