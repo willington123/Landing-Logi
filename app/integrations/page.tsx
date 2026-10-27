@@ -1,0 +1,333 @@
+'use client';
+
+import React, { useState } from 'react';
+import Sidebar from '@/components/layout/Sidebar';
+import Header from '@/components/layout/Header';
+import LandingWizardModal from '@/components/landings/LandingWizardModal';
+import {
+  Plug,
+  CheckCircle2,
+  AlertCircle,
+  Key,
+  ShieldCheck,
+  ExternalLink,
+  MessageSquare,
+  PhoneCall,
+  BarChart3,
+  Truck,
+  Globe,
+  Lock,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react';
+
+interface IntegrationItem {
+  id: string;
+  name: string;
+  category: 'voice' | 'crm' | 'tracking' | 'logistics';
+  description: string;
+  iconBg: string;
+  status: 'connected' | 'configured_simulator' | 'requires_keys' | 'coming_soon';
+  requiresKeysText: string;
+  keyFields: { name: string; label: string; placeholder: string; isSecret?: boolean }[];
+  docUrl: string;
+}
+
+const INTEGRATIONS: IntegrationItem[] = [
+  {
+    id: 'whatsapp_cloud',
+    name: 'WhatsApp Business Cloud API (Oficial)',
+    category: 'crm',
+    description: 'Conecta la API oficial de Meta para enviar plantillas HSM aprobadas y recibir mensajes de clientes sin riesgo de bloqueo.',
+    iconBg: 'bg-emerald-500',
+    status: 'connected',
+    requiresKeysText: 'Token permanente y WABA ID configurables.',
+    keyFields: [
+      { name: 'waba_id', label: 'WhatsApp Business Account ID', placeholder: '1098234718293' },
+      { name: 'phone_id', label: 'Phone Number ID', placeholder: '1029384756102' },
+      { name: 'access_token', label: 'Meta System User Access Token', placeholder: 'EAABw...', isSecret: true },
+    ],
+    docUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
+  },
+  {
+    id: 'vapi_ai',
+    name: 'Vapi AI (Voice Agents Ultra-Rápidos)',
+    category: 'voice',
+    description: 'Motor de voz en tiempo real con latencia inferior a 500ms para llamadas de confirmación ultra-humanas.',
+    iconBg: 'bg-brand-navy',
+    status: 'configured_simulator',
+    requiresKeysText: 'Actualmente activo en modo simulador local. Ingresa tu API Key de Vapi para marcar teléfonos reales.',
+    keyFields: [
+      { name: 'vapi_key', label: 'Vapi Private API Key', placeholder: 'vapi_sec_...', isSecret: true },
+      { name: 'vapi_assistant_id', label: 'Assistant ID preconfigurado', placeholder: 'asst_...' },
+    ],
+    docUrl: 'https://vapi.ai',
+  },
+  {
+    id: 'retell_ai',
+    name: 'Retell AI (Telefonía Inteligente)',
+    category: 'voice',
+    description: 'Llamadas conversacionales en español neutro y latinoamericano con detección avanzada de buzón de voz.',
+    iconBg: 'bg-indigo-600',
+    status: 'requires_keys',
+    requiresKeysText: 'Requiere credenciales de Retell AI para llamadas salientes.',
+    keyFields: [
+      { name: 'retell_key', label: 'Retell API Key', placeholder: 'retell_key_...', isSecret: true },
+    ],
+    docUrl: 'https://retellai.com',
+  },
+  {
+    id: 'twilio_voice',
+    name: 'Twilio Voice + Troncal SIP',
+    category: 'voice',
+    description: 'Telefonía tradicional para Colombia (+57), México (+52) y España (+34) con Caller ID de empresa verificado.',
+    iconBg: 'bg-red-600',
+    status: 'requires_keys',
+    requiresKeysText: 'Account SID y Auth Token de Twilio.',
+    keyFields: [
+      { name: 'twilio_sid', label: 'Account SID', placeholder: 'AC...' },
+      { name: 'twilio_token', label: 'Auth Token', placeholder: '••••••••', isSecret: true },
+      { name: 'twilio_phone', label: 'Número Telefónico Saliente', placeholder: '+576017948800' },
+    ],
+    docUrl: 'https://twilio.com',
+  },
+  {
+    id: 'meta_capi',
+    name: 'Meta Conversions API (CAPI) & Pixel',
+    category: 'tracking',
+    description: 'Envía eventos del lado del servidor (Purchase, Lead, InitiateCheckout) para eludir bloqueadores y maximizar ROAS en Facebook Ads.',
+    iconBg: 'bg-blue-600',
+    status: 'connected',
+    requiresKeysText: 'Conexión activa con deduplicación de eventos browser + servidor.',
+    keyFields: [
+      { name: 'pixel_id', label: 'Dataset / Pixel ID', placeholder: '8942109823192' },
+      { name: 'capi_token', label: 'Conversions API Access Token', placeholder: 'EAAG...', isSecret: true },
+      { name: 'test_code', label: 'Test Event Code (Opcional)', placeholder: 'TEST48291' },
+    ],
+    docUrl: 'https://developers.facebook.com/docs/marketing-api/conversions-api',
+  },
+  {
+    id: 'dropi_logistics',
+    name: 'Dropi / Servientrega / Interrapidísimo',
+    category: 'logistics',
+    description: 'Generación automática de guías de despacho y liquidación de dinero contraentrega directo a tu cuenta.',
+    iconBg: 'bg-amber-600',
+    status: 'connected',
+    requiresKeysText: 'Integrado vía webhook de despacho.',
+    keyFields: [
+      { name: 'dropi_token', label: 'Token de Integración Dropi / Transportadora', placeholder: 'dropi_token_...', isSecret: true },
+    ],
+    docUrl: 'https://dropi.co',
+  },
+];
+
+export default function IntegrationsPage() {
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
+
+  const filtered = INTEGRATIONS.filter(
+    (item) => selectedCategory === 'all' || item.category === selectedCategory
+  );
+
+  const toggleShowSecret = (fieldKey: string) => {
+    setShowSecrets((prev) => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
+  };
+
+  const handleSaveIntegration = (id: string) => {
+    setSavedFeedback(id);
+    setTimeout(() => setSavedFeedback(null), 2500);
+  };
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      <Sidebar onOpenWizard={() => setIsWizardOpen(true)} />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Header onOpenWizard={() => setIsWizardOpen(true)} title="Centro de Conectores & Integraciones" />
+
+        <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
+          {/* Header Description */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                Integraciones Oficiales & Capa de Telefonía
+              </h2>
+              <p className="text-xs text-slate-500">
+                Conecta tus proveedores externos de voz IA, telefonía, mensajería oficial y plataformas de pauta.
+              </p>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl text-xs font-bold text-slate-600">
+              <button
+                onClick={() => setSelectedCategory('all')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCategory === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setSelectedCategory('voice')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCategory === 'voice' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Voz IA & Telefonía
+              </button>
+              <button
+                onClick={() => setSelectedCategory('crm')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCategory === 'crm' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                WhatsApp Oficial
+              </button>
+              <button
+                onClick={() => setSelectedCategory('tracking')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCategory === 'tracking' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Meta CAPI & Píxeles
+              </button>
+              <button
+                onClick={() => setSelectedCategory('logistics')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCategory === 'logistics' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Logística & Dropi
+              </button>
+            </div>
+          </div>
+
+          {/* Integrations Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filtered.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-5"
+              >
+                <div className="space-y-4">
+                  {/* Top Row: Icon + Title + Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-xl ${item.iconBg} text-white flex items-center justify-center font-black shadow-md`}>
+                        {item.category === 'voice' && <PhoneCall className="w-5 h-5" />}
+                        {item.category === 'crm' && <MessageSquare className="w-5 h-5" />}
+                        {item.category === 'tracking' && <BarChart3 className="w-5 h-5" />}
+                        {item.category === 'logistics' && <Truck className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">{item.name}</h3>
+                        <span className="text-[10px] text-slate-400 capitalize">{item.category}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      {item.status === 'connected' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Conectado</span>
+                        </span>
+                      )}
+                      {item.status === 'configured_simulator' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-brand-navy border border-blue-200">
+                          <Sparkles className="w-3 h-3 text-brand-navy" />
+                          <span>Simulador Activo</span>
+                        </span>
+                      )}
+                      {item.status === 'requires_keys' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                          <Key className="w-3 h-3 text-amber-600" />
+                          <span>Faltan Credenciales</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {item.description}
+                  </p>
+
+                  {/* Key inputs */}
+                  <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                    {item.keyFields.map((field) => {
+                      const fieldKey = `${item.id}_${field.name}`;
+                      const isRevealed = showSecrets[fieldKey];
+
+                      return (
+                        <div key={field.name}>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            {field.label}:
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={field.isSecret && !isRevealed ? 'password' : 'text'}
+                              placeholder={field.placeholder}
+                              defaultValue={item.status === 'connected' ? '••••••••••••••••' : ''}
+                              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono focus:ring-1 focus:ring-brand-red focus:bg-white"
+                            />
+                            {field.isSecret && (
+                              <button
+                                type="button"
+                                onClick={() => toggleShowSecret(fieldKey)}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                              >
+                                {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <a
+                    href={item.docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-semibold text-brand-navy hover:underline flex items-center gap-1"
+                  >
+                    <span>Ver documentación</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+
+                  <button
+                    onClick={() => handleSaveIntegration(item.id)}
+                    className="px-4 py-1.5 bg-brand-navy hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    {savedFeedback === item.id ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>¡Guardado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-3.5 h-3.5" />
+                        <span>Guardar Credenciales</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+
+      <LandingWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+      />
+    </div>
+  );
+}
