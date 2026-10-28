@@ -42,7 +42,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'crm',
     description: 'Conecta la API oficial de Meta para enviar plantillas HSM aprobadas y recibir mensajes de clientes sin riesgo de bloqueo.',
     iconBg: 'bg-emerald-500',
-    status: 'connected',
+    status: 'coming_soon',
     requiresKeysText: 'Token permanente y WABA ID configurables.',
     keyFields: [
       { name: 'waba_id', label: 'WhatsApp Business Account ID', placeholder: '1098234718293' },
@@ -57,7 +57,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'voice',
     description: 'Motor de voz en tiempo real con latencia inferior a 500ms para llamadas de confirmación ultra-humanas.',
     iconBg: 'bg-brand-navy',
-    status: 'configured_simulator',
+    status: 'coming_soon',
     requiresKeysText: 'Actualmente activo en modo simulador local. Ingresa tu API Key de Vapi para marcar teléfonos reales.',
     keyFields: [
       { name: 'vapi_key', label: 'Vapi Private API Key', placeholder: 'vapi_sec_...', isSecret: true },
@@ -71,7 +71,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'voice',
     description: 'Llamadas conversacionales en español neutro y latinoamericano con detección avanzada de buzón de voz.',
     iconBg: 'bg-indigo-600',
-    status: 'requires_keys',
+    status: 'coming_soon',
     requiresKeysText: 'Requiere credenciales de Retell AI para llamadas salientes.',
     keyFields: [
       { name: 'retell_key', label: 'Retell API Key', placeholder: 'retell_key_...', isSecret: true },
@@ -84,7 +84,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'voice',
     description: 'Telefonía tradicional para Colombia (+57), México (+52) y España (+34) con Caller ID de empresa verificado.',
     iconBg: 'bg-red-600',
-    status: 'requires_keys',
+    status: 'coming_soon',
     requiresKeysText: 'Account SID y Auth Token de Twilio.',
     keyFields: [
       { name: 'twilio_sid', label: 'Account SID', placeholder: 'AC...' },
@@ -99,7 +99,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'tracking',
     description: 'Envía eventos del lado del servidor (Purchase, Lead, InitiateCheckout) para eludir bloqueadores y maximizar ROAS en Facebook Ads.',
     iconBg: 'bg-blue-600',
-    status: 'connected',
+    status: 'coming_soon',
     requiresKeysText: 'Conexión activa con deduplicación de eventos browser + servidor.',
     keyFields: [
       { name: 'pixel_id', label: 'Dataset / Pixel ID', placeholder: '8942109823192' },
@@ -114,7 +114,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     category: 'logistics',
     description: 'Generación automática de guías de despacho y liquidación de dinero contraentrega directo a tu cuenta.',
     iconBg: 'bg-amber-600',
-    status: 'connected',
+    status: 'coming_soon',
     requiresKeysText: 'Integrado vía webhook de despacho.',
     keyFields: [
       { name: 'dropi_token', label: 'Token de Integración Dropi / Transportadora', placeholder: 'dropi_token_...', isSecret: true },
@@ -157,7 +157,7 @@ export default function IntegrationsPage() {
                 Integraciones
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">
-                Conecta voz IA, WhatsApp, píxeles de anuncios y transportadoras.
+                Estas conexiones están en desarrollo y todavía no funcionan. El píxel de Meta ya funciona: configúralo en Configuración.
               </p>
             </div>
 
@@ -242,6 +242,11 @@ export default function IntegrationsPage() {
                           <span>Simulador Activo</span>
                         </span>
                       )}
+                      {item.status === 'coming_soon' && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/15">
+                          Próximamente
+                        </span>
+                      )}
                       {item.status === 'requires_keys' && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                           <Key className="w-3 h-3 text-amber-600" />
@@ -270,6 +275,7 @@ export default function IntegrationsPage() {
                             <input
                               type={field.isSecret && !isRevealed ? 'password' : 'text'}
                               placeholder={field.placeholder}
+                              disabled={item.status === 'coming_soon'}
                               defaultValue={item.status === 'connected' ? '••••••••••••••••' : ''}
                               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono focus:ring-1 focus:ring-brand-red focus:bg-white"
                             />
@@ -303,7 +309,9 @@ export default function IntegrationsPage() {
 
                   <button
                     onClick={() => handleSaveIntegration(item.id)}
-                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                    disabled={item.status === 'coming_soon'}
+                    title={item.status === 'coming_soon' ? 'Esta integración todavía no está disponible' : undefined}
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {savedFeedback === item.id ? (
                       <>

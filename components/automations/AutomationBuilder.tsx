@@ -50,73 +50,7 @@ interface ExecutionLog {
   details?: string;
 }
 
-const INITIAL_EXECUTION_LOGS: ExecutionLog[] = [
-  {
-    id: 'log-101',
-    flowId: 'auto-1',
-    flowName: 'Disparo Inmediato de Llamada IA al Recibir Pedido',
-    triggerEvent: 'order_created',
-    orderNumber: 'LP-9821',
-    customerName: 'Santiago Rodríguez',
-    actionsExecuted: ['Plantilla WhatsApp order_received_alert', 'Llamada IA encolada (2 min)'],
-    status: 'success',
-    latencyMs: 380,
-    timestamp: 'Hace 4 minutos',
-    details: 'WhatsApp entregado a +57 312 458 9120. Valentina IA programada.',
-  },
-  {
-    id: 'log-102',
-    flowId: 'auto-3',
-    flowName: 'Pedido Confirmado por Voz -> Generar Despacho',
-    triggerEvent: 'call_confirmed',
-    orderNumber: 'LP-9821',
-    customerName: 'Santiago Rodríguez',
-    actionsExecuted: ['Estado actualizado a confirmed_by_voice', 'WhatsApp order_confirmed_success', 'Webhook logístico despachado'],
-    status: 'success',
-    latencyMs: 510,
-    timestamp: 'Hace 8 minutos',
-    details: 'Webhook respondió HTTP 200 con número de guía logística #GUIA-77821.',
-  },
-  {
-    id: 'log-103',
-    flowId: 'auto-2',
-    flowName: 'Reintento Inteligente si No Contesta la Llamada',
-    triggerEvent: 'call_unanswered',
-    orderNumber: 'LP-9824',
-    customerName: 'Diana Carolina Ruiz',
-    actionsExecuted: ['WhatsApp missed_call_notice', 'Estado cambiado a retry_scheduled (+45 min)'],
-    status: 'success',
-    latencyMs: 290,
-    timestamp: 'Hace 35 minutos',
-    details: 'Cliente no contestó tras 5 timbres. Notificación WhatsApp enviada.',
-  },
-  {
-    id: 'log-104',
-    flowId: 'auto-1',
-    flowName: 'Disparo Inmediato de Llamada IA al Recibir Pedido',
-    triggerEvent: 'order_created',
-    orderNumber: 'LP-9822',
-    customerName: 'Camila Montoya López',
-    actionsExecuted: ['Plantilla WhatsApp order_received_alert', 'Llamada IA disparada'],
-    status: 'success',
-    latencyMs: 410,
-    timestamp: 'Hace 1 hora',
-    details: 'Llamada contestada al 1er intento. Duración: 64s.',
-  },
-  {
-    id: 'log-105',
-    flowId: 'auto-3',
-    flowName: 'Pedido Confirmado por Voz -> Generar Despacho',
-    triggerEvent: 'call_confirmed',
-    orderNumber: 'LP-9822',
-    customerName: 'Camila Montoya López',
-    actionsExecuted: ['Estado actualizado', 'Webhook logístico'],
-    status: 'success',
-    latencyMs: 460,
-    timestamp: 'Hace 58 minutos',
-    details: 'Generación de guía Servientrega automática.',
-  },
-];
+const INITIAL_EXECUTION_LOGS: ExecutionLog[] = [];
 
 const TRIGGER_LABELS: Record<string, { title: string; subtitle: string; icon: any; color: string; bg: string }> = {
   order_created: {
@@ -395,13 +329,9 @@ export default function AutomationBuilder() {
               {flows.reduce((acc, f) => acc + (f.executionsCount || 0), 0).toLocaleString()}
             </div>
           </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">Tasa de Entrega WA</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">99.4%</div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 font-medium">Tiempo Respuesta IA</div>
-            <div className="text-2xl font-bold text-amber-600 mt-0.5">&lt; 2 min</div>
+          <div className="col-span-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800 leading-relaxed">
+            <strong className="block text-amber-900 mb-0.5">Todavía no se ejecutan solas</strong>
+            Estos flujos son plantillas. Empezarán a funcionar cuando conectes WhatsApp Business y un proveedor de llamadas real.
           </div>
         </div>
       </div>

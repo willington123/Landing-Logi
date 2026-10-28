@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { pullFromCloud } from '@/lib/cloud';
+import { pullFromCloud, CLOUD_SYNC_EVENT } from '@/lib/cloud';
+import { logiStore } from '@/lib/store';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -34,8 +35,8 @@ const NAV_GROUPS = [
   {
     label: 'Atender',
     items: [
-      { href: '/voice-ai', label: 'Llamadas IA', icon: PhoneCall, live: true },
-      { href: '/crm', label: 'Mensajes', icon: MessageSquare, badge: '3' },
+      { href: '/voice-ai', label: 'Llamadas IA', icon: PhoneCall },
+      { href: '/crm', label: 'Mensajes', icon: MessageSquare },
     ],
   },
   {
@@ -58,6 +59,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [authOn, setAuthOn] = useState(false);
+  const [storeName, setStoreName] = useState('');
 
   useEffect(() => {
     const toggle = () => setOpen((v) => !v);
@@ -67,11 +69,15 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
   // Refresh landings and orders from Supabase (no-op when the cloud is not configured).
   useEffect(() => {
+    const readName = () => setStoreName(logiStore.getStoreSettings().storeName);
+    readName();
+    window.addEventListener(CLOUD_SYNC_EVENT, readName);
     pullFromCloud();
     fetch('/api/status')
       .then((r) => r.json())
       .then((d) => setAuthOn(Boolean(d.auth)))
       .catch(() => {});
+    return () => window.removeEventListener(CLOUD_SYNC_EVENT, readName);
   }, []);
 
   const logout = async () => {
@@ -142,17 +148,6 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                       {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-brand-gradient" />}
                       <Icon className={`w-[18px] h-[18px] ${active ? 'text-brand-navy' : 'text-slate-400'}`} strokeWidth={2} />
                       <span className="flex-1">{item.label}</span>
-                      {'badge' in item && item.badge && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-brand-red text-white text-[11px] font-bold flex items-center justify-center">
-                          {item.badge}
-                        </span>
-                      )}
-                      {'live' in item && item.live && (
-                        <span className="relative flex h-2 w-2" title="Agente activo">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                        </span>
-                      )}
                     </Link>
                   );
                 })}
@@ -166,8 +161,8 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           <Link href="/settings" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition">
             <img src="/brand/logipages-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-slate-900 truncate">Tienda Pro E-commerce</p>
-              <p className="text-xs text-slate-500 truncate">Plan Growth</p>
+              <p className="text-[13px] font-semibold text-slate-900 truncate">{storeName || 'Mi tienda'}</p>
+              <p className="text-xs text-slate-500 truncate">{storeName ? 'Configuración' : 'Pon el nombre de tu tienda'}</p>
             </div>
           </Link>
           {authOn && (

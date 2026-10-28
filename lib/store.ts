@@ -302,7 +302,7 @@ export const logiStore = {
       contactPhone: order.phone,
       channel: 'whatsapp',
       status: 'open',
-      assignedAgent: 'Valentina IA Bot',
+      assignedAgent: 'Asistente IA',
       lastMessage: `Nuevo pedido ${order.orderNumber} por $${order.totalAmount.toLocaleString()} recibido`,
       lastMessageAt: 'Ahora',
       unreadCount: 1,
@@ -349,6 +349,66 @@ export const logiStore = {
       updated = [flow, ...flows];
     }
     safeSet(STORAGE_KEYS.AUTOMATIONS, updated);
+  },
+
+  // Removes the old demo records (fake landings, orders, chats, calls) that earlier
+  // versions saved in the browser. Runs once; real data is never touched.
+  purgeDemoData: (): void => {
+    if (typeof window === 'undefined') return;
+    const FLAG = 'logipages_demo_purged_v1';
+    if (localStorage.getItem(FLAG)) return;
+    const demo = {
+      landings: ['lp-titan-pro-01'],
+      orders: ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004'],
+      calls: ['call-1001', 'call-1003'],
+      contacts: ['ct-1', 'ct-2', 'ct-3'],
+      conversations: ['conv-1', 'conv-2', 'conv-3'],
+    };
+    const filterKey = (key: string, ids: string[], field = 'id') => {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      try {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) localStorage.setItem(key, JSON.stringify(list.filter((x: any) => !ids.includes(x?.[field]))));
+      } catch {
+        // ignore corrupted entries
+      }
+    };
+    filterKey(STORAGE_KEYS.LANDINGS, demo.landings);
+    filterKey(STORAGE_KEYS.ORDERS, demo.orders);
+    filterKey(STORAGE_KEYS.CALL_TASKS, demo.calls);
+    filterKey(STORAGE_KEYS.CALL_TASKS, demo.orders, 'orderId');
+    filterKey(STORAGE_KEYS.CRM_CONTACTS, demo.contacts);
+    filterKey(STORAGE_KEYS.CRM_CONVERSATIONS, demo.conversations);
+    try {
+      const msgs = JSON.parse(localStorage.getItem(STORAGE_KEYS.CRM_MESSAGES) || 'null');
+      if (msgs && typeof msgs === 'object') {
+        demo.conversations.forEach((id) => delete msgs[id]);
+        localStorage.setItem(STORAGE_KEYS.CRM_MESSAGES, JSON.stringify(msgs));
+      }
+    } catch {
+      // ignore
+    }
+    // Demo automations come back as inactive templates with no fake execution counts.
+    try {
+      const flows = JSON.parse(localStorage.getItem(STORAGE_KEYS.AUTOMATIONS) || 'null');
+      if (Array.isArray(flows)) {
+        const defaults = Object.fromEntries(DEFAULT_AUTOMATIONS.map((f) => [f.id, f]));
+        localStorage.setItem(STORAGE_KEYS.AUTOMATIONS, JSON.stringify(flows.map((f: any) => defaults[f.id] || f)));
+      }
+    } catch {
+      // ignore
+    }
+    // Voice agent: drop the made-up phone numbers.
+    try {
+      const va = JSON.parse(localStorage.getItem(STORAGE_KEYS.VOICE_AGENT) || 'null');
+      if (va && va.phoneNumber === '+57 601 794 8800') {
+        localStorage.setItem(STORAGE_KEYS.VOICE_AGENT, JSON.stringify({ ...va, phoneNumber: '', operatorTransferPhone: '', isActive: false }));
+      }
+    } catch {
+      // ignore
+    }
+    localStorage.setItem(FLAG, new Date().toISOString());
   },
 
   // Store settings (brand name, support contact, defaults for new landings)

@@ -67,7 +67,12 @@ async function uploadInlineImages(landing: LandingPageConfig): Promise<{ landing
 // ---------- landings ----------
 
 export async function upsertLanding(input: LandingPageConfig) {
-  const { landing, replaced } = await uploadInlineImages(input);
+  const uploaded = await uploadInlineImages(input);
+  const replaced = uploaded.replaced;
+  // Visits are counted on the server; never let a save from the editor lower them.
+  const { data: existing } = await db().from('landings').select('data').eq('id', input.id).maybeSingle();
+  const storedViews = (existing?.data as LandingPageConfig | undefined)?.viewsCount || 0;
+  const landing = { ...uploaded.landing, viewsCount: Math.max(storedViews, uploaded.landing.viewsCount || 0) };
   const { error } = await db()
     .from('landings')
     .upsert({ id: landing.id, slug: landing.slug, data: landing, published: landing.isPublished !== false, updated_at: new Date().toISOString() });
@@ -93,6 +98,15 @@ export async function getPublicLanding(slugOrId: string): Promise<LandingPageCon
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.data as LandingPageConfig) || null;
+}
+
+// Counts a visit on a public landing (stored inside the landing JSON).
+export async function incrementLandingViews(slugOrId: string) {
+  const landing = await getPublicLanding(slugOrId);
+  if (!landing) return;
+  const next = { ...landing, viewsCount: (landing.viewsCount || 0) + 1 };
+  const { error } = await db().from('landings').update({ data: next }).eq('id', landing.id);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteLanding(id: string) {

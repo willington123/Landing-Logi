@@ -30,6 +30,24 @@ export default function PublicLanding({ initial, slug, cloud }: { initial: Landi
     setLoading(false);
   }, [cloud, initial, slug]);
 
+  // Visit counter: once per browser session, never for bots without JS.
+  useEffect(() => {
+    if (!config) return;
+    const key = `lp_viewed_${config.id}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch {
+      // private mode: count anyway
+    }
+    if (cloud) {
+      fetch('/api/public/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ landingId: config.id }) }).catch(() => {});
+    } else {
+      const l = logiStore.getLandingBySlug(config.slug);
+      if (l) logiStore.saveLanding({ ...l, viewsCount: (l.viewsCount || 0) + 1 });
+    }
+  }, [config, cloud]);
+
   // Meta Pixel
   useEffect(() => {
     if (!config?.metaPixelId) return;

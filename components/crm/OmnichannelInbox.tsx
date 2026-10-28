@@ -181,13 +181,7 @@ const WHATSAPP_TEMPLATES: WhatsAppTemplate[] = [
   },
 ];
 
-const AVAILABLE_AGENTS = [
-  'Valentina IA Bot',
-  'Agente Soporte (Carlos)',
-  'Laura Restrepo (Ventas)',
-  'Equipo Logística (Central)',
-  'Sin Asignar',
-];
+const AVAILABLE_AGENTS = ['Sin asignar', 'Yo', 'Asistente IA'];
 
 interface OmnichannelInboxProps {
   initialConversationId?: string;
@@ -697,8 +691,8 @@ export default function OmnichannelInbox({
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-[#FF252B] border border-red-200">
-                Live Sync
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600" title="La bandeja se conectará a WhatsApp Business próximamente">
+                Próximamente WhatsApp
               </span>
             </div>
           </div>

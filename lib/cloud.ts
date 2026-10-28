@@ -32,7 +32,11 @@ async function getJSON(url: string) {
 
 // Downloads landings, orders and settings into the local cache.
 export async function pullFromCloud(): Promise<boolean> {
-  if (!(await isCloud())) return false;
+  logiStore.purgeDemoData();
+  if (!(await isCloud())) {
+    window.dispatchEvent(new Event(CLOUD_SYNC_EVENT));
+    return false;
+  }
   try {
     await migrateLocalLandings();
     const [l, o, st] = await Promise.all([getJSON('/api/landings'), getJSON('/api/orders'), getJSON('/api/settings')]);
@@ -49,7 +53,7 @@ export async function pullFromCloud(): Promise<boolean> {
 
 // First time the panel runs with Supabase: upload landings that exist only in this
 // browser, so replacing the local cache with the cloud copy never loses work.
-const DEMO_IDS = new Set(['lp-titan-pro-01']);
+const DEMO_IDS = new Set(['lp-titan-pro-01']); // never upload the old demo landing
 async function migrateLocalLandings() {
   const FLAG = 'logipages_cloud_migrated';
   if (localStorage.getItem(FLAG)) return;

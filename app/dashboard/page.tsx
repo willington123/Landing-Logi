@@ -275,8 +275,8 @@ export default function DashboardPage() {
               <section className={`${card} p-5`}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-[15px] font-semibold text-slate-900">Agente de voz</h3>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Activo
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                    Simulador
                   </span>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
@@ -285,7 +285,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Valentina</p>
-                    <p className="text-xs text-slate-500">Acento colombiano · Simulador</p>
+                    <p className="text-xs text-slate-500">Prueba cómo confirmaría tus pedidos</p>
                   </div>
                 </div>
                 <dl className="grid grid-cols-2 gap-3 mb-4">
@@ -314,11 +314,11 @@ export default function DashboardPage() {
                   </span>
                   <div>
                     <h3 className="text-[15px] font-semibold text-slate-900">Mensajes</h3>
-                    <p className="text-xs text-slate-500">WhatsApp, Instagram y Messenger</p>
+                    <p className="text-xs text-slate-500">Próximamente con WhatsApp</p>
                   </div>
                 </div>
                 <p className="text-sm text-slate-500 leading-relaxed mb-4">
-                  Responde a tus clientes desde una sola bandeja, con notas internas para tu equipo.
+                  Cuando conectes WhatsApp Business, aquí responderás a tus clientes desde una sola bandeja.
                 </p>
                 <Link
                   href="/crm"
