@@ -9,6 +9,21 @@ import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import OfferCountdownBox from '@/components/landings/OfferCountdownBox';
 import { defaultCombo } from '@/lib/offer-countdown';
 import {
+  EMPTY_ADDRESS,
+  RURAL,
+  STREET_TYPES,
+  buildAddress,
+  cleanAddressPiece,
+  formatPhoneInput,
+  localPhoneDigits,
+  phoneRule,
+  streetLine,
+  validateAddress,
+  validateName,
+  validatePhone,
+  type AddressParts,
+} from '@/lib/order-form';
+import {
   Check,
   X as XIcon,
   Truck,
@@ -157,14 +172,38 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const [drawer, setDrawer] = useState(false);
 
   // Order form
-  const [form, setForm] = useState({ name: '', phone: '', region: isColombia ? 'Antioquia' : '', city: '', address: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', region: '', city: '', address: '', notes: '' });
+  const [addr, setAddr] = useState<AddressParts>(EMPTY_ADDRESS);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const phoneInfo = phoneRule(config.country);
+  const FIX_FIELDS = 'Revisa los datos marcados en rojo para que tu pedido llegue sin problemas.';
+  // Hide the "fix the fields" banner once every field is fixed.
+  useEffect(() => {
+    if (formError === FIX_FIELDS && !Object.values(errors).some(Boolean)) setFormError(null);
+  }, [errors, formError]);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<any | null>(null);
   // wa.me link with the order details; the thank-you step opens it after a countdown.
   const doneWhatsApp = done ? orderWhatsAppUrl(config, done) : '';
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const clearError = (k: string) => setErrors((er) => (er[k] ? { ...er, [k]: '' } : er));
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const v = k === 'phone' ? formatPhoneInput(e.target.value, config.country) : e.target.value;
+    setForm((f) => ({ ...f, [k]: v }));
+    clearError(k);
+  };
+  const setA = (k: keyof AddressParts) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const v = ['via', 'cross', 'plate'].includes(k) ? cleanAddressPiece(e.target.value) : e.target.value;
+    setAddr((a) => ({ ...a, [k]: v }));
+    clearError(k);
+  };
+  // Field check when leaving a field, so mistakes show up before submitting.
+  const checkPhone = () => form.phone && setErrors((er) => ({ ...er, phone: validatePhone(form.phone, config.country) || '' }));
+  const checkName = () => form.name && setErrors((er) => ({ ...er, name: validateName(form.name) || '' }));
+  const labelCls = 'block text-xs font-semibold text-slate-700 mb-1';
+  const inputCls = (k: string) =>
+    `w-full h-12 px-4 rounded-xl border text-sm outline-none ${errors[k] ? 'border-red-400 bg-red-50/40 focus:border-red-500' : 'border-slate-300 focus:border-slate-900'}`;
+  const errMsg = (k: string) => (errors[k] ? <p className="mt-1 text-xs text-red-600">{errors[k]}</p> : null);
 
   // Meta Pixel: checkout started (only on the public page, never in the editor preview).
   useEffect(() => {
@@ -192,10 +231,23 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    if (!form.name.trim()) return setFormError('Escribe tu nombre completo.');
-    if (form.phone.replace(/\D/g, '').length < 7) return setFormError('Escribe un número de celular válido.');
-    if (!form.city.trim()) return setFormError('Escribe tu ciudad o municipio.');
-    if (!form.address.trim()) return setFormError('Escribe la dirección de entrega.');
+    const errs: Record<string, string> = {};
+    const nameErr = validateName(form.name);
+    if (nameErr) errs.name = nameErr;
+    const phoneErr = validatePhone(form.phone, config.country);
+    if (phoneErr) errs.phone = phoneErr;
+    if (!form.region.trim()) errs.region = isColombia ? 'Elige tu departamento.' : 'Escribe tu estado o provincia.';
+    if (form.city.trim().length < 2) errs.city = 'Escribe tu ciudad o municipio.';
+    if (isColombia) Object.assign(errs, validateAddress(addr));
+    else if (form.address.trim().length < 6) errs.address = 'Escribe la dirección completa de entrega.';
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      setFormError(FIX_FIELDS);
+      const first = ['name', 'phone', 'region', 'city', 'type', 'via', 'cross', 'plate', 'rural', 'address', 'neighborhood'].find((k) => errs[k]);
+      if (first) document.getElementById(`of-${first}`)?.focus();
+      return;
+    }
+    setErrors({});
     setSubmitting(true);
     const order = {
       landingPageId: config.id,
@@ -204,10 +256,10 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
       units: combo.units,
       totalAmount: combo.promoPrice,
       customerName: form.name.trim(),
-      phone: form.phone.trim(),
+      phone: formatPhoneInput(localPhoneDigits(form.phone, config.country), config.country),
       department: form.region.trim(),
       city: form.city.trim(),
-      address: form.address.trim(),
+      address: isColombia ? buildAddress(addr) : form.address.trim(),
       notes: form.notes.trim(),
       paymentMethod: 'cash_on_delivery' as const,
     };
@@ -893,26 +945,104 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                   </div>
                 )}
 
-                {[
-                  { k: 'name' as const, ph: 'Nombre y apellido', ac: 'name' },
-                  { k: 'phone' as const, ph: 'Celular / WhatsApp', ac: 'tel', type: 'tel' },
-                ].map((f) => (
-                  <input key={f.k} className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900" placeholder={f.ph} value={form[f.k]} onChange={set(f.k)} autoComplete={f.ac} type={f.type || 'text'} />
-                ))}
-                <div className="grid grid-cols-2 gap-3">
-                  {isColombia ? (
-                    <select className="w-full h-12 px-3 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900 bg-white" value={form.region} onChange={set('region')}>
-                      {CO_DEPARTMENTS.map((dep) => (
-                        <option key={dep}>{dep}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900" placeholder="Estado / Provincia" value={form.region} onChange={set('region')} />
-                  )}
-                  <input className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900" placeholder="Ciudad" value={form.city} onChange={set('city')} autoComplete="address-level2" />
+                {/* Name */}
+                <div>
+                  <label htmlFor="of-name" className={labelCls}>Nombre y apellido</label>
+                  <input id="of-name" className={inputCls('name')} placeholder="Ej. Laura Gómez" value={form.name} onChange={set('name')} onBlur={checkName} autoComplete="name" />
+                  {errMsg('name')}
                 </div>
-                <input className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900" placeholder="Dirección completa" value={form.address} onChange={set('address')} autoComplete="street-address" />
-                <input className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm outline-none focus:border-slate-900" placeholder="Barrio / indicaciones (opcional)" value={form.notes} onChange={set('notes')} />
+
+                {/* Phone */}
+                <div>
+                  <label htmlFor="of-phone" className={labelCls}>Celular / WhatsApp</label>
+                  <div className="relative">
+                    <input
+                      id="of-phone"
+                      className={`${inputCls('phone')} pr-16`}
+                      placeholder={phoneInfo.example}
+                      value={form.phone}
+                      onChange={set('phone')}
+                      onBlur={checkPhone}
+                      autoComplete="tel-national"
+                      type="tel"
+                      inputMode="numeric"
+                    />
+                    <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums ${localPhoneDigits(form.phone, config.country).length === phoneInfo.length ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>
+                      {localPhoneDigits(form.phone, config.country).length}/{phoneInfo.length}
+                    </span>
+                  </div>
+                  {errMsg('phone') || <p className="mt-1 text-[11px] text-slate-500">{phoneInfo.length} números, sin +{phoneInfo.code}. Te contactamos a este número.</p>}
+                </div>
+
+                {/* Region + city */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="of-region" className={labelCls}>{isColombia ? 'Departamento' : 'Estado / Provincia'}</label>
+                    {isColombia ? (
+                      <select id="of-region" className={`${inputCls('region')} bg-white px-3`} value={form.region} onChange={set('region')}>
+                        <option value="" disabled>Elige…</option>
+                        {CO_DEPARTMENTS.map((dep) => (
+                          <option key={dep}>{dep}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input id="of-region" className={inputCls('region')} value={form.region} onChange={set('region')} />
+                    )}
+                    {errMsg('region')}
+                  </div>
+                  <div>
+                    <label htmlFor="of-city" className={labelCls}>Ciudad o municipio</label>
+                    <input id="of-city" className={inputCls('city')} value={form.city} onChange={set('city')} autoComplete="address-level2" />
+                    {errMsg('city')}
+                  </div>
+                </div>
+
+                {/* Address */}
+                {isColombia ? (
+                  <div className="space-y-2">
+                    <span className={labelCls}>Dirección de entrega</span>
+                    <div className="grid grid-cols-[1fr_96px] gap-2">
+                      <select id="of-type" aria-label="Tipo de vía" className={`${inputCls('type')} bg-white px-3`} value={addr.type} onChange={setA('type')}>
+                        <option value="" disabled>Calle, carrera…</option>
+                        {STREET_TYPES.map((t) => (
+                          <option key={t}>{t}</option>
+                        ))}
+                        <option value={RURAL}>Rural (vereda, finca…)</option>
+                      </select>
+                      {addr.type !== RURAL && (
+                        <input id="of-via" aria-label="Número de la vía" className={inputCls('via')} placeholder="45A" value={addr.via} onChange={setA('via')} />
+                      )}
+                    </div>
+                    {addr.type === RURAL ? (
+                      <input id="of-rural" className={inputCls('rural')} placeholder="Ej. Vereda El Placer, finca La Esperanza, km 5 vía Rionegro" value={addr.rural} onChange={setA('rural')} />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-slate-500">#</span>
+                        <input id="of-cross" aria-label="Número después del #" className={inputCls('cross')} placeholder="10" value={addr.cross} onChange={setA('cross')} />
+                        <span className="text-base font-bold text-slate-500">-</span>
+                        <input id="of-plate" aria-label="Número de la casa" className={inputCls('plate')} placeholder="20" value={addr.plate} onChange={setA('plate')} />
+                      </div>
+                    )}
+                    {errMsg('type') || errMsg('via') || errMsg('cross') || errMsg('plate') || errMsg('rural')}
+                    {streetLine(addr) && addr.type !== RURAL && (
+                      <p className="text-xs text-slate-600">
+                        Tu dirección: <strong className="text-slate-900">{streetLine(addr)}</strong>
+                      </p>
+                    )}
+                    <input className={inputCls('complement')} placeholder="Apto, torre, casa, bloque (opcional)" value={addr.complement} onChange={setA('complement')} />
+                    <div>
+                      <input id="of-neighborhood" className={inputCls('neighborhood')} placeholder="Barrio" value={addr.neighborhood} onChange={setA('neighborhood')} />
+                      {errMsg('neighborhood')}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor="of-address" className={labelCls}>Dirección completa</label>
+                    <input id="of-address" className={inputCls('address')} value={form.address} onChange={set('address')} autoComplete="street-address" />
+                    {errMsg('address')}
+                  </div>
+                )}
+                <input className={inputCls('notes')} placeholder="Indicaciones para el repartidor (opcional)" value={form.notes} onChange={set('notes')} />
 
                 <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-sm">
                   <span className="text-slate-600">Total a pagar al recibir</span>

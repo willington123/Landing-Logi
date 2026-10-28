@@ -5,6 +5,7 @@ import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
 import { sendOrderConfirmation } from '@/lib/server/wa-actions';
 import { onNewOrder } from '@/lib/server/voice-actions';
 import type { OrderItem } from '@/lib/types';
+import { serverOrderErrors } from '@/lib/order-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +26,10 @@ export async function POST(req: NextRequest) {
     const phone = clean(b.phone, 40);
     const city = clean(b.city, 80);
     const address = clean(b.address, 240);
-    if (!name || phone.replace(/\D/g, '').length < 7 || !city || !address || !combo) {
-      return NextResponse.json({ success: false, error: 'Faltan datos del pedido.' }, { status: 400 });
-    }
+    if (!combo) return NextResponse.json({ success: false, error: 'Faltan datos del pedido.' }, { status: 400 });
+    // Same rules as the landing form (phone digits by country, name + surname, full address).
+    const invalid = serverOrderErrors({ name, phone, city, address }, landing.country);
+    if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 });
 
     const id = `ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const order: OrderItem = {
