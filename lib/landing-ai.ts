@@ -49,6 +49,7 @@ export interface OfferInput {
   price: number; // total price for all units
   label?: string; // optional badge, e.g. "Más vendido"
   popular?: boolean;
+  selected?: boolean; // pre-selected when the page opens
 }
 
 export interface SalesLandingInput {
@@ -109,6 +110,7 @@ export function buildCombos(offers: OfferInput[], regularUnit: number, currency:
       savingsText: parts.join(' · '),
       badge: o.label?.trim() || undefined,
       isPopular: i === popularIdx && valid.length > 1,
+      isDefault: Boolean(o.selected) || undefined,
     };
   });
 }
