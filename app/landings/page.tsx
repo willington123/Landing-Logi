@@ -120,7 +120,7 @@ export default function LandingsPage() {
                         </span>
                       )}
                       <span className="absolute bottom-3 left-3 text-sm font-semibold text-white">
-                        ${landing.promoPrice.toLocaleString('es-CO')} {landing.currency}
+                        ${(landing.promoPrice || 0).toLocaleString('es-CO')} {landing.currency}
                       </span>
                     </Link>
 
@@ -130,8 +130,8 @@ export default function LandingsPage() {
 
                       <dl className="grid grid-cols-3 gap-2 mt-4 mb-4">
                         {[
-                          ['Visitas', landing.viewsCount.toLocaleString('es-CO')],
-                          ['Pedidos', landing.ordersCount.toLocaleString('es-CO')],
+                          ['Visitas', (landing.viewsCount || 0).toLocaleString('es-CO')],
+                          ['Pedidos', (landing.ordersCount || 0).toLocaleString('es-CO')],
                           ['Conversión', `${conv}%`],
                         ].map(([k, v]) => (
                           <div key={k} className="rounded-xl bg-slate-50 px-3 py-2">
