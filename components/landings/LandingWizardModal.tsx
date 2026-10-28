@@ -196,6 +196,8 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
     const images: GeneratedImages = { benefits: [] };
     if (withImages) {
       const palette = `${copy.design.primary}, ${copy.design.accent}, ${copy.design.dark}`;
+      // Cloudflare's FLUX.2 needs a reference under 512x512.
+      const referenceImage = await compressImage(productImage, 500, 0.85);
       const jobs: { key: string; prompt: string; aspect: string; set: (img: string) => void }[] = [
         { key: 'hero', prompt: copy.heroImagePrompt, aspect: '16:9', set: (i) => (images.hero = i) },
         { key: 'solution', prompt: copy.solutionImagePrompt, aspect: '4:3', set: (i) => (images.solution = i) },
@@ -218,6 +220,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
             const data = await postJSON('/api/landing/image', {
               ...common,
               imageBase64: productImage,
+              referenceImage,
               prompt: job.prompt,
               aspectRatio: job.aspect,
               palette,
@@ -389,7 +392,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                   />
                   <span className="text-xs text-slate-600">
                     <strong className="text-slate-900 block">Generar 5 imágenes publicitarias con IA</strong>
-                    Escenas con tu producto real: banner, persona usándolo y una por beneficio. Requiere tener la facturación activada en Gemini.
+                    Escenas con tu producto real: banner, persona usándolo y una por beneficio. Usa Gemini (con facturación) o Cloudflare (gratis).
                   </span>
                 </label>
               </div>
