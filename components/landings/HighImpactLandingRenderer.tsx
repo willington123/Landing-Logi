@@ -31,6 +31,7 @@ import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import { defaultCombo, splitTime, useOfferCountdown } from '@/lib/offer-countdown';
+import { formatPhoneInput, localPhoneDigits, phoneRule, validateName, validatePhone } from '@/lib/order-form';
 
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
@@ -231,20 +232,22 @@ function ClassicLandingRenderer({
     e.preventDefault();
     setFormError(null);
 
-    if (!customerName.trim()) {
-      setFormError('Por favor ingresa tu nombre completo.');
+    const nameErr = validateName(customerName);
+    if (nameErr) {
+      setFormError(nameErr);
       return;
     }
-    if (!phone.trim() || phone.replace(/\D/g, '').length < 7) {
-      setFormError('Por favor ingresa un número de teléfono celular válido para coordinar la entrega.');
+    const phoneErr = validatePhone(phone, config.country);
+    if (phoneErr) {
+      setFormError(phoneErr);
       return;
     }
     if (!city.trim()) {
       setFormError('Por favor ingresa tu ciudad o municipio.');
       return;
     }
-    if (!address.trim()) {
-      setFormError('Por favor ingresa tu dirección exacta de entrega.');
+    if (address.trim().length < 6 || !/\d/.test(address)) {
+      setFormError('Escribe la dirección completa: tipo de vía (calle, carrera…), número, # y placa. Ej. Carrera 43A # 1-220.');
       return;
     }
 
@@ -709,13 +712,14 @@ function ClassicLandingRenderer({
                     type="tel"
                     required
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Ej. 312 345 6789"
+                    onChange={(e) => setPhone(formatPhoneInput(e.target.value, config.country))}
+                    inputMode="numeric"
+                    placeholder={`Ej. ${phoneRule(config.country).example}`}
                     className="w-full text-xs pl-10 pr-3.5 py-3 border border-slate-300 rounded-xl focus:border-[#172C8A] focus:outline-none bg-slate-50/50"
                   />
                 </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  Te llamaremos o escribiremos por WhatsApp para confirmar antes de enviar.
+                  {localPhoneDigits(phone, config.country).length}/{phoneRule(config.country).length} números · Te llamaremos o escribiremos por WhatsApp para confirmar antes de enviar.
                 </span>
               </div>
 

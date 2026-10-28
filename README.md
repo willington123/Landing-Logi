@@ -28,6 +28,8 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
 - **Oferta seleccionada por defecto:** en el editor (pestaña *Ofertas*), marca *Seleccionada al abrir* en la oferta que quieres que aparezca elegida. Es independiente de *Destacada* (la etiqueta resaltada); si no marcas ninguna, se selecciona la destacada.
 - **Contador de oferta:** en *Ofertas → Contador de oferta*, con dos modos: *termina cada día a medianoche* (hora del país de la landing) o *dura unas horas por visitante* (se guarda en su navegador; recargar no lo reinicia y al terminar empieza otra vez). Texto editable; aparece junto a las ofertas y en el formulario de pedido.
 
+- **Formulario de pedido guiado:** celular con el número exacto de cifras del país (10 en Colombia, empezando por 3), con contador y formato automático; dirección por partes en Colombia (tipo de vía —calle, carrera, avenida, transversal, diagonal…—, número, # y placa, más apto/torre y barrio), con opción *Rural* para veredas y fincas. Nombre y apellido, celular, departamento, ciudad, dirección y barrio son obligatorios; el servidor también lo comprueba.
+
 ### 2. Llamadas IA (Vapi)
 - Un agente de voz con IA llama a cada cliente, confirma producto, total y dirección, y marca el pedido como *Confirmado*, *Cancelado*, *Volver a llamar* o *Revisar*. Si el cliente corrige la dirección, se guarda la nueva.
 - Horario de llamadas, espera tras el pedido, reintentos si no contesta, llamada de prueba a tu propio teléfono, e historial con resumen, transcripción y grabación.
