@@ -34,6 +34,11 @@ export interface GeneratedCopy {
   finalCtaText: string;
   seoTitle: string;
   seoDescription: string;
+  brandName?: string;
+  featureChips?: { icon: string; text: string }[];
+  painTags?: string[];
+  productDetails?: string;
+  shippingInfo?: string;
   design: { primary: string; accent: string; dark: string; light: string; vibe: string };
   heroImagePrompt: string;
   solutionImagePrompt: string;
@@ -129,6 +134,11 @@ export function buildSalesLanding(
     comparison: copy.comparison || [],
     finalCtaTitle: copy.finalCtaTitle,
     finalCtaText: copy.finalCtaText,
+    brandName: copy.brandName,
+    featureChips: copy.featureChips || [],
+    painTags: copy.painTags || [],
+    productDetails: copy.productDetails,
+    shippingInfo: copy.shippingInfo,
   };
 
   const generatedGallery = [images.hero, images.solution, ...images.benefits].filter(Boolean) as string[];

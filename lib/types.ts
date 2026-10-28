@@ -125,6 +125,12 @@ export interface SalesPageContent {
   comparison: ComparisonRow[];
   finalCtaTitle: string;
   finalCtaText: string;
+  // Brand-style product page fields (optional for older landings)
+  brandName?: string;
+  featureChips?: { icon: string; text: string }[];
+  productDetails?: string;
+  shippingInfo?: string;
+  painTags?: string[];
 }
 
 export interface LandingPageConfig {
