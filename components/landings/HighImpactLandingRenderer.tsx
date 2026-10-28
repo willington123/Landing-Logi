@@ -30,6 +30,7 @@ import ProductCreativeCard from '@/components/landings/ProductCreativeCard';
 import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
+import { defaultCombo, splitTime, useOfferCountdown } from '@/lib/offer-countdown';
 
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
@@ -130,10 +131,7 @@ function ClassicLandingRenderer({
     ];
   }, [config]);
 
-  const [selectedComboId, setSelectedComboId] = useState<string>(() => {
-    const popular = combos.find((c) => c.isPopular);
-    return popular ? popular.id : combos[0]?.id || 'c1';
-  });
+  const [selectedComboId, setSelectedComboId] = useState<string>(() => defaultCombo(combos)?.id || 'c1');
 
   const selectedCombo = useMemo(() => {
     return combos.find((c) => c.id === selectedComboId) || combos[0];
@@ -159,7 +157,13 @@ function ClassicLandingRenderer({
     return () => clearInterval(interval);
   }, []);
 
+  // Configured countdown (daily / per visitor) replaces the old 15-minute loop.
+  const offerLeft = useOfferCountdown(config);
   const formatCountdown = (seconds: number) => {
+    if (offerLeft !== null) {
+      const t = splitTime(offerLeft);
+      return `${t.h}:${t.m}:${t.s}`;
+    }
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;

@@ -32,6 +32,7 @@ import {
 import { logiStore } from '@/lib/store';
 import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
+import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
 import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
 
@@ -275,12 +276,13 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
   }, [config]);
 
   // ----- offers -----
+  const countdown = { ...DEFAULT_COUNTDOWN, ...(config.countdown || {}) };
   const regularUnit = (() => {
     const c = config.combos[0];
     return c && c.regularPrice > c.promoPrice ? Math.round(c.regularPrice / c.units) : 0;
   })();
-  const offers = config.combos.map((c) => ({ units: c.units, price: c.promoPrice, label: c.badge || '', popular: !!c.isPopular }));
-  const applyOffers = (next: { units: number; price: number; label: string; popular: boolean }[], unit = regularUnit) => {
+  const offers = config.combos.map((c) => ({ units: c.units, price: c.promoPrice, label: c.badge || '', popular: !!c.isPopular, selected: !!c.isDefault }));
+  const applyOffers = (next: { units: number; price: number; label: string; popular: boolean; selected: boolean }[], unit = regularUnit) => {
     const sorted = [...next].sort((a, b) => a.units - b.units);
     const combos = buildCombos(sorted, unit, config.currency);
     const entry = combos[0];
@@ -290,11 +292,11 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
     update({ combos, promoPrice, regularPrice, discountBadge: discount > 0 ? `-${discount}%` : '' });
   };
   // Keep empty/incomplete rows editable while typing: store drafts locally.
-  const [offerDrafts, setOfferDrafts] = useState(() => offers.map((o) => ({ units: String(o.units), price: String(o.price), label: o.label, popular: o.popular })));
+  const [offerDrafts, setOfferDrafts] = useState(() => offers.map((o) => ({ units: String(o.units), price: String(o.price), label: o.label, popular: o.popular, selected: o.selected })));
   const [unitDraft, setUnitDraft] = useState(regularUnit ? String(regularUnit) : '');
   const commitOffers = (drafts: typeof offerDrafts, unit = unitDraft) => {
     setOfferDrafts(drafts);
-    const valid = drafts.map((o) => ({ units: Number(o.units) || 0, price: Number(o.price) || 0, label: o.label, popular: o.popular })).filter((o) => o.units > 0 && o.price > 0);
+    const valid = drafts.map((o) => ({ units: Number(o.units) || 0, price: Number(o.price) || 0, label: o.label, popular: o.popular, selected: o.selected })).filter((o) => o.units > 0 && o.price > 0);
     if (valid.length) applyOffers(valid, Number(unit) || 0);
   };
 
@@ -526,11 +528,17 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                   <div className="space-y-2">
                     {offerDrafts.map((o, i) => (
                       <div key={i} className="rounded-lg border border-slate-200 p-3 bg-slate-50/60 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold inline-flex items-center gap-1.5">
-                            <input type="radio" name="popular" checked={o.popular} onChange={() => commitOffers(offerDrafts.map((x, j) => ({ ...x, popular: j === i })))} className="accent-slate-900" />
-                            Destacada
-                          </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <label className="text-xs font-semibold inline-flex items-center gap-1.5" title="Lleva la etiqueta resaltada con el color principal">
+                              <input type="radio" name="popular" checked={o.popular} onChange={() => commitOffers(offerDrafts.map((x, j) => ({ ...x, popular: j === i })))} className="accent-slate-900" />
+                              Destacada
+                            </label>
+                            <label className="text-xs font-semibold inline-flex items-center gap-1.5" title="Esta oferta aparece marcada cuando el cliente abre la página">
+                              <input type="radio" name="selected" checked={o.selected} onChange={() => commitOffers(offerDrafts.map((x, j) => ({ ...x, selected: j === i })))} className="accent-slate-900" />
+                              Seleccionada al abrir
+                            </label>
+                          </div>
                           <RowTools onRemove={offerDrafts.length > 1 ? () => commitOffers(offerDrafts.filter((_, j) => j !== i)) : undefined} />
                         </div>
                         <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -541,8 +549,33 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                       </div>
                     ))}
                   </div>
-                  <button type="button" onClick={() => { const last = Number(offerDrafts[offerDrafts.length - 1]?.units) || 0; setOfferDrafts([...offerDrafts, { units: last ? String(last * 2) : '', price: '', label: '', popular: false }]); }} className="text-xs font-semibold text-slate-700 inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Añadir oferta</button>
-                  <p className="text-[11px] text-slate-500">La oferta con menos unidades es la compra mínima y su precio aparece arriba.</p>
+                  <button type="button" onClick={() => { const last = Number(offerDrafts[offerDrafts.length - 1]?.units) || 0; setOfferDrafts([...offerDrafts, { units: last ? String(last * 2) : '', price: '', label: '', popular: false, selected: false }]); }} className="text-xs font-semibold text-slate-700 inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Añadir oferta</button>
+                  <p className="text-[11px] text-slate-500">
+                    La oferta con menos unidades es la compra mínima y su precio aparece arriba. Si no marcas ninguna como &quot;Seleccionada al abrir&quot;, se selecciona la destacada.
+                  </p>
+                </Group>
+                <Group title="Contador de oferta" defaultOpen>
+                  <label className="text-sm text-slate-700 flex items-center gap-2">
+                    <input type="checkbox" checked={countdown.enabled} onChange={(e) => update({ countdown: { ...countdown, enabled: e.target.checked } })} />
+                    Mostrar contador regresivo
+                  </label>
+                  {countdown.enabled && (
+                    <>
+                      <Field label="Cómo funciona">
+                        <select className={inputCls} value={countdown.mode} onChange={(e) => update({ countdown: { ...countdown, mode: e.target.value as 'daily' | 'visitor' } })}>
+                          <option value="daily">Termina cada día a medianoche y vuelve a empezar</option>
+                          <option value="visitor">Dura unas horas por visitante y vuelve a empezar</option>
+                        </select>
+                      </Field>
+                      {countdown.mode === 'visitor' && (
+                        <Field label="Horas" hint="Se cuenta desde la primera visita de cada persona. Recargar la página no lo reinicia; al terminar, empieza otra vez.">
+                          <input className={inputCls} inputMode="numeric" value={String(countdown.hours || '')} onChange={(e) => update({ countdown: { ...countdown, hours: Math.min(168, Number(e.target.value.replace(/\D/g, '')) || 0) } })} />
+                        </Field>
+                      )}
+                      <Text label="Texto sobre el contador" value={countdown.text} onChange={(v) => update({ countdown: { ...countdown, text: v } })} placeholder="🔥 Oferta por tiempo limitado. Termina en:" />
+                      <p className="text-[11px] text-slate-500">Aparece junto a las ofertas y en el formulario de pedido.</p>
+                    </>
+                  )}
                 </Group>
                 <Group title="Envío y garantía" defaultOpen>
                   <Text label="Texto de envío" value={config.shippingCostText} onChange={(v) => update({ shippingCostText: v })} placeholder="Envío gratis" />

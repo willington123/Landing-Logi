@@ -6,6 +6,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Inter, Playfair_Display, Fraunces } from 'next/font/google';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
+import OfferCountdownBox from '@/components/landings/OfferCountdownBox';
+import { defaultCombo } from '@/lib/offer-countdown';
 import {
   Check,
   X as XIcon,
@@ -128,8 +130,13 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const combos: ProductCombo[] = config.combos?.length
     ? config.combos
     : [{ id: 'single', name: config.productName, units: 1, regularPrice: config.regularPrice, promoPrice: config.promoPrice, savingsText: '', isPopular: true }];
-  const [comboId, setComboId] = useState(() => (combos.find((c) => c.isPopular) || combos[0]).id);
-  const combo = combos.find((c) => c.id === comboId) || combos.find((c) => c.isPopular) || combos[0];
+  const [comboId, setComboId] = useState(() => (defaultCombo(combos) || combos[0]).id);
+  const combo = combos.find((c) => c.id === comboId) || defaultCombo(combos) || combos[0];
+  // In the editor preview, follow changes to the default offer.
+  const defaultId = defaultCombo(combos)?.id;
+  useEffect(() => {
+    if (previewMode && defaultId) setComboId(defaultId);
+  }, [previewMode, defaultId]);
 
   const gallery = useMemo(
     () => [config.mainImage, ...(config.galleryImages || [])].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i),
@@ -407,6 +414,8 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                 {combos[0].savingsText ? ` · ${combos[0].savingsText}` : ''}
               </p>
             )}
+
+            <OfferCountdownBox config={config} dark={d.dark} accent={d.accent} />
 
             {/* Offers */}
             {combos.length > 1 && (
@@ -850,6 +859,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
               )
             ) : (
               <form onSubmit={submit} className="flex-1 overflow-y-auto p-5 space-y-3">
+                <OfferCountdownBox config={config} dark={d.dark} accent={d.accent} compact />
                 <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: d.light }}>
                   <img src={config.mainImage} alt="" className="w-14 h-14 rounded-lg object-cover bg-white" />
                   <div className="flex-1 min-w-0">

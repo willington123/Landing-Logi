@@ -20,6 +20,7 @@ export interface ProductCombo {
   savingsText: string;
   badge?: string;
   isPopular?: boolean;
+  isDefault?: boolean; // pre-selected when the page opens (falls back to the popular one)
   image?: string;
 }
 
@@ -134,6 +135,16 @@ export interface SalesPageContent {
   painImage?: string;
 }
 
+// Urgency countdown on the landing.
+// daily: ends at midnight (landing's country time) and starts again the next day.
+// visitor: lasts `hours` from the visitor's first view (saved in their browser), then starts again.
+export interface OfferCountdown {
+  enabled: boolean;
+  mode: 'daily' | 'visitor';
+  hours: number;
+  text: string;
+}
+
 export interface LandingPageConfig {
   id: string;
   layout?: 'classic' | 'sales-v2';
@@ -172,6 +183,7 @@ export interface LandingPageConfig {
   primaryColor: string;
   accentColor: string;
   enableStickyBar: boolean;
+  countdown?: OfferCountdown;
   enableRecentSalesPopup: boolean;
   seoTitle: string;
   seoDescription: string;

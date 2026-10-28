@@ -25,6 +25,9 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
   - **Copilot de IA**: Modifica el copy, estilo o urgencia mediante instrucciones en lenguaje natural.
 - **Publicación Real Fuera del Editor**: Rutas públicas directas `/p/[slug]` con metadatos OpenGraph, SEO y captura funcional de pedidos.
 
+- **Oferta seleccionada por defecto:** en el editor (pestaña *Ofertas*), marca *Seleccionada al abrir* en la oferta que quieres que aparezca elegida. Es independiente de *Destacada* (la etiqueta resaltada); si no marcas ninguna, se selecciona la destacada.
+- **Contador de oferta:** en *Ofertas → Contador de oferta*, con dos modos: *termina cada día a medianoche* (hora del país de la landing) o *dura unas horas por visitante* (se guarda en su navegador; recargar no lo reinicia y al terminar empieza otra vez). Texto editable; aparece junto a las ofertas y en el formulario de pedido.
+
 ### 2. Llamadas IA (Vapi)
 - Un agente de voz con IA llama a cada cliente, confirma producto, total y dirección, y marca el pedido como *Confirmado*, *Cancelado*, *Volver a llamar* o *Revisar*. Si el cliente corrige la dirección, se guarda la nueva.
 - Horario de llamadas, espera tras el pedido, reintentos si no contesta, llamada de prueba a tu propio teléfono, e historial con resumen, transcripción y grabación.
