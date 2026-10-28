@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { VoiceCallSimulatorModal } from '@/components/voice/VoiceCallSimulatorModal';
 import { logiStore } from '@/lib/store';
-import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
+import { CLOUD_SYNC_EVENT, deleteOrders } from '@/lib/cloud';
 import { OrderItem, OrderStatus, VoiceCallTask } from '@/lib/types';
 import {
   ShoppingBag,
@@ -26,6 +26,8 @@ import {
   Sparkles,
   Phone,
   Download,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import { downloadOrdersExcel } from '@/lib/orders-export';
 
@@ -38,6 +40,11 @@ export default function OrdersPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [activeCallTask, setActiveCallTask] = useState<VoiceCallTask | null>(null);
+  // Deleting: checked rows, and the ids waiting for confirmation.
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refreshData = () => {
     setOrders(logiStore.getOrders());
@@ -51,6 +58,37 @@ export default function OrdersPage() {
     return () => window.removeEventListener(CLOUD_SYNC_EVENT, refreshData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const toggleChecked = (id: string) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const askDelete = (ids: string[]) => {
+    setDeleteError(null);
+    setConfirmIds(ids);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmIds) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteOrders(confirmIds);
+      const gone = new Set(confirmIds);
+      setChecked((prev) => new Set(Array.from(prev).filter((id) => !gone.has(id))));
+      if (selectedOrder && gone.has(selectedOrder.id)) setSelectedOrder(null);
+      setConfirmIds(null);
+      refreshData();
+    } catch (e: any) {
+      setDeleteError(e?.message || 'No se pudieron eliminar los pedidos.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleLaunchCall = (order: OrderItem) => {
     const task = callTasks.find((c) => c.orderId === order.id) || {
@@ -78,6 +116,15 @@ export default function OrdersPage() {
       order.phone.includes(searchQuery);
     return matchesStatus && matchesSearch;
   });
+  const visibleChecked = filteredOrders.filter((o) => checked.has(o.id));
+  const allVisibleChecked = filteredOrders.length > 0 && visibleChecked.length === filteredOrders.length;
+  const toggleAllVisible = () =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (allVisibleChecked) filteredOrders.forEach((o) => next.delete(o.id));
+      else filteredOrders.forEach((o) => next.add(o.id));
+      return next;
+    });
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
@@ -183,12 +230,46 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          {visibleChecked.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+              <span className="text-sm text-slate-700">
+                {visibleChecked.length} {visibleChecked.length === 1 ? 'pedido seleccionado' : 'pedidos seleccionados'}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChecked(new Set())}
+                  className="h-8 px-3 text-[13px] font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Quitar selección
+                </button>
+                <button
+                  type="button"
+                  onClick={() => askDelete(visibleChecked.map((o) => o.id))}
+                  className="h-8 px-3 text-[13px] font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white inline-flex items-center gap-1.5 transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-slate-50/70 border-b border-slate-200/80 text-xs text-slate-500">
-                    <th className="py-3 px-5 font-medium">Pedido</th>
+                    <th className="py-3 pl-5 pr-1 w-8">
+                      <input
+                        type="checkbox"
+                        aria-label="Seleccionar todos los pedidos visibles"
+                        checked={allVisibleChecked}
+                        onChange={toggleAllVisible}
+                        className="w-4 h-4 rounded border-slate-300 align-middle cursor-pointer"
+                      />
+                    </th>
+                    <th className="py-3 px-3 font-medium">Pedido</th>
                     <th className="py-3 px-3 font-medium">Cliente</th>
                     <th className="py-3 px-3 font-medium hidden md:table-cell">Destino</th>
                     <th className="py-3 px-3 font-medium hidden lg:table-cell">Producto</th>
@@ -200,12 +281,25 @@ export default function OrdersPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredOrders.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-sm text-slate-500">No hay pedidos con estos filtros.</td>
+                      <td colSpan={8} className="py-12 text-center text-sm text-slate-500">No hay pedidos con estos filtros.</td>
                     </tr>
                   )}
                   {filteredOrders.map((order) => (
-                    <tr key={order.id} onClick={() => setSelectedOrder(order)} className="hover:bg-slate-50/70 transition cursor-pointer">
-                      <td className="py-3.5 px-5 font-mono text-[13px] text-slate-500 whitespace-nowrap">{order.orderNumber}</td>
+                    <tr
+                      key={order.id}
+                      onClick={() => setSelectedOrder(order)}
+                      className={`transition cursor-pointer ${checked.has(order.id) ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}
+                    >
+                      <td className="py-3.5 pl-5 pr-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Seleccionar pedido ${order.orderNumber}`}
+                          checked={checked.has(order.id)}
+                          onChange={() => toggleChecked(order.id)}
+                          className="w-4 h-4 rounded border-slate-300 align-middle cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-[13px] text-slate-500 whitespace-nowrap">{order.orderNumber}</td>
                       <td className="py-3.5 px-3">
                         <p className="font-medium text-slate-900 whitespace-nowrap">{order.customerName}</p>
                         <p className="text-xs text-slate-500">{order.phone}</p>
@@ -309,6 +403,50 @@ export default function OrdersPage() {
               >
                 <PhoneCall className="w-4 h-4" />
                 <span>Llamar para confirmar</span>
+              </button>
+              <button
+                onClick={() => askDelete([selectedOrder.id])}
+                className="h-10 px-4 border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Eliminar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmIds && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                {confirmIds.length === 1 ? '¿Eliminar este pedido?' : `¿Eliminar ${confirmIds.length} pedidos?`}
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Se borrarán para siempre del panel y de la base de datos. No se puede deshacer. Si los necesitas, descárgalos antes en Excel.
+              </p>
+            </div>
+            {deleteError && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2.5">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmIds(null)}
+                disabled={deleting}
+                className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-semibold transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex-1 h-10 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition inline-flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Eliminar
               </button>
             </div>
           </div>

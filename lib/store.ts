@@ -160,6 +160,23 @@ export const logiStore = {
     return newOrder;
   },
 
+  // Removes orders from this browser's cache (the cloud copy is deleted by lib/cloud.ts first).
+  deleteOrders: (ids: string[]): void => {
+    const remove = new Set(ids);
+    const orders = logiStore.getOrders();
+    const gone = orders.filter((o) => remove.has(o.id));
+    safeSet(STORAGE_KEYS.ORDERS, orders.filter((o) => !remove.has(o.id)));
+    safeSet(STORAGE_KEYS.CALL_TASKS, logiStore.getCallTasks().filter((c) => !remove.has(c.orderId)));
+    // Local mode counts orders per landing; keep that number in step.
+    if (typeof window !== 'undefined' && !(window as any).__lpCloud && gone.length) {
+      const landings = logiStore.getLandings().map((l) => {
+        const n = gone.filter((o) => o.landingPageId === l.id).length;
+        return n && l.ordersCount ? { ...l, ordersCount: Math.max(0, l.ordersCount - n) } : l;
+      });
+      safeSet(STORAGE_KEYS.LANDINGS, landings);
+    }
+  },
+
   updateOrderStatus: (orderId: string, status: OrderItem['status']): void => {
     const orders = logiStore.getOrders();
     const index = orders.findIndex((o) => o.id === orderId);

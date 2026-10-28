@@ -153,6 +153,13 @@ export async function updateOrderStatus(id: string, status: OrderItem['status'])
   if (error) throw new Error(error.message);
 }
 
+// Deletes orders for good. WhatsApp conversations keep their messages; their order link is cleared.
+export async function deleteOrders(ids: string[]): Promise<number> {
+  const { data, error } = await db().from('orders').delete().in('id', ids).select('id');
+  if (error) throw new Error(error.message);
+  return data?.length || 0;
+}
+
 // ---------- settings ----------
 
 export async function getSettings<T>(): Promise<T | null> {
