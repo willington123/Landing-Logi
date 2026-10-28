@@ -29,6 +29,7 @@ import { logiStore } from '@/lib/store';
 import ProductCreativeCard from '@/components/landings/ProductCreativeCard';
 import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
+import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
@@ -283,15 +284,8 @@ function ClassicLandingRenderer({
     setOrderCompletedData(saved);
   };
 
-  // wa.me link with the order details; opened automatically on the public page.
+  // wa.me link with the order details; the thank-you step opens it after a countdown.
   const completedWhatsApp = orderCompletedData ? orderWhatsAppUrl(config, orderCompletedData) : '';
-  useEffect(() => {
-    if (!completedWhatsApp || previewMode) return;
-    const t = setTimeout(() => {
-      window.location.href = completedWhatsApp;
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [completedWhatsApp, previewMode]);
 
   // Discount %
   const discountPercent = Math.max(
@@ -987,6 +981,17 @@ function ClassicLandingRenderer({
       {/* ORDER SUCCESS MODAL */}
       {orderCompletedData && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          {completedWhatsApp ? (
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-scale-up max-h-[92vh] overflow-y-auto">
+            <WhatsAppConfirmStep
+              url={completedWhatsApp}
+              order={orderCompletedData}
+              currency={config.currency || 'COP'}
+              previewMode={previewMode}
+              onClose={() => setOrderCompletedData(null)}
+            />
+          </div>
+          ) : (
           <div className="bg-white rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-scale-up">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl font-black">
               ✓
@@ -1027,18 +1032,6 @@ function ClassicLandingRenderer({
               Nuestro equipo de logística te contactará en breve para verificar la guía de despacho.
             </p>
 
-            {completedWhatsApp && (
-              <div className="space-y-2">
-                {!previewMode && <p className="text-xs font-semibold text-slate-800">Te estamos llevando a WhatsApp para enviarnos tu pedido…</p>}
-                <a
-                  href={completedWhatsApp}
-                  className="w-full py-3 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center"
-                >
-                  Enviar mi pedido por WhatsApp
-                </a>
-              </div>
-            )}
-
             <button
               onClick={() => setOrderCompletedData(null)}
               className="w-full py-3 bg-[#172C8A] hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
@@ -1046,6 +1039,7 @@ function ClassicLandingRenderer({
               Entendido / Cerrar
             </button>
           </div>
+          )}
         </div>
       )}
     </div>

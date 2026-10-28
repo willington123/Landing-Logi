@@ -13,7 +13,7 @@ type OrderLike = Pick<OrderItem, 'productName' | 'comboName' | 'totalAmount' | '
 export function orderWhatsAppMessage(order: OrderLike, currency = 'COP'): string {
   const field = (label: string, v?: string) => (v?.trim() ? [`${label}: ${v.trim()}`] : []);
   return [
-    '¡Hola! Acabo de hacer un pedido 🛍️',
+    '¡Hola! Quiero confirmar mi pedido ✅',
     '',
     ...(order.orderNumber ? [`*Pedido:* ${order.orderNumber}`] : []),
     `*Producto:* ${order.productName} - ${order.comboName}`,
@@ -26,6 +26,8 @@ export function orderWhatsAppMessage(order: OrderLike, currency = 'COP'): string
     ...field('Ciudad', order.city),
     ...field('Dirección', order.address),
     ...field('Indicaciones', order.notes),
+    '',
+    'Confirmo que mis datos son correctos.',
   ].join('\n');
 }
 
