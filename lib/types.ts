@@ -209,6 +209,8 @@ export interface OrderItem {
   callTaskId?: string;
   createdAt: string;
   confirmedAt?: string;
+  callNotes?: string; // what the AI call or a call error reported
+  previousAddress?: string; // address before the customer corrected it on the call
 }
 
 export interface VoiceAgentSettings {

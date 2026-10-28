@@ -222,13 +222,83 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
   );
 }
 
+interface VapiStatus {
+  ready: boolean;
+  webhookSecret: boolean;
+  cron: boolean;
+  missing: string[];
+}
+
+// Vapi card: real status; settings and history live in Llamadas IA.
+function VapiCard({ status }: { status: VapiStatus | null | undefined }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-brand-navy text-white flex items-center justify-center shadow-md">
+            <PhoneCall className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-slate-900">Vapi AI (llamadas de confirmación)</h3>
+            <span className="text-[11px] text-slate-400">Agente de voz con IA</span>
+          </div>
+        </div>
+        {status === undefined ? (
+          <span className="text-[11px] text-slate-400">Comprobando…</span>
+        ) : status?.ready ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Configurado
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            <Key className="w-3 h-3 text-amber-600" /> No configurado
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-600 leading-relaxed">
+        Llama a cada cliente, confirma producto, total y dirección, y actualiza el pedido a Confirmado, Cancelado o Revisar. Reintenta si no contesta, dentro
+        de tu horario.
+      </p>
+      <div className="space-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
+        {[
+          ['VAPI_API_KEY', !status?.missing.includes('VAPI_API_KEY')],
+          ['VAPI_PHONE_NUMBER_ID', !status?.missing.includes('VAPI_PHONE_NUMBER_ID')],
+          ['VAPI_WEBHOOK_SECRET', Boolean(status?.webhookSecret)],
+          ['CRON_SECRET', Boolean(status?.cron)],
+        ].map(([name, ok]) => (
+          <div key={name as string} className="flex items-center gap-2">
+            {ok ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
+            <code className="font-mono font-semibold text-slate-700">{name}</code>
+          </div>
+        ))}
+      </div>
+      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+        <a href="https://docs.vapi.ai" target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1">
+          <span>Documentación de Vapi</span>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+        <a href="/voice-ai" className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition">
+          Abrir Llamadas IA
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
+  const [vapiStatus, setVapiStatus] = useState<VapiStatus | null | undefined>(undefined);
   const [waStatus, setWaStatus] = useState<WaStatus | null | undefined>(undefined);
   useEffect(() => {
     fetch('/api/status', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => setWaStatus(d.whatsapp || null))
-      .catch(() => setWaStatus(null));
+      .then((d) => {
+        setWaStatus(d.whatsapp || null);
+        setVapiStatus(d.vapi || null);
+      })
+      .catch(() => {
+        setWaStatus(null);
+        setVapiStatus(null);
+      });
   }, []);
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -264,7 +334,7 @@ export default function IntegrationsPage() {
                 Integraciones
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">
-                WhatsApp ya funciona cuando configuras sus variables de entorno. El resto de conexiones están en desarrollo. El píxel de Meta se configura en Configuración.
+                WhatsApp y Vapi ya funcionan cuando configuras sus variables de entorno. El resto de conexiones están en desarrollo. El píxel de Meta se configura en Configuración.
               </p>
             </div>
 
@@ -317,6 +387,8 @@ export default function IntegrationsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {filtered.map((item) => item.id === 'whatsapp_cloud' ? (
               <WhatsAppCard key={item.id} status={waStatus} />
+            ) : item.id === 'vapi_ai' ? (
+              <VapiCard key={item.id} status={vapiStatus} />
             ) : (
               <div
                 key={item.id}

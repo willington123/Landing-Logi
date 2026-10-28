@@ -3,6 +3,7 @@ import { cloudEnabled, createOrder, getPublicLanding, patchOrderData } from '@/l
 import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
 import { sendOrderConfirmation } from '@/lib/server/wa-actions';
+import { onNewOrder } from '@/lib/server/voice-actions';
 import type { OrderItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -85,6 +86,9 @@ export async function POST(req: NextRequest) {
       }));
       if (whatsapp) await patchOrderData(order.id, { whatsapp }).catch(() => {});
     }
+
+    // AI confirmation call (Vapi): now, or scheduled by call hours / delay. Never blocks the order.
+    await onNewOrder(order, req.nextUrl.origin);
 
     return NextResponse.json({ success: true, order });
   } catch (e: any) {

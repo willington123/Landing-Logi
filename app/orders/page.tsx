@@ -4,13 +4,12 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
-import { VoiceCallSimulatorModal } from '@/components/voice/VoiceCallSimulatorModal';
+import { CallButton } from '@/components/voice/CallButton';
 import { logiStore } from '@/lib/store';
-import { CLOUD_SYNC_EVENT, deleteOrders } from '@/lib/cloud';
-import { OrderItem, OrderStatus, VoiceCallTask } from '@/lib/types';
+import { CLOUD_SYNC_EVENT, deleteOrders, pullFromCloud } from '@/lib/cloud';
+import { OrderItem, OrderStatus } from '@/lib/types';
 import {
   ShoppingBag,
-  PhoneCall,
   Search,
   Filter,
   CheckCircle2,
@@ -33,13 +32,10 @@ import { downloadOrdersExcel } from '@/lib/orders-export';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [callTasks, setCallTasks] = useState<VoiceCallTask[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [activeCallTask, setActiveCallTask] = useState<VoiceCallTask | null>(null);
   // Deleting: checked rows, and the ids waiting for confirmation.
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
@@ -47,8 +43,10 @@ export default function OrdersPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refreshData = () => {
-    setOrders(logiStore.getOrders());
-    setCallTasks(logiStore.getCallTasks());
+    const fresh = logiStore.getOrders();
+    setOrders(fresh);
+    // Keep the open detail in step with the latest data.
+    setSelectedOrder((cur) => (cur ? fresh.find((o) => o.id === cur.id) || null : cur));
   };
 
   useEffect(() => {
@@ -58,6 +56,16 @@ export default function OrdersPage() {
     return () => window.removeEventListener(CLOUD_SYNC_EVENT, refreshData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While an AI call is running, refresh from the server so its result shows up by itself.
+  const anyCalling = orders.some((o) => o.status === 'calling');
+  useEffect(() => {
+    if (!anyCalling) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') pullFromCloud();
+    }, 10000);
+    return () => clearInterval(t);
+  }, [anyCalling]);
 
   const toggleChecked = (id: string) =>
     setChecked((prev) => {
@@ -88,22 +96,6 @@ export default function OrdersPage() {
     } finally {
       setDeleting(false);
     }
-  };
-
-  const handleLaunchCall = (order: OrderItem) => {
-    const task = callTasks.find((c) => c.orderId === order.id) || {
-      id: `call-${Date.now()}`,
-      orderId: order.id,
-      customerName: order.customerName,
-      phone: order.phone,
-      status: order.status,
-      attempts: 1,
-      maxAttempts: 3,
-      durationSeconds: 0,
-      transcript: [],
-    };
-    setActiveCallTask(task);
-    setIsSimulatorOpen(true);
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -163,6 +155,13 @@ export default function OrdersPage() {
             <span>Reintento</span>
           </span>
         );
+      case 'unanswered':
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/15">
+            <Phone className="w-3.5 h-3.5 text-orange-600" />
+            <span>No contesta</span>
+          </span>
+        );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/15">
@@ -215,6 +214,8 @@ export default function OrdersPage() {
                 <option value="confirmed_by_voice">Confirmados</option>
                 <option value="needs_review">Por revisar</option>
                 <option value="retry_scheduled">Reintento</option>
+                <option value="calling">Llamando</option>
+                <option value="unanswered">No contesta</option>
                 <option value="cancelled">Cancelados</option>
               </select>
               <button
@@ -317,16 +318,7 @@ export default function OrdersPage() {
                       </td>
                       <td className="py-3.5 px-3">{getStatusBadge(order.status)}</td>
                       <td className="py-3.5 px-5 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLaunchCall(order);
-                          }}
-                          className="h-8 px-3 rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 text-[13px] font-medium inline-flex items-center gap-1.5 transition whitespace-nowrap"
-                        >
-                          <PhoneCall className="w-3.5 h-3.5" />
-                          Llamar
-                        </button>
+                        <CallButton order={order} onCalled={() => pullFromCloud()} />
                       </td>
                     </tr>
                   ))}
@@ -384,6 +376,18 @@ export default function OrdersPage() {
                 )}
               </div>
 
+              {(selectedOrder.callNotes || selectedOrder.previousAddress) && (
+                <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">
+                  <span className="text-indigo-700 text-xs font-semibold">Llamada IA</span>
+                  {selectedOrder.callNotes && <p className="text-slate-700">{selectedOrder.callNotes}</p>}
+                  {selectedOrder.previousAddress && (
+                    <p className="text-slate-500">
+                      El cliente corrigió la dirección. Antes: <span className="line-through">{selectedOrder.previousAddress}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <span className="text-slate-500 text-xs font-medium">Campaña de Atribución</span>
                 <p className="font-mono text-xs text-slate-600">
@@ -393,17 +397,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => {
-                  const ord = selectedOrder;
-                  setSelectedOrder(null);
-                  handleLaunchCall(ord);
-                }}
-                className="flex-1 h-10 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2"
-              >
-                <PhoneCall className="w-4 h-4" />
-                <span>Llamar para confirmar</span>
-              </button>
+              <CallButton order={selectedOrder} variant="wide" onCalled={() => pullFromCloud()} />
               <button
                 onClick={() => askDelete([selectedOrder.id])}
                 className="h-10 px-4 border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2"
@@ -452,14 +446,6 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
-
-      {/* Voice Simulator Modal */}
-      <VoiceCallSimulatorModal
-        isOpen={isSimulatorOpen}
-        onClose={() => setIsSimulatorOpen(false)}
-        task={activeCallTask}
-        onCompleted={() => refreshData()}
-      />
 
       <LandingWizardModal
         isOpen={isWizardOpen}
