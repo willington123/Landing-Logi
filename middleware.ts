@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_COOKIE, authEnabled, expectedToken, safeEqual } from '@/lib/auth';
 
-// Public: landing pages, their order endpoint, the WhatsApp webhook (signed by Meta), the login flow and static assets.
-const PUBLIC_PREFIXES = ['/p/', '/api/public/', '/api/whatsapp/webhook', '/api/auth/', '/login', '/_next/', '/brand/', '/favicon', '/icon', '/apple-icon'];
+// Public: landing pages, their order endpoint, webhooks (WhatsApp, Vapi) and the cron endpoint (each checks its own secret),
+// the login flow and static assets.
+const PUBLIC_PREFIXES = ['/p/', '/api/public/', '/api/whatsapp/webhook', '/api/vapi/webhook', '/api/cron/', '/api/auth/', '/login', '/_next/', '/brand/', '/favicon', '/icon', '/apple-icon'];
 
 export async function middleware(req: NextRequest) {
   if (!authEnabled()) return NextResponse.next();

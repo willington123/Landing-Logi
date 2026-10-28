@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
-import { VoiceCallSimulatorModal } from '@/components/voice/VoiceCallSimulatorModal';
+import { CallButton, useVapiReady } from '@/components/voice/CallButton';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
 import { LandingPageConfig, OrderItem, VoiceCallTask } from '@/lib/types';
@@ -33,15 +33,12 @@ import {
 export default function DashboardPage() {
   const [landings, setLandings] = useState<LandingPageConfig[]>([]);
   const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [callTasks, setCallTasks] = useState<VoiceCallTask[]>([]);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [activeSimTask, setActiveSimTask] = useState<VoiceCallTask | null>(null);
+  const vapiReady = useVapiReady();
 
   const refreshData = () => {
     setLandings(logiStore.getLandings());
     setOrders(logiStore.getOrders());
-    setCallTasks(logiStore.getCallTasks());
   };
 
   useEffect(() => {
@@ -60,26 +57,6 @@ export default function DashboardPage() {
   const pendingCallsCount = orders.filter((o) => o.status === 'pending_call' || o.status === 'calling').length;
   const confirmationRate = orders.length > 0 ? Math.round((confirmedOrdersCount / orders.length) * 100) : 0;
 
-  const handleTestCall = (order?: OrderItem) => {
-    if (order) {
-      const task = callTasks.find((c) => c.orderId === order.id) || {
-        id: `call-${Date.now()}`,
-        orderId: order.id,
-        customerName: order.customerName,
-        phone: order.phone,
-        status: order.status,
-        attempts: 1,
-        maxAttempts: 3,
-        durationSeconds: 0,
-        transcript: [],
-      };
-      setActiveSimTask(task);
-    } else {
-      setActiveSimTask(callTasks[0] || null);
-    }
-    setIsSimulatorOpen(true);
-  };
-
   const money = (v: number) => `$${v.toLocaleString('es-CO')}`;
   const statusChip: Record<string, { label: string; cls: string; Icon: typeof Clock }> = {
     confirmed_by_voice: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15', Icon: CheckCircle2 },
@@ -92,7 +69,7 @@ export default function DashboardPage() {
     { label: 'Pedidos', value: orders.length.toString(), hint: 'Capturados en tus landings', Icon: ShoppingBag, tone: 'text-brand-navy bg-brand-navy/[0.07]' },
     { label: 'Confirmados por IA', value: confirmedOrdersCount.toString(), hint: `${confirmationRate}% de confirmación`, Icon: PhoneCall, tone: 'text-emerald-600 bg-emerald-50' },
     { label: 'Ventas contraentrega', value: money(totalRevenue), hint: 'COP en pedidos activos', Icon: TrendingUp, tone: 'text-brand-red bg-brand-red/[0.07]' },
-    { label: 'Llamadas en cola', value: pendingCallsCount.toString(), hint: 'Dentro del horario permitido', Icon: Clock, tone: 'text-amber-600 bg-amber-50' },
+    { label: 'Llamadas en cola', value: pendingCallsCount.toString(), hint: 'Pedidos por confirmar', Icon: Clock, tone: 'text-amber-600 bg-amber-50' },
   ];
 
   const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
@@ -127,13 +104,13 @@ export default function DashboardPage() {
                   <Sparkles className="w-4 h-4" />
                   Crear landing con IA
                 </button>
-                <button
-                  onClick={() => handleTestCall()}
+                <Link
+                  href="/voice-ai"
                   className="h-11 px-5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-300 hover:bg-slate-50 transition"
                 >
                   <Play className="w-4 h-4 text-emerald-600" />
-                  Probar llamada IA
-                </button>
+                  Llamadas IA
+                </Link>
               </div>
             </div>
           </section>
@@ -253,13 +230,7 @@ export default function DashboardPage() {
                               </span>
                             </td>
                             <td className="px-5 py-3 text-right">
-                              <button
-                                onClick={() => handleTestCall(order)}
-                                className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
-                                aria-label={`Llamar a ${order.customerName}`}
-                              >
-                                <PhoneCall className="w-4 h-4" />
-                              </button>
+                              <CallButton order={order} variant="icon" />
                             </td>
                           </tr>
                         );
@@ -274,37 +245,25 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <section className={`${card} p-5`}>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[15px] font-semibold text-slate-900">Agente de voz</h3>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                    Simulador
-                  </span>
+                  <h3 className="text-[15px] font-semibold text-slate-900">Llamadas IA</h3>
+                  {vapiReady === null ? null : vapiReady ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Conectado</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">Sin conectar</span>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center font-semibold">
-                    V
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Valentina</p>
-                    <p className="text-xs text-slate-500">Prueba cómo confirmaría tus pedidos</p>
-                  </div>
-                </div>
-                <dl className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <dt className="text-xs text-slate-500">Horario</dt>
-                    <dd className="text-sm font-semibold text-slate-900 mt-0.5">08:30 – 19:30</dd>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <dt className="text-xs text-slate-500">Llamadas</dt>
-                    <dd className="text-sm font-semibold text-slate-900 mt-0.5 tabular-nums">{callTasks.length}</dd>
-                  </div>
-                </dl>
-                <button
-                  onClick={() => handleTestCall()}
+                <p className="text-sm text-slate-500 leading-relaxed mb-4">
+                  {vapiReady
+                    ? 'Un agente de voz con IA llama a tus clientes, confirma el pedido y la dirección, y actualiza el estado solo.'
+                    : 'Conecta Vapi para que un agente de voz con IA llame a tus clientes y confirme cada pedido.'}
+                </p>
+                <Link
+                  href="/voice-ai"
                   className="w-full h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  Probar llamada en vivo
-                </button>
+                  <PhoneCall className="w-4 h-4" />
+                  {vapiReady ? 'Ver llamadas' : 'Configurar llamadas'}
+                </Link>
               </section>
 
               <section className={`${card} p-5`}>
@@ -314,11 +273,11 @@ export default function DashboardPage() {
                   </span>
                   <div>
                     <h3 className="text-[15px] font-semibold text-slate-900">Mensajes</h3>
-                    <p className="text-xs text-slate-500">Próximamente con WhatsApp</p>
+                    <p className="text-xs text-slate-500">WhatsApp Business</p>
                   </div>
                 </div>
                 <p className="text-sm text-slate-500 leading-relaxed mb-4">
-                  Cuando conectes WhatsApp Business, aquí responderás a tus clientes desde una sola bandeja.
+                  Las respuestas de tus clientes por WhatsApp llegan aquí, con su pedido al lado. Se activa al conectar WhatsApp en Integraciones.
                 </p>
                 <Link
                   href="/crm"
@@ -339,12 +298,7 @@ export default function DashboardPage() {
         onGenerated={() => refreshData()}
       />
 
-      <VoiceCallSimulatorModal
-        isOpen={isSimulatorOpen}
-        onClose={() => setIsSimulatorOpen(false)}
-        task={activeSimTask}
-        onCompleted={() => refreshData()}
-      />
+
     </div>
   );
 }

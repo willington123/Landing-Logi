@@ -25,17 +25,10 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
   - **Copilot de IA**: Modifica el copy, estilo o urgencia mediante instrucciones en lenguaje natural.
 - **Publicación Real Fuera del Editor**: Rutas públicas directas `/p/[slug]` con metadatos OpenGraph, SEO y captura funcional de pedidos.
 
-### 2. Agente de Voz con IA & Simulador Interactivo
-- **Configuración de Agente (`VoiceAgentSettings`)**:
-  - Proveedores: LogiPages Simulator (Web Speech API nativo), Vapi AI (<500ms latencia), Retell AI y Twilio Voice.
-  - Acentos y regionalismos: Colombia 🇨🇴, México 🇲🇽, España 🇪🇸, Argentina 🇦🇷 y Neutro 🌎.
-  - Guion interactivo con chips dinámicos (`{{cliente}}`, `{{producto}}`, `{{direccion}}`, `{{total}}`).
-  - Ventana de horarios permitidos (ej. 08:30 a 19:30) con estado en tiempo real.
-- **Simulador Telefónico Interactivo (`VoiceCallSimulatorModal`)**:
-  - Interfaz de smartphone con Dynamic Island y espectro de audio animado cuando el agente habla.
-  - Síntesis auditiva con voz en español (`speechSynthesis`) y transcripción en vivo con marcas de tiempo.
-  - Disparadores rápidos de respuesta del cliente: Confirmar afirmativamente, solicitar cambio de dirección o cancelar pedido cortésmente.
-  - Entrada de voz por micrófono mediante Web Speech Recognition.
+### 2. Llamadas IA (Vapi)
+- Un agente de voz con IA llama a cada cliente, confirma producto, total y dirección, y marca el pedido como *Confirmado*, *Cancelado*, *Volver a llamar* o *Revisar*. Si el cliente corrige la dirección, se guarda la nueva.
+- Horario de llamadas, espera tras el pedido, reintentos si no contesta, llamada de prueba a tu propio teléfono, e historial con resumen, transcripción y grabación.
+- Se activa al configurar Vapi (ver sección [Llamadas IA (Vapi)](#llamadas-ia-vapi)).
 
 ### 3. Mensajes (WhatsApp)
 - Confirmación automática de cada pedido por WhatsApp con una plantilla aprobada y dos botones: **Confirmar pedido** y **Cancelar**. La respuesta del cliente cambia el estado del pedido a *Confirmado* o *Cancelado*.
@@ -107,6 +100,7 @@ Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment
 | `IMAGE_PROVIDER` | `replicate`, `gemini`, `cloudflare` o `auto` |
 | `META_CAPI_ACCESS_TOKEN` | (Opcional) Conversions API de Meta: envía cada pedido desde el servidor |
 | `WHATSAPP_*` | (Opcional) Confirmación de pedidos y bandeja de WhatsApp. Ver sección [WhatsApp](#whatsapp) |
+| `VAPI_*`, `CRON_SECRET` | (Opcional) Llamadas de confirmación con IA. Ver sección [Llamadas IA (Vapi)](#llamadas-ia-vapi) |
 
 ### 3. GitHub y Vercel
 1. Sube el proyecto a un repositorio **privado** de GitHub.
@@ -180,4 +174,57 @@ En **Settings → Environment Variables** añade y vuelve a desplegar (**Deploym
 Comprueba el estado en **Integraciones** del panel: la tarjeta de WhatsApp debe decir *Configurado*. Haz un pedido de prueba con tu propio número.
 
 > WhatsApp solo permite texto libre dentro de las 24 h siguientes al último mensaje del cliente. Fuera de esa ventana la bandeja lo indica y no envía nada.
+
+## Llamadas IA (Vapi)
+
+Un agente de voz llama al cliente después del pedido, confirma producto, cantidad, total a pagar y dirección, y deja el pedido en *Confirmado*, *Cancelado*, *Reintento* (pidió que lo llamen después o no contestó) o *Revisar* (dudas, cambios o una situación poco clara). Todo se ve en **Llamadas IA**: resumen, transcripción, grabación y costo de cada llamada. Sin las variables `VAPI_*` no se hace ninguna llamada.
+
+Necesitas Supabase configurado. Vapi cobra por minuto (agente + voz + transcripción) y tu proveedor de telefonía cobra la llamada.
+
+### 1. Base de datos
+En Supabase → **SQL Editor**, ejecuta [`supabase/migrations/003_vapi.sql`](supabase/migrations/003_vapi.sql).
+
+### 2. Cuenta y número en Vapi
+1. Crea una cuenta en [dashboard.vapi.ai](https://dashboard.vapi.ai) y añade saldo (**Billing**).
+2. **Número de teléfono:** los números gratis de Vapi **no** pueden hacer llamadas salientes. Compra un número en [Twilio](https://www.twilio.com) (o Telnyx/Vonage) e impórtalo en Vapi → **Phone Numbers → Import** (Twilio: Account SID, Auth Token y el número).
+   - Un número local de tu país (por ejemplo +57 en Colombia) tiene más respuesta que uno extranjero. Twilio pide documentos para números de algunos países.
+   - En Twilio → **Voice → Settings → Geo permissions**, activa las llamadas al país de tus clientes.
+3. Copia el **ID** del número importado → `VAPI_PHONE_NUMBER_ID`.
+4. **API Keys** → copia la clave **privada** → `VAPI_API_KEY`.
+
+No hace falta crear el asistente en Vapi: la app lo arma en cada llamada con los datos del pedido y la configuración de **Llamadas IA**, y le indica el webhook `https://<tu-dominio>/api/vapi/webhook`.
+
+### 3. Variables en Vercel
+**Settings → Environment Variables**, y después **Redeploy**:
+
+| Variable | Valor |
+|---|---|
+| `VAPI_API_KEY` | Clave privada de Vapi |
+| `VAPI_PHONE_NUMBER_ID` | ID del número importado |
+| `VAPI_WEBHOOK_SECRET` | Texto aleatorio largo (protege el webhook) |
+| `CRON_SECRET` | Otro texto aleatorio largo (protege la tarea programada) |
+| `PUBLIC_BASE_URL` | (Opcional) `https://tu-dominio.com`. Si no la pones se usa el dominio de producción de Vercel |
+
+Las llamadas deben hacerse desde el dominio de **producción**: las versiones de prueba de Vercel suelen estar protegidas y Vapi no podría avisar del resultado.
+
+### 4. Tarea programada (reintentos y llamadas fuera de horario)
+Las llamadas inmediatas no la necesitan. Para los reintentos, la espera antes de llamar y los pedidos que llegan fuera de horario, algo debe llamar cada 5–10 minutos a:
+
+```
+GET https://<tu-dominio>/api/cron/calls
+Authorization: Bearer <CRON_SECRET>
+```
+
+- **Gratis:** en [cron-job.org](https://cron-job.org) crea un trabajo cada 5 minutos con esa URL y, en *Advanced → Headers*, la cabecera `Authorization: Bearer <CRON_SECRET>`. Si la herramienta no permite cabeceras, usa `https://<tu-dominio>/api/cron/calls?secret=<CRON_SECRET>`.
+- **Vercel Pro:** crea `vercel.json` con `{"crons":[{"path":"/api/cron/calls","schedule":"*/5 * * * *"}]}`. Vercel envía la cabecera con `CRON_SECRET` solo. (El plan Hobby solo permite tareas diarias y el despliegue falla con esa frecuencia.)
+
+La misma tarea cierra las llamadas cuyo aviso de Vapi no llegó.
+
+### 5. Configurar y probar
+En el panel, **Llamadas IA**:
+1. Elige nombre y voz del agente, la primera frase, el horario y los reintentos. En *Instrucciones adicionales* pon datos de tu tienda (tiempos de envío, garantía…). Pulsa **Guardar**.
+2. **Llamada de prueba:** escribe tu número y pulsa **Llamarme ahora**. Responde como un cliente; el resultado aparece en el historial. No cambia ningún pedido.
+3. Activa **Llamar automáticamente a cada pedido nuevo** cuando estés contento. También puedes llamar a mano con el botón **Llamar** en Pedidos.
+
+> Si también usas la confirmación por WhatsApp, pon unos 15 minutos de espera antes de llamar: si el cliente confirma por WhatsApp antes, no se le llama.
 
