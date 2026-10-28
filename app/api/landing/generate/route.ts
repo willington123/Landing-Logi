@@ -144,7 +144,10 @@ export async function POST(req: NextRequest) {
     const raw = err instanceof Error ? err.message : 'Error interno';
     let message = raw;
     if (/api key/i.test(raw)) message = 'Google rechazó la API Key. Revisa que esté bien copiada.';
-    else if (status === 429) message = 'Límite de uso de tu clave de Gemini alcanzado. Espera un minuto y vuelve a intentarlo.';
+    else if (status === 429)
+      message = /per day/i.test(raw)
+        ? 'Tu clave gratuita de Gemini agotó su límite diario en todos los modelos. Se renueva mañana, o activa la facturación para quitar el límite.'
+        : 'Límite de uso de tu clave de Gemini alcanzado. Espera un minuto y vuelve a intentarlo.';
     else if (status >= 500) message = 'Google está saturado en este momento. Inténtalo de nuevo en unos minutos.';
     return NextResponse.json({ success: false, error: message, rawError: raw }, { status: status >= 400 ? status : 500 });
   }

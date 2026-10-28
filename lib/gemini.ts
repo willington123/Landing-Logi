@@ -8,8 +8,11 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TEXT_MODELS = [
   process.env.GEMINI_TEXT_MODEL,
   'gemini-3.8-flash',
-  'gemini-flash-latest',
   'gemini-3.5-flash',
+  'gemini-flash-latest',
+  // Lite models: lower quality but their own free quota, used when the others are exhausted.
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
 ].filter(Boolean) as string[];
 const IMAGE_MODELS = [
   process.env.GEMINI_IMAGE_MODEL,
@@ -80,8 +83,9 @@ async function withFallback<T>(models: string[], run: (model: string) => Promise
     } catch (err) {
       const e = err instanceof GeminiError ? err : new GeminiError(err instanceof Error ? err.message : String(err));
       errors.push(e);
-      // Bad key or quota exhausted: trying other models won't help.
-      if (e.status === 401 || e.status === 403 || e.status === 429 || /api key/i.test(e.message)) break;
+      // Bad key: other models won't help. Quota limits (429) are per model on the free
+      // tier, so in that case the next model may still work.
+      if (e.status === 401 || e.status === 403 || /api key/i.test(e.message)) break;
     }
   }
   // Report every model's failure; the first one is usually the meaningful one.
