@@ -92,6 +92,18 @@ export async function pushSettings(settings: StoreSettings) {
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
 }
 
+// Deletes orders in Supabase (when configured), then from the local cache.
+// Throws if the server refuses, so the panel never hides orders that still exist.
+export async function deleteOrders(ids: string[]) {
+  if (!ids.length) return;
+  if (await isCloud()) {
+    const res = await fetch('/api/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || `No se pudieron eliminar los pedidos (HTTP ${res.status}).`);
+  }
+  logiStore.deleteOrders(ids);
+}
+
 export function pushOrderStatus(id: string, status: OrderItem['status']) {
   if (typeof window === 'undefined' || !(window as any).__lpCloud) return;
   fetch(`/api/orders/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }).catch(() => {});
