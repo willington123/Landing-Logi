@@ -83,7 +83,23 @@ export async function upsertLanding(input: LandingPageConfig) {
 export async function listLandings(): Promise<LandingPageConfig[]> {
   const { data, error } = await db().from('landings').select('data').order('updated_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return (data || []).map((r) => r.data as LandingPageConfig);
+  const landings = (data || []).map((r) => r.data as LandingPageConfig);
+  // Orders are counted from the orders table (the number stored in the landing JSON is never updated by the server).
+  const counts = await countOrdersByLanding(landings.map((l) => l.id));
+  return landings.map((l) => ({ ...l, ordersCount: counts[l.id] ?? l.ordersCount ?? 0 }));
+}
+
+// Number of orders per landing (one small count query each, run in parallel).
+async function countOrdersByLanding(ids: string[]): Promise<Record<string, number>> {
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      const { count, error } = await db().from('orders').select('id', { count: 'exact', head: true }).eq('landing_id', id);
+      return [id, error ? undefined : count ?? 0] as const;
+    }),
+  );
+  const out: Record<string, number> = {};
+  for (const [id, n] of entries) if (n !== undefined) out[id] = n;
+  return out;
 }
 
 export async function getPublicLanding(slugOrId: string): Promise<LandingPageConfig | null> {
