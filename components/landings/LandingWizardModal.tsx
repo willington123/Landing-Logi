@@ -392,7 +392,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                   />
                   <span className="text-xs text-slate-600">
                     <strong className="text-slate-900 block">Generar 5 imágenes publicitarias con IA</strong>
-                    Escenas con tu producto real: banner, persona usándolo y una por beneficio. Usa Gemini (con facturación) o Cloudflare (gratis).
+                    Escenas con tu producto real: banner, persona usándolo y una por beneficio. Usa Gemini, Replicate (nano-banana) o Cloudflare (gratis), según lo que configures.
                   </span>
                 </label>
               </div>
