@@ -475,6 +475,15 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     onChange={(e) => setConfig({ ...config, whatsappNumber: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-orange"
                   />
+                  <label className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-300 cursor-pointer">
+                    <span>Al terminar el pedido, llevar al cliente a WhatsApp con sus datos</span>
+                    <input
+                      type="checkbox"
+                      checked={config.whatsappRedirect !== false}
+                      onChange={(e) => setConfig({ ...config, whatsappRedirect: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-brand-orange focus:ring-brand-orange"
+                    />
+                  </label>
                 </div>
               </div>
             )}

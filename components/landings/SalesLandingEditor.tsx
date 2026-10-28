@@ -409,6 +409,13 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                   <Text label="Detalles del producto (desplegable)" value={s.productDetails} onChange={(v) => updateSales({ productDetails: v })} multiline />
                   <Text label="Envío y pago (desplegable)" value={s.shippingInfo} onChange={(v) => updateSales({ shippingInfo: v })} multiline />
                   <Text label="WhatsApp" value={config.whatsappNumber} onChange={(v) => update({ whatsappNumber: v })} placeholder="+57 300 000 0000" />
+                  <label className="text-sm text-slate-700 flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" checked={config.whatsappRedirect !== false} onChange={(e) => update({ whatsappRedirect: e.target.checked })} />
+                    <span>
+                      Al terminar el pedido, llevar al cliente a WhatsApp con sus datos
+                      <span className="block text-xs text-slate-500">Se abre un chat con este número y el mensaje del pedido ya escrito.</span>
+                    </span>
+                  </label>
                 </Group>
 
                 <Group title="Pasos">

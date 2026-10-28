@@ -41,6 +41,8 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
 - Confirmación automática de cada pedido por WhatsApp con una plantilla aprobada y dos botones: **Confirmar pedido** y **Cancelar**. La respuesta del cliente cambia el estado del pedido a *Confirmado* o *Cancelado*.
 - Bandeja real guardada en Supabase: conversaciones, mensajes con su estado (enviado, entregado, leído, fallido) y el pedido vinculado. Respuestas de texto libre dentro de la ventana de 24 h de WhatsApp.
 - Se activa solo cuando configuras las variables de WhatsApp (ver sección [WhatsApp](#whatsapp)).
+- **Redirección a WhatsApp al terminar el pedido:** si la landing tiene un número de WhatsApp, el cliente pasa automáticamente a un chat con ese número y con el mensaje del pedido ya escrito (número de pedido, producto, total y sus datos). Se puede apagar en el editor de la landing. No necesita la API de WhatsApp.
+- **Excel de pedidos:** en *Pedidos*, el botón **Descargar Excel** baja los pedidos que ves en la tabla (con los filtros aplicados) con todos sus datos.
 
 ### 4. Automatizaciones & Analíticas
 - **Constructor de Flujos (`AutomationBuilder`)**: Nodos de disparadores (Nuevo Pedido, Llamada Confirmada, No Contesta), condiciones y acciones (Disparar llamada IA, Enviar WhatsApp oficial, Crear tarea humana, Webhook logístico).

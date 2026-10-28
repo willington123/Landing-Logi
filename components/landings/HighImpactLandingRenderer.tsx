@@ -28,6 +28,7 @@ import { LandingPageConfig, ProductCombo, BenefitItem, PaymentMethodType } from 
 import { logiStore } from '@/lib/store';
 import ProductCreativeCard from '@/components/landings/ProductCreativeCard';
 import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
+import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
@@ -221,7 +222,7 @@ function ClassicLandingRenderer({
     }
   };
 
-  const handleCheckoutSubmit = (e: React.FormEvent) => {
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -260,11 +261,11 @@ function ClassicLandingRenderer({
       createdAt: new Date().toISOString(),
     };
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      triggerConfetti();
+    // Wait for the saved order (the public page returns it with the real order number).
+    let saved: any = orderPayload;
+    try {
       if (onOrderSubmit) {
-        onOrderSubmit(orderPayload);
+        saved = (await onOrderSubmit(orderPayload)) || orderPayload;
       } else {
         try {
           logiStore.createOrder(orderPayload);
@@ -272,9 +273,25 @@ function ClassicLandingRenderer({
           // Ignore
         }
       }
-      setOrderCompletedData(orderPayload);
-    }, 600);
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setFormError(err?.message || 'No pudimos registrar tu pedido. Inténtalo de nuevo.');
+      return;
+    }
+    setIsSubmitting(false);
+    triggerConfetti();
+    setOrderCompletedData(saved);
   };
+
+  // wa.me link with the order details; opened automatically on the public page.
+  const completedWhatsApp = orderCompletedData ? orderWhatsAppUrl(config, orderCompletedData) : '';
+  useEffect(() => {
+    if (!completedWhatsApp || previewMode) return;
+    const t = setTimeout(() => {
+      window.location.href = completedWhatsApp;
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [completedWhatsApp, previewMode]);
 
   // Discount %
   const discountPercent = Math.max(
@@ -1009,6 +1026,18 @@ function ClassicLandingRenderer({
             <p className="text-[11px] text-slate-500">
               Nuestro equipo de logística te contactará en breve para verificar la guía de despacho.
             </p>
+
+            {completedWhatsApp && (
+              <div className="space-y-2">
+                {!previewMode && <p className="text-xs font-semibold text-slate-800">Te estamos llevando a WhatsApp para enviarnos tu pedido…</p>}
+                <a
+                  href={completedWhatsApp}
+                  className="w-full py-3 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center"
+                >
+                  Enviar mi pedido por WhatsApp
+                </a>
+              </div>
+            )}
 
             <button
               onClick={() => setOrderCompletedData(null)}

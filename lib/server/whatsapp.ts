@@ -91,10 +91,7 @@ export function sendConfirmTemplate(to: string, vars: { name: string; product: s
   });
 }
 
-export function formatMoney(amount: number, currency = 'COP'): string {
-  if (currency === 'EUR') return `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount || 0)} €`;
-  return `$${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(amount || 0)} ${currency}`;
-}
+export { formatMoney } from '@/lib/whatsapp-link';
 
 // ---------- webhook parsing ----------
 

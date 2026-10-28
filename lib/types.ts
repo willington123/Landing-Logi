@@ -166,6 +166,8 @@ export interface LandingPageConfig {
   guaranteeDays: number;
   whatsappNumber: string;
   whatsappDirectMessage: string;
+  // After an order, send the customer to WhatsApp with the order details (default: on when there is a number).
+  whatsappRedirect?: boolean;
   themeStyle: 'impact-vibrant' | 'dark-luxe' | 'dropship-fast' | 'clean-white' | 'tech-neon';
   primaryColor: string;
   accentColor: string;
