@@ -17,7 +17,7 @@ export function cloudEnabled(): boolean {
 }
 
 let client: SupabaseClient | null = null;
-function db(): SupabaseClient {
+export function db(): SupabaseClient {
   if (!cloudEnabled()) throw new Error('Supabase no está configurado (SUPABASE_URL y la clave secreta SUPABASE_SERVICE_ROLE_KEY).');
   if (!client) {
     client = createClient(supabaseUrl(), supabaseSecret(), {

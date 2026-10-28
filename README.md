@@ -37,10 +37,10 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
   - Disparadores rápidos de respuesta del cliente: Confirmar afirmativamente, solicitar cambio de dirección o cancelar pedido cortésmente.
   - Entrada de voz por micrófono mediante Web Speech Recognition.
 
-### 3. CRM Omnicanal (Bandeja Compartida de 3 Columnas)
-- **Columna Izquierda**: Bandeja unificada (WhatsApp oficial Meta Cloud, Instagram, Messenger, Webchat), filtros por estado y asignación de asesores.
-- **Columna Central**: Línea de tiempo conversacional con diferenciación de burbujas (Cliente, Asesor Humano, Bot de IA) y **Notas Internas de Equipo** protegidas con candado 🔒. Selector de respuestas rápidas (`/`) y plantillas oficiales de WhatsApp Meta HSM.
-- **Columna Derecha (Expediente 360°)**: Ficha de cliente, LTV acumulado, pedidos vinculados con estado de despacho, llamadas de IA realizadas y gestor de etiquetas.
+### 3. Mensajes (WhatsApp)
+- Confirmación automática de cada pedido por WhatsApp con una plantilla aprobada y dos botones: **Confirmar pedido** y **Cancelar**. La respuesta del cliente cambia el estado del pedido a *Confirmado* o *Cancelado*.
+- Bandeja real guardada en Supabase: conversaciones, mensajes con su estado (enviado, entregado, leído, fallido) y el pedido vinculado. Respuestas de texto libre dentro de la ventana de 24 h de WhatsApp.
+- Se activa solo cuando configuras las variables de WhatsApp (ver sección [WhatsApp](#whatsapp)).
 
 ### 4. Automatizaciones & Analíticas
 - **Constructor de Flujos (`AutomationBuilder`)**: Nodos de disparadores (Nuevo Pedido, Llamada Confirmada, No Contesta), condiciones y acciones (Disparar llamada IA, Enviar WhatsApp oficial, Crear tarea humana, Webhook logístico).
@@ -104,6 +104,7 @@ Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment
 | `REPLICATE_API_TOKEN` | Imágenes con nano-banana |
 | `IMAGE_PROVIDER` | `replicate`, `gemini`, `cloudflare` o `auto` |
 | `META_CAPI_ACCESS_TOKEN` | (Opcional) Conversions API de Meta: envía cada pedido desde el servidor |
+| `WHATSAPP_*` | (Opcional) Confirmación de pedidos y bandeja de WhatsApp. Ver sección [WhatsApp](#whatsapp) |
 
 ### 3. GitHub y Vercel
 1. Sube el proyecto a un repositorio **privado** de GitHub.
@@ -113,3 +114,68 @@ Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment
 La primera vez que abras el panel publicado, las landings que tenías en el navegador se suben solas a la base de datos.
 
 > El plan gratuito de Vercel (Hobby) es para uso no comercial; para vender con anuncios usa el plan Pro.
+
+## WhatsApp
+
+Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.
+
+Necesitas Supabase configurado (sección anterior) y una cuenta de Meta Business.
+
+### 1. Base de datos
+En Supabase → **SQL Editor → New query**, pega [`supabase/migrations/002_whatsapp.sql`](supabase/migrations/002_whatsapp.sql) y pulsa **Run**. (Si instalas desde cero, `supabase/schema.sql` ya lo incluye.)
+
+### 2. App y número en Meta
+1. En [developers.facebook.com](https://developers.facebook.com/apps) crea una app de tipo **Business** (o usa la que ya tienes) y añádele el producto **WhatsApp**, vinculado a tu portafolio de Meta Business.
+2. Registra tu número en **WhatsApp Manager → Herramientas de la cuenta → Números de teléfono** (no puede estar usándose en la app de WhatsApp normal).
+3. En **WhatsApp → Configuración de la API** (o en WhatsApp Manager, al abrir el número) copia el **Identificador del número de teléfono** → `WHATSAPP_PHONE_NUMBER_ID`.
+4. En **Configuración → Básica** de la app copia la **Clave secreta de la app** → `WHATSAPP_APP_SECRET`.
+
+### 3. Token permanente
+1. **Configuración del negocio (business.facebook.com/settings) → Usuarios → Usuarios del sistema → Agregar**, rol *Administrador*.
+2. **Asignar activos**: tu app (control total) y tu cuenta de WhatsApp Business (control total).
+3. **Generar token**: elige tu app, caducidad **Nunca** y los permisos `whatsapp_business_messaging` y `whatsapp_business_management`.
+4. Copia el token → `WHATSAPP_TOKEN`. Es secreto: solo en Vercel / `.env.local`.
+
+### 4. Plantilla de confirmación
+En **WhatsApp Manager → Plantillas de mensajes → Crear plantilla**:
+
+- **Categoría:** Utilidad (*Utility*)
+- **Nombre:** `confirmacion_pedido` → `WHATSAPP_CONFIRM_TEMPLATE`
+- **Idioma:** Español (`es`) → `WHATSAPP_TEMPLATE_LANG` (si eliges *Español (COL)* pon `es_CO`)
+- **Cuerpo** (variables numeradas):
+
+  ```
+  Hola {{1}}, recibimos tu pedido de {{2}} por {{3}}, con pago contraentrega en {{4}}. ¿Confirmas tu pedido para enviarlo?
+  ```
+
+  Ejemplos para la revisión de Meta: `{{1}}` Laura · `{{2}}` Faja moldeadora - 2 unidades · `{{3}}` $129.900 COP · `{{4}}` Medellín
+- **Botones:** *Respuesta rápida* (Quick reply), en este orden:
+  1. `Confirmar pedido`
+  2. `Cancelar`
+
+Espera a que el estado sea **Aprobada** (suele tardar minutos).
+
+### 5. Variables en Vercel
+En **Settings → Environment Variables** añade y vuelve a desplegar (**Deployments → Redeploy**):
+
+| Variable | Valor |
+|---|---|
+| `WHATSAPP_TOKEN` | Token permanente del paso 3 |
+| `WHATSAPP_PHONE_NUMBER_ID` | Identificador del número del paso 2 |
+| `WHATSAPP_VERIFY_TOKEN` | Un texto aleatorio que inventes (lo usarás en el paso 6) |
+| `WHATSAPP_APP_SECRET` | Clave secreta de la app del paso 2 |
+| `WHATSAPP_CONFIRM_TEMPLATE` | `confirmacion_pedido` |
+| `WHATSAPP_TEMPLATE_LANG` | `es` (o el código del idioma de tu plantilla) |
+
+`META_GRAPH_VERSION` (opcional, por defecto `v26.0`) se comparte con la Conversions API.
+
+### 6. Webhook
+1. En la app de Meta → **WhatsApp → Configuración → Webhook → Editar**.
+2. **URL de devolución de llamada:** `https://<tu-dominio>/api/whatsapp/webhook`
+3. **Token de verificación:** el mismo valor de `WHATSAPP_VERIFY_TOKEN`. Pulsa **Verificar y guardar**.
+4. En **Campos del webhook**, suscríbete a `messages`.
+
+Comprueba el estado en **Integraciones** del panel: la tarjeta de WhatsApp debe decir *Configurado*. Haz un pedido de prueba con tu propio número.
+
+> WhatsApp solo permite texto libre dentro de las 24 h siguientes al último mensaje del cliente. Fuera de esa ventana la bandeja lo indica y no envía nada.
+

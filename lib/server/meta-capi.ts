@@ -27,7 +27,7 @@ const CALLING_CODES: Record<string, { code: string; iso: string; localLength: nu
 };
 
 // Meta wants phones with country code, digits only (e.g. 573001234567).
-function normalizePhone(phone: string, country?: string): string {
+export function normalizePhone(phone: string, country?: string): string {
   let digits = (phone || '').replace(/\D/g, '');
   const cc = CALLING_CODES[country || 'Colombia'] || CALLING_CODES.Colombia;
   if (digits.startsWith('00')) digits = digits.slice(2);
