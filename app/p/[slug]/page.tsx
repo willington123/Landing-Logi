@@ -5,6 +5,7 @@ import { notFound, useParams } from 'next/navigation';
 import HighImpactLandingRenderer from '@/components/landings/HighImpactLandingRenderer';
 import { logiStore } from '@/lib/store';
 import { LandingPageConfig } from '@/lib/types';
+import { initMetaPixel, trackPixelOnce } from '@/lib/meta-pixel';
 
 export default function PublicLandingPage() {
   const params = useParams();
@@ -20,6 +21,16 @@ export default function PublicLandingPage() {
       landing.viewsCount = (landing.viewsCount || 0) + 1;
       logiStore.saveLanding(landing);
       setConfig(landing);
+      if (landing.metaPixelId) {
+        initMetaPixel(landing.metaPixelId);
+        trackPixelOnce(`view-${landing.id}`, 'ViewContent', {
+          content_name: landing.productName,
+          content_ids: [landing.id],
+          content_type: 'product',
+          value: landing.promoPrice,
+          currency: landing.currency || 'COP',
+        });
+      }
     }
     setIsLoading(false);
   }, [slug]);

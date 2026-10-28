@@ -51,6 +51,7 @@ import {
 import confetti from 'canvas-confetti';
 import { LandingPageConfig, LandingDesign, ProductCombo } from '@/lib/types';
 import { logiStore } from '@/lib/store';
+import { trackPixel } from '@/lib/meta-pixel';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 const playfair = Playfair_Display({ weight: ['600', '700'], style: ['normal', 'italic'], subsets: ['latin'], display: 'swap', preload: false });
@@ -154,6 +155,20 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Meta Pixel: checkout started (only on the public page, never in the editor preview).
+  useEffect(() => {
+    if (!drawer || previewMode) return;
+    trackPixel('InitiateCheckout', {
+      content_name: config.productName,
+      content_ids: [config.id],
+      content_type: 'product',
+      num_items: combo.units,
+      value: combo.promoPrice,
+      currency: config.currency || 'COP',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer]);
+
   useEffect(() => {
     if (!drawer) return;
     const prev = document.body.style.overflow;
@@ -194,6 +209,20 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
         } catch {
           // ignore storage errors in demo mode
         }
+      }
+      if (!previewMode) {
+        trackPixel(
+          'Purchase',
+          {
+            content_name: config.productName,
+            content_ids: [config.id],
+            content_type: 'product',
+            num_items: combo.units,
+            value: combo.promoPrice,
+            currency: config.currency || 'COP',
+          },
+          saved.id || `order-${Date.now()}`
+        );
       }
       setSubmitting(false);
       setDone(saved);

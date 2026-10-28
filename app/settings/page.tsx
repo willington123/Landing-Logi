@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [supportEmail, setSupportEmail] = useState('');
   const [currency, setCurrency] = useState('COP');
   const [defaultGuaranteeDays, setDefaultGuaranteeDays] = useState(30);
+  const [metaPixelId, setMetaPixelId] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function SettingsPage() {
     setSupportEmail(st.supportEmail);
     setCurrency(st.currency);
     setDefaultGuaranteeDays(st.guaranteeDays);
+    setMetaPixelId(st.metaPixelId);
   }, []);
 
   const handleSave = (e: React.FormEvent) => {
@@ -42,6 +44,7 @@ export default function SettingsPage() {
       supportEmail: supportEmail.trim(),
       currency,
       guaranteeDays: Number(defaultGuaranteeDays) || 30,
+      metaPixelId: metaPixelId.trim(),
     });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
@@ -160,6 +163,27 @@ export default function SettingsPage() {
                     Servientrega, Coordinadora, Interrapidísimo, Envía
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Meta Pixel */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <span className="w-4 h-4 rounded bg-[#0866FF] text-white text-[9px] font-bold flex items-center justify-center">f</span>
+                <h3 className="text-[15px] font-semibold text-slate-900">Píxel de Meta (Facebook / Instagram Ads)</h3>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">ID del píxel por defecto</label>
+                <input
+                  value={metaPixelId}
+                  onChange={(e) => setMetaPixelId(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
+                  placeholder="Ej. 123456789012345"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                />
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Se aplica a cada landing nueva (puedes cambiarlo por landing en el editor). Lo encuentras en Meta Events Manager → Orígenes de datos → tu píxel.
+                </p>
               </div>
             </div>
 

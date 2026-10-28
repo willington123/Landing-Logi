@@ -279,6 +279,8 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
       },
       images
     );
+    const pixel = logiStore.getStoreSettings().metaPixelId;
+    if (pixel) landing.metaPixelId = pixel;
     logiStore.saveLanding(landing);
     if (!logiStore.getLandingBySlug(landing.slug)) {
       setError(

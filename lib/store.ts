@@ -40,6 +40,7 @@ export interface StoreSettings {
   supportEmail: string;
   currency: string;
   guaranteeDays: number;
+  metaPixelId: string;
 }
 
 const DEFAULT_STORE_SETTINGS: StoreSettings = {
@@ -48,6 +49,7 @@ const DEFAULT_STORE_SETTINGS: StoreSettings = {
   supportEmail: '',
   currency: 'COP',
   guaranteeDays: 30,
+  metaPixelId: '',
 };
 
 function safeGet<T>(key: string, defaultValue: T): T {

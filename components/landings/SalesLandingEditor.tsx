@@ -120,7 +120,7 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
   { id: 'reviews', label: 'Reseñas', icon: MessageSquareQuote },
   { id: 'faq', label: 'Preguntas', icon: HelpCircle },
   { id: 'design', label: 'Diseño', icon: Palette },
-  { id: 'seo', label: 'SEO', icon: SearchIcon },
+  { id: 'seo', label: 'Píxel y SEO', icon: SearchIcon },
 ];
 
 // ---------- image slot (upload / remove / regenerate with AI) ----------
@@ -651,6 +651,18 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
             )}
 
             {tab === 'seo' && (
+              <>
+              <Group title="Píxel de Meta (Facebook / Instagram Ads)" defaultOpen>
+                <Field
+                  label="ID del píxel"
+                  hint="Envía PageView y ViewContent al abrir la landing, InitiateCheckout al abrir el formulario y Purchase (con valor y moneda) al confirmar el pedido. En el editor no se envía nada."
+                >
+                  <input className={inputCls} inputMode="numeric" value={config.metaPixelId || ''} placeholder="Ej. 123456789012345" onChange={(e) => update({ metaPixelId: e.target.value.replace(/\D/g, '') })} />
+                </Field>
+                {config.metaPixelId && !/^\d{10,20}$/.test(config.metaPixelId) && (
+                  <p className="text-[11px] text-red-600">El ID del píxel suele tener 15 o 16 números.</p>
+                )}
+              </Group>
               <Group title="Buscadores y enlace" defaultOpen>
                 <Text label="Título para Google" value={config.seoTitle} onChange={(v) => update({ seoTitle: v })} />
                 <Text label="Descripción para Google" value={config.seoDescription} onChange={(v) => update({ seoDescription: v })} multiline />
@@ -658,6 +670,7 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                   <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 break-all">{config.publishedUrl}</div>
                 </Field>
               </Group>
+              </>
             )}
 
             <div className="h-6" />
