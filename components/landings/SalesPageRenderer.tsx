@@ -827,8 +827,8 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
               <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center">
                 <WhatsAppConfirmStep
                   url={doneWhatsApp}
-                  firstName={done.customerName?.split(' ')[0]}
-                  orderNumber={done.orderNumber}
+                  order={done}
+                  currency={config.currency || 'COP'}
                   previewMode={previewMode}
                   onClose={() => { setDrawer(false); setDone(null); }}
                 />

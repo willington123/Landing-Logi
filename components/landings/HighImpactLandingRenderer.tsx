@@ -985,8 +985,8 @@ function ClassicLandingRenderer({
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-scale-up max-h-[92vh] overflow-y-auto">
             <WhatsAppConfirmStep
               url={completedWhatsApp}
-              firstName={orderCompletedData.customerName?.split(' ')[0]}
-              orderNumber={orderCompletedData.orderNumber}
+              order={orderCompletedData}
+              currency={config.currency || 'COP'}
               previewMode={previewMode}
               onClose={() => setOrderCompletedData(null)}
             />

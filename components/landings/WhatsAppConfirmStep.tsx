@@ -3,8 +3,9 @@
 // Thank-you step when the landing sends the customer to WhatsApp: makes clear the order is
 // only confirmed once they tap "Enviar", then opens WhatsApp after a short countdown.
 import React, { useEffect, useState } from 'react';
+import { formatMoney } from '@/lib/whatsapp-link';
 
-const COUNTDOWN = 5;
+const COUNTDOWN = 7;
 
 function WhatsAppIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -14,15 +15,37 @@ function WhatsAppIcon({ className = 'w-5 h-5' }: { className?: string }) {
   );
 }
 
+export interface ConfirmOrderSummary {
+  productName: string;
+  comboName: string;
+  totalAmount: number;
+  customerName: string;
+  phone: string;
+  address: string;
+  city: string;
+  department?: string;
+  notes?: string;
+}
+
 interface Props {
   url: string;
-  firstName?: string;
-  orderNumber?: string;
+  order: ConfirmOrderSummary & { orderNumber?: string };
+  currency?: string;
   previewMode?: boolean;
   onClose?: () => void;
 }
 
-export default function WhatsAppConfirmStep({ url, firstName, orderNumber, previewMode = false, onClose }: Props) {
+export default function WhatsAppConfirmStep({ url, order, currency = 'COP', previewMode = false, onClose }: Props) {
+  const firstName = order.customerName?.trim().split(/\s+/)[0];
+  const orderNumber = order.orderNumber;
+  const place = [order.city, order.department].filter(Boolean).join(', ');
+  const rows: [string, string | undefined][] = [
+    ['Nombre', order.customerName],
+    ['Celular', order.phone],
+    ['Dirección', order.address],
+    ['Ciudad', place],
+    ['Indicaciones', order.notes],
+  ];
   const [left, setLeft] = useState(previewMode ? 0 : COUNTDOWN);
   const [opened, setOpened] = useState(false);
 
@@ -49,6 +72,31 @@ export default function WhatsAppConfirmStep({ url, firstName, orderNumber, previ
       <div className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-left">
         <p className="text-sm font-bold text-amber-900">Tu pedido aún no está confirmado</p>
         <p className="text-sm text-amber-900/90 mt-0.5">Envíanos el mensaje por WhatsApp para confirmarlo. Sin confirmación no podemos despacharlo.</p>
+      </div>
+
+      {/* What the customer is confirming (same data as the WhatsApp message). */}
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">{order.productName}</p>
+            <p className="text-xs text-slate-500">{order.comboName}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-sm font-bold text-slate-900">{formatMoney(order.totalAmount, currency)}</p>
+            <p className="text-[11px] text-slate-500">Pagas al recibir</p>
+          </div>
+        </div>
+        <dl className="mt-3 pt-3 border-t border-slate-200 space-y-1.5">
+          {rows
+            .filter(([, v]) => v && v.trim())
+            .map(([k, v]) => (
+              <div key={k} className="flex gap-3 text-[13px]">
+                <dt className="w-24 shrink-0 text-slate-500">{k}</dt>
+                <dd className="text-slate-800 break-words min-w-0">{v}</dd>
+              </div>
+            ))}
+        </dl>
+        <p className="mt-3 text-[11px] text-slate-500">Estos datos van en el mensaje de WhatsApp.</p>
       </div>
 
       <ol className="mt-4 space-y-2 text-left text-sm text-slate-700">
