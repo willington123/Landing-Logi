@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { pullFromCloud } from '@/lib/cloud';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -15,6 +16,7 @@ import {
   Plug,
   Settings,
   X,
+  LogOut,
 } from 'lucide-react';
 
 // Header's menu button dispatches this event to open the sidebar on mobile.
@@ -55,12 +57,27 @@ const NAV_GROUPS = [
 export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [authOn, setAuthOn] = useState(false);
 
   useEffect(() => {
     const toggle = () => setOpen((v) => !v);
     window.addEventListener(SIDEBAR_TOGGLE_EVENT, toggle);
     return () => window.removeEventListener(SIDEBAR_TOGGLE_EVENT, toggle);
   }, []);
+
+  // Refresh landings and orders from Supabase (no-op when the cloud is not configured).
+  useEffect(() => {
+    pullFromCloud();
+    fetch('/api/status')
+      .then((r) => r.json())
+      .then((d) => setAuthOn(Boolean(d.auth)))
+      .catch(() => {});
+  }, []);
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  };
 
   // Close the mobile drawer after navigating.
   useEffect(() => setOpen(false), [pathname]);
@@ -153,6 +170,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               <p className="text-xs text-slate-500 truncate">Plan Growth</p>
             </div>
           </Link>
+          {authOn && (
+            <button onClick={logout} className="mt-1 w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">
+              <LogOut className="w-4 h-4" /> Cerrar sesión
+            </button>
+          )}
         </div>
       </aside>
     </>

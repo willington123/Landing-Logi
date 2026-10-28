@@ -22,6 +22,7 @@ import { logiStore } from '@/lib/store';
 import { LandingPageConfig } from '@/lib/types';
 import { buildSalesLanding, GeneratedCopy, GeneratedImages } from '@/lib/landing-ai';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
+import { pushLanding } from '@/lib/cloud';
 
 interface LandingWizardModalProps {
   isOpen: boolean;
@@ -289,9 +290,20 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
       setPhase('form');
       return;
     }
-    setResult(landing);
+    // Publish to Supabase (when configured) so the link works for everyone.
+    let finalLanding = landing;
+    try {
+      const cloud = await pushLanding(landing);
+      if (cloud) {
+        finalLanding = cloud.landing;
+        logiStore.saveLanding(finalLanding);
+      }
+    } catch (e: any) {
+      setImageNotice(`La landing se guardó en este navegador, pero no se pudo publicar en la nube: ${e.message}`);
+    }
+    setResult(finalLanding);
     setPhase('done');
-    onGenerated?.(landing);
+    onGenerated?.(finalLanding);
   };
 
   const reset = () => {

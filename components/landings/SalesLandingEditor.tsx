@@ -33,6 +33,7 @@ import { logiStore } from '@/lib/store';
 import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
+import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
 
 // ---------- small form primitives ----------
 const inputCls =
@@ -212,7 +213,9 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
   const [config, setConfig] = useState<LandingPageConfig>(initial);
   const [tab, setTab] = useState<Tab>('content');
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'full'>('saved');
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'full' | 'cloud-error'>('saved');
+  const [cloudOn, setCloudOn] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const firstRender = useRef(true);
@@ -241,14 +244,33 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
     return () => window.removeEventListener('message', onMsg);
   }, [postPreview]);
 
-  // ----- autosave -----
+  // ----- autosave (browser + Supabase) -----
+  useEffect(() => {
+    isCloud().then(setCloudOn);
+  }, []);
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
     setSaveState('saving');
-    const t = setTimeout(() => setSaveState(logiStore.trySaveLanding(config) ? 'saved' : 'full'), 700);
+    const t = setTimeout(async () => {
+      const localOk = logiStore.trySaveLanding(config);
+      if (!(await isCloud())) {
+        setSaveState(localOk ? 'saved' : 'full');
+        return;
+      }
+      try {
+        const res = await pushLanding(config);
+        setCloudError(null);
+        setSaveState('saved');
+        // Uploaded images come back as URLs: swap them in so they aren't sent again.
+        if (res && Object.keys(res.replaced).length) setConfig((c) => swapStrings(c, res.replaced));
+      } catch (e: any) {
+        setCloudError(e.message);
+        setSaveState('cloud-error');
+      }
+    }, 1200);
     return () => clearTimeout(t);
   }, [config]);
 
@@ -318,7 +340,8 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
           <div className="text-sm font-semibold text-slate-900 truncate">{config.productName}</div>
           <div className="text-[11px] text-slate-500 flex items-center gap-1">
             {saveState === 'saving' && (<><Loader2 className="w-3 h-3 animate-spin" /> Guardando…</>)}
-            {saveState === 'saved' && (<><Check className="w-3 h-3 text-emerald-600" /> Guardado</>)}
+            {saveState === 'saved' && (<><Check className="w-3 h-3 text-emerald-600" /> {cloudOn ? 'Guardado y publicado' : 'Guardado en este navegador'}</>)}
+            {saveState === 'cloud-error' && (<span className="text-red-600 flex items-center gap-1" title={cloudError || ''}><AlertCircle className="w-3 h-3" /> No se pudo publicar en la nube</span>)}
             {saveState === 'full' && (<span className="text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Sin espacio en el navegador: quita imágenes o borra landings antiguas</span>)}
           </div>
         </div>

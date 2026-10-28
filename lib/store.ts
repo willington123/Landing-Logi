@@ -169,6 +169,14 @@ export const logiStore = {
         orders[index].confirmedAt = new Date().toISOString();
       }
       safeSet(STORAGE_KEYS.ORDERS, [...orders]);
+      // Mirror to Supabase when the panel runs in cloud mode (flag set by lib/cloud.ts).
+      if (typeof window !== 'undefined' && (window as any).__lpCloud) {
+        fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }).catch(() => {});
+      }
     }
   },
 

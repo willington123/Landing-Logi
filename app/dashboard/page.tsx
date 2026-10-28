@@ -7,6 +7,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { VoiceCallSimulatorModal } from '@/components/voice/VoiceCallSimulatorModal';
 import { logiStore } from '@/lib/store';
+import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
 import { LandingPageConfig, OrderItem, VoiceCallTask } from '@/lib/types';
 import {
   Sparkles,
@@ -45,6 +46,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     refreshData();
+    // Re-read when fresh data arrives from Supabase.
+    window.addEventListener(CLOUD_SYNC_EVENT, refreshData);
+    return () => window.removeEventListener(CLOUD_SYNC_EVENT, refreshData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const totalRevenue = orders

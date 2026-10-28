@@ -6,6 +6,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { logiStore } from '@/lib/store';
+import { CLOUD_SYNC_EVENT, deleteLandingCloud } from '@/lib/cloud';
 import { LandingPageConfig } from '@/lib/types';
 import {
   Sparkles,
@@ -33,6 +34,10 @@ export default function LandingsPage() {
 
   useEffect(() => {
     refreshData();
+    // Re-read when fresh data arrives from Supabase.
+    window.addEventListener(CLOUD_SYNC_EVENT, refreshData);
+    return () => window.removeEventListener(CLOUD_SYNC_EVENT, refreshData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCopyUrl = (landing: LandingPageConfig) => {
@@ -45,6 +50,7 @@ export default function LandingsPage() {
   const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar esta landing page?')) {
       logiStore.deleteLanding(id);
+      deleteLandingCloud(id);
       refreshData();
     }
   };

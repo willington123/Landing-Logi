@@ -108,7 +108,7 @@ const plain = (t?: string) => (t || '').replace(/\*\*/g, '');
 interface Props {
   config: LandingPageConfig;
   previewMode?: boolean;
-  onOrderSubmit?: (orderData: any) => void;
+  onOrderSubmit?: (orderData: any) => unknown;
 }
 
 export default function SalesPageRenderer({ config, previewMode = false, onOrderSubmit }: Props) {
@@ -178,7 +178,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
     };
   }, [drawer]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     if (!form.name.trim()) return setFormError('Escribe tu nombre completo.');
@@ -200,39 +200,42 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
       notes: form.notes.trim(),
       paymentMethod: 'cash_on_delivery' as const,
     };
-    setTimeout(() => {
-      let saved: any = order;
-      if (onOrderSubmit) onOrderSubmit(order);
-      else if (!previewMode) {
-        try {
-          saved = logiStore.createOrder(order);
-        } catch {
-          // ignore storage errors in demo mode
-        }
+    let saved: any = order;
+    try {
+      if (onOrderSubmit) {
+        // The public page may save the order on the server and return it (with its number).
+        saved = (await onOrderSubmit(order)) || order;
+      } else if (!previewMode) {
+        saved = logiStore.createOrder(order);
       }
-      if (!previewMode) {
-        trackPixel(
-          'Purchase',
-          {
-            content_name: config.productName,
-            content_ids: [config.id],
-            content_type: 'product',
-            num_items: combo.units,
-            value: combo.promoPrice,
-            currency: config.currency || 'COP',
-          },
-          saved.id || `order-${Date.now()}`
-        );
-      }
+    } catch (err: any) {
       setSubmitting(false);
-      setDone(saved);
-      try {
-        confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 }, colors: [d.primary, d.accent, '#ffffff'] });
-      } catch {
-        // ignore
-      }
-    }, 500);
+      setFormError(err?.message || 'No pudimos registrar tu pedido. Inténtalo de nuevo.');
+      return;
+    }
+    if (!previewMode) {
+      trackPixel(
+        'Purchase',
+        {
+          content_name: config.productName,
+          content_ids: [config.id],
+          content_type: 'product',
+          num_items: combo.units,
+          value: combo.promoPrice,
+          currency: config.currency || 'COP',
+        },
+        saved.id || `order-${Date.now()}`
+      );
+    }
+    setSubmitting(false);
+    setDone(saved);
+    try {
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 }, colors: [d.primary, d.accent, '#ffffff'] });
+    } catch {
+      // ignore
+    }
   };
+
 
   const whatsappHref = config.whatsappNumber
     ? `https://wa.me/${config.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(config.whatsappDirectMessage || '')}`

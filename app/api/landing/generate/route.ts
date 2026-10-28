@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON, imagePart, resolveApiKey, GeminiError, GeminiPart } from '@/lib/gemini';
 import { ICON_NAMES, GeneratedCopy } from '@/lib/landing-ai';
 
-export const maxDuration = 60;
+// Gemini can be slow when saturated; Vercel allows up to 300 s with Fluid compute.
+export const maxDuration = 180;
 
 const S = { type: 'STRING' } as const;
 const strArr = (n: number) => ({ type: 'ARRAY', items: S, minItems: n, maxItems: n });

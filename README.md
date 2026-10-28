@@ -80,3 +80,35 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
 
 4. Abrir en el navegador:
    `http://localhost:3000`
+
+---
+
+## 🌐 Publicar en internet (Supabase + Vercel)
+
+Sin base de datos, las landings y los pedidos se guardan solo en tu navegador. Para que tus clientes vean las landings y sus pedidos te lleguen, hace falta Supabase.
+
+### 1. Supabase (base de datos, gratis)
+1. Crea un proyecto en [supabase.com](https://supabase.com).
+2. Abre **SQL Editor → New query**, pega el contenido de [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**.
+3. En **Project Settings → API** copia la **Project URL** y la clave **service_role** (es secreta: nunca la compartas ni la subas al código).
+
+### 2. Variables de entorno
+Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment Variables**):
+
+| Variable | Para qué |
+|---|---|
+| `SUPABASE_URL` | URL del proyecto de Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave service_role de Supabase |
+| `ADMIN_PASSWORD` | Contraseña del panel (obligatoria al publicar) |
+| `GEMINI_API_KEY` | Textos con IA |
+| `REPLICATE_API_TOKEN` | Imágenes con nano-banana |
+| `IMAGE_PROVIDER` | `replicate`, `gemini`, `cloudflare` o `auto` |
+
+### 3. GitHub y Vercel
+1. Sube el proyecto a un repositorio **privado** de GitHub.
+2. En [vercel.com](https://vercel.com) → **Add New → Project** → importa el repositorio.
+3. Añade las variables del paso 2 y pulsa **Deploy**.
+
+La primera vez que abras el panel publicado, las landings que tenías en el navegador se suben solas a la base de datos.
+
+> El plan gratuito de Vercel (Hobby) es para uso no comercial; para vender con anuncios usa el plan Pro.

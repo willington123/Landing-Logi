@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { logiStore } from '@/lib/store';
+import { pushSettings, CLOUD_SYNC_EVENT } from '@/lib/cloud';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
+    const load = () => {
     const st = logiStore.getStoreSettings();
     setStoreName(st.storeName);
     setSupportPhone(st.supportPhone);
@@ -34,18 +36,24 @@ export default function SettingsPage() {
     setCurrency(st.currency);
     setDefaultGuaranteeDays(st.guaranteeDays);
     setMetaPixelId(st.metaPixelId);
+    };
+    load();
+    window.addEventListener(CLOUD_SYNC_EVENT, load);
+    return () => window.removeEventListener(CLOUD_SYNC_EVENT, load);
   }, []);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    logiStore.saveStoreSettings({
+    const next = {
       storeName: storeName.trim(),
       supportPhone: supportPhone.trim(),
       supportEmail: supportEmail.trim(),
       currency,
       guaranteeDays: Number(defaultGuaranteeDays) || 30,
       metaPixelId: metaPixelId.trim(),
-    });
+    };
+    logiStore.saveStoreSettings(next);
+    pushSettings(next);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };

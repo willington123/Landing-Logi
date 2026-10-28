@@ -32,7 +32,7 @@ import SalesPageRenderer from '@/components/landings/SalesPageRenderer';
 interface HighImpactLandingRendererProps {
   config: LandingPageConfig;
   previewMode?: boolean;
-  onOrderSubmit?: (orderData: any) => void;
+  onOrderSubmit?: (orderData: any) => unknown;
 }
 
 const COLOMBIAN_DEPARTMENTS = [
