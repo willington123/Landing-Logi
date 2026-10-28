@@ -43,7 +43,6 @@ const SCHEMA = {
     finalCtaText: S,
     seoTitle: S,
     seoDescription: S,
-    brandName: S,
     featureChips: objArr(4, { icon, text: S }),
     painTags: strArr(2),
     productDetails: S,
@@ -65,6 +64,14 @@ const SCHEMA = {
 };
 (SCHEMA as any).required = Object.keys(SCHEMA.properties);
 
+function offersText(b: any): string {
+  const offers = (Array.isArray(b.offers) ? b.offers : []).filter((o: any) => o.units > 0 && o.price > 0);
+  if (!offers.length) return `1 unidad por ${b.promoPrice} ${b.currency}`;
+  const list = offers.map((o: any) => `${o.units} ${o.units === 1 ? 'unidad' : 'unidades'} por ${o.price} ${b.currency}`).join('; ');
+  const min = Math.min(...offers.map((o: any) => o.units));
+  return min > 1 ? `${list}. Compra mínima: ${min} unidades.` : list;
+}
+
 function buildPrompt(b: any): string {
   return `Eres el director creativo de una marca DTC premium (estilo de las mejores tiendas Shopify) y vendes con pago contraentrega en ${b.country || 'Colombia'}.
 Analiza la FOTO del producto y los DATOS del vendedor y escribe la ficha de producto completa para ESTE producto (nada genérico que sirva para cualquier otro).
@@ -75,7 +82,8 @@ DATOS DEL VENDEDOR
 - Nombre: ${b.productName || '(dedúcelo de la foto)'}
 - Descripción / notas: ${b.description || '(ninguna, dedúcelo de la foto)'}
 - Público objetivo: ${b.audience || '(dedúcelo)'}
-- Precio normal: ${b.regularPrice} ${b.currency} · Precio oferta: ${b.promoPrice} ${b.currency}
+- Marca / tienda: ${b.brandName || '(no indicada; no inventes un nombre de marca, habla del producto)'}
+- Ofertas del vendedor (son las ÚNICAS que existen): ${offersText(b)}
 - Envío: ${b.shippingType === 'calculated' ? 'con costo según destino' : 'gratis'} · Pago contraentrega
 - Garantía: ${b.guaranteeDays || 30} días
 - Tono deseado: ${b.tone || 'cercano, seguro y sensorial'}
@@ -87,7 +95,6 @@ ESTILO DE ESCRITURA (muy importante)
 - En títulos de sección y en el headline marca UNA palabra clave con **dobles asteriscos** (ej. "Tu piel, **más luminosa** cada mañana"). En textos descriptivos puedes marcar 1-2 frases clave con **.
 
 CAMPOS
-- brandName: nombre corto de marca para el producto (1-2 palabras, inventado pero creíble, sin usar marcas reales).
 - productName: nombre comercial del producto (máx. 6 palabras).
 - eyebrow: frase corta tipo etiqueta que resume la promesa (máx. 5 palabras, sin mayúsculas sostenidas).
 - headline: promesa principal (máx. 10 palabras). subheadline: 1-2 frases con el beneficio central y el pago contraentrega.
@@ -106,6 +113,7 @@ CAMPOS
 
 REGLAS
 - Usa SOLO características visibles en la foto o dadas por el vendedor. No inventes certificaciones, cifras técnicas, premios ni promesas médicas.
+- NO inventes ofertas, descuentos, combos, 2x1, regalos ni cantidades distintas a las del vendedor. Si hay compra mínima, menciónala con naturalidad.
 - NO inventes testimonios, número de clientes, calificaciones, porcentajes de satisfacción ni apariciones en prensa.
 - FAQs: dudas reales de compra (uso, envío, pago contraentrega, garantía, para quién es).
 

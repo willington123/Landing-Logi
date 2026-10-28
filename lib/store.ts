@@ -31,6 +31,23 @@ const STORAGE_KEYS = {
   CRM_MESSAGES: 'logipages_crm_messages',
   AUTOMATIONS: 'logipages_automations',
   GEMINI_API_KEY: 'logipages_gemini_api_key',
+  STORE_SETTINGS: 'logipages_store_settings',
+};
+
+export interface StoreSettings {
+  storeName: string;
+  supportPhone: string;
+  supportEmail: string;
+  currency: string;
+  guaranteeDays: number;
+}
+
+const DEFAULT_STORE_SETTINGS: StoreSettings = {
+  storeName: '',
+  supportPhone: '',
+  supportEmail: '',
+  currency: 'COP',
+  guaranteeDays: 30,
 };
 
 function safeGet<T>(key: string, defaultValue: T): T {
@@ -74,6 +91,21 @@ export const logiStore = {
     }
     safeSet(STORAGE_KEYS.LANDINGS, updated);
     return landing;
+  },
+
+  // Like saveLanding, but reports whether the browser had room to store it.
+  trySaveLanding: (landing: LandingPageConfig): boolean => {
+    if (typeof window === 'undefined') return false;
+    const landings = logiStore.getLandings();
+    const index = landings.findIndex((l) => l.id === landing.id);
+    const next = { ...landing, updatedAt: new Date().toISOString() };
+    const updated = index >= 0 ? landings.map((l, i) => (i === index ? next : l)) : [next, ...landings];
+    try {
+      localStorage.setItem(STORAGE_KEYS.LANDINGS, JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   deleteLanding: (id: string): void => {
@@ -307,6 +339,13 @@ export const logiStore = {
       updated = [flow, ...flows];
     }
     safeSet(STORAGE_KEYS.AUTOMATIONS, updated);
+  },
+
+  // Store settings (brand name, support contact, defaults for new landings)
+  getStoreSettings: (): StoreSettings => ({ ...DEFAULT_STORE_SETTINGS, ...safeGet(STORAGE_KEYS.STORE_SETTINGS, {}) }),
+
+  saveStoreSettings: (settings: StoreSettings): void => {
+    safeSet(STORAGE_KEYS.STORE_SETTINGS, settings);
   },
 
   // Gemini API Key

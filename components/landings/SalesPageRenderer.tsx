@@ -126,7 +126,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
     ? config.combos
     : [{ id: 'single', name: config.productName, units: 1, regularPrice: config.regularPrice, promoPrice: config.promoPrice, savingsText: '', isPopular: true }];
   const [comboId, setComboId] = useState(() => (combos.find((c) => c.isPopular) || combos[0]).id);
-  const combo = combos.find((c) => c.id === comboId) || combos[0];
+  const combo = combos.find((c) => c.id === comboId) || combos.find((c) => c.isPopular) || combos[0];
 
   const gallery = useMemo(
     () => [config.mainImage, ...(config.galleryImages || [])].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i),
@@ -365,6 +365,13 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
               )}
             </div>
 
+            {combos.length === 1 && combos[0].units > 1 && (
+              <p className="mt-1.5 text-[13px] text-slate-600">
+                Precio por <strong className="text-slate-900">{combos[0].name}</strong>
+                {combos[0].savingsText ? ` · ${combos[0].savingsText}` : ''}
+              </p>
+            )}
+
             {/* Offers */}
             {combos.length > 1 && (
               <div className="mt-6">
@@ -385,9 +392,12 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                         </span>
                         <span className="flex-1">
                           <span className="block text-sm font-semibold text-slate-900">
-                            {c.units} {c.units === 1 ? 'unidad' : 'unidades'}
-                            {c.badge && c.isPopular && (
-                              <span className="ml-2 inline-block text-[10.5px] font-bold px-2 py-0.5 rounded-full align-middle whitespace-nowrap" style={{ background: d.primary, color: onPrimary }}>
+                            {c.name}
+                            {c.badge && (
+                              <span
+                                className="ml-2 inline-block text-[10.5px] font-bold px-2 py-0.5 rounded-full align-middle whitespace-nowrap"
+                                style={c.isPopular ? { background: d.primary, color: onPrimary } : { background: d.light, color: d.dark, border: `1px solid ${d.dark}22` }}
+                              >
                                 {c.badge}
                               </span>
                             )}
@@ -509,7 +519,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                   </ul>
                 </div>
                 <div className="col-span-2 relative">
-                  <img src={img(2)} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <img src={s.painImage || img(2)} alt="" className="absolute inset-0 w-full h-full object-cover" />
                 </div>
               </div>
               <div className="px-1 sm:px-2">
@@ -796,22 +806,23 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                   <img src={config.mainImage} alt="" className="w-14 h-14 rounded-lg object-cover bg-white" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-slate-900 truncate">{config.productName}</div>
-                    <div className="text-xs text-slate-500">{combo.units} {combo.units === 1 ? 'unidad' : 'unidades'}</div>
+                    <div className="text-xs text-slate-500">{combo.name}</div>
                   </div>
                   <div className="text-sm font-bold text-slate-900">{money(combo.promoPrice)}</div>
                 </div>
 
                 {combos.length > 1 && (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {combos.map((c) => (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => setComboId(c.id)}
-                        className="rounded-xl border-2 py-2 text-xs font-semibold"
+                        className="flex-1 min-w-[84px] rounded-xl border-2 px-2 py-2 text-xs font-semibold"
                         style={{ borderColor: c.id === comboId ? d.dark : '#E5E7EB', color: d.dark, background: c.id === comboId ? d.light : '#fff' }}
                       >
                         {c.units} {c.units === 1 ? 'unidad' : 'unid.'}
+                        <span className="block font-normal text-slate-500">${c.promoPrice.toLocaleString('es-CO')}</span>
                       </button>
                     ))}
                   </div>

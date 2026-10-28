@@ -19,7 +19,9 @@ export function replicateConfigured(): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function call(url: string, init: RequestInit = {}) {
+// Accounts with a low balance can only run one prediction at a time; Replicate answers
+// 429 with how long to wait, so we wait and retry a few times.
+async function call(url: string, init: RequestInit = {}, attempt = 0): Promise<any> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -29,6 +31,11 @@ async function call(url: string, init: RequestInit = {}) {
     },
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 429 && attempt < 5) {
+    const secs = Number(/(\d+)\s*second/.exec(String(data?.detail || ''))?.[1]) || Number(res.headers.get('retry-after')) || 6;
+    await sleep(Math.min(30, secs + 1) * 1000);
+    return call(url, init, attempt + 1);
+  }
   if (!res.ok) {
     const msg = data?.detail || data?.title || data?.error || `HTTP ${res.status}`;
     throw new ReplicateError(`Replicate (${MODEL}): ${msg}`, res.status);

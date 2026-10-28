@@ -16,9 +16,15 @@ export function compressImage(src: string, maxSide = 1280, quality = 0.82): Prom
       ctx.fillStyle = '#ffffff'; // transparent PNGs get a white background
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      try {
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch {
+        reject(new Error('No se pudo procesar la imagen (el servidor de origen no lo permite).'));
+      }
     };
     img.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    // Remote images need CORS so the canvas can export them.
+    if (!src.startsWith('data:')) img.crossOrigin = 'anonymous';
     img.src = src;
   });
 }

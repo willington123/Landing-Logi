@@ -131,6 +131,7 @@ export interface SalesPageContent {
   productDetails?: string;
   shippingInfo?: string;
   painTags?: string[];
+  painImage?: string;
 }
 
 export interface LandingPageConfig {

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { logiStore } from '@/lib/store';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -17,15 +18,31 @@ import {
 
 export default function SettingsPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [storeName, setStoreName] = useState('Tienda Pro E-commerce Colombia');
-  const [supportPhone, setSupportPhone] = useState('+57 300 123 4567');
-  const [supportEmail, setSupportEmail] = useState('soporte@tiendapro.com');
+  const [storeName, setStoreName] = useState('');
+  const [supportPhone, setSupportPhone] = useState('');
+  const [supportEmail, setSupportEmail] = useState('');
   const [currency, setCurrency] = useState('COP');
   const [defaultGuaranteeDays, setDefaultGuaranteeDays] = useState(30);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  useEffect(() => {
+    const st = logiStore.getStoreSettings();
+    setStoreName(st.storeName);
+    setSupportPhone(st.supportPhone);
+    setSupportEmail(st.supportEmail);
+    setCurrency(st.currency);
+    setDefaultGuaranteeDays(st.guaranteeDays);
+  }, []);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    logiStore.saveStoreSettings({
+      storeName: storeName.trim(),
+      supportPhone: supportPhone.trim(),
+      supportEmail: supportEmail.trim(),
+      currency,
+      guaranteeDays: Number(defaultGuaranteeDays) || 30,
+    });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -63,6 +80,7 @@ export default function SettingsPage() {
                   <input
                     type="text"
                     value={storeName}
+                    placeholder="Ej. Mi Tienda"
                     onChange={(e) => setStoreName(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
                   />
@@ -93,6 +111,7 @@ export default function SettingsPage() {
                   <input
                     type="text"
                     value={supportPhone}
+                    placeholder="+57 300 000 0000"
                     onChange={(e) => setSupportPhone(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
                   />
@@ -105,6 +124,7 @@ export default function SettingsPage() {
                   <input
                     type="email"
                     value={supportEmail}
+                    placeholder="soporte@mitienda.com"
                     onChange={(e) => setSupportEmail(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
                   />

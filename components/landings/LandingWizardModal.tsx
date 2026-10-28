@@ -46,6 +46,12 @@ const TONES = [
   { id: 'experto, técnico y confiable', label: 'Experto' },
 ];
 
+interface OfferDraft {
+  units: string;
+  price: string;
+  label: string;
+}
+
 type TaskState = 'pending' | 'running' | 'done' | 'error';
 interface Task {
   key: string;
@@ -94,8 +100,10 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const [productName, setProductName] = useState('');
   const [description, setDescription] = useState('');
   const [audience, setAudience] = useState('');
-  const [regularPrice, setRegularPrice] = useState('199000');
-  const [promoPrice, setPromoPrice] = useState('119900');
+  const [brandName, setBrandName] = useState('');
+  const [regularPrice, setRegularPrice] = useState('');
+  const [offers, setOffers] = useState<OfferDraft[]>([{ units: '1', price: '', label: '' }]);
+  const [popularIdx, setPopularIdx] = useState(0);
   const [country, setCountry] = useState('Colombia');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [shippingType, setShippingType] = useState<'free' | 'calculated'>('free');
@@ -110,6 +118,10 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   useEffect(() => {
     if (!isOpen) return;
     setApiKey(logiStore.getGeminiApiKey());
+    const st = logiStore.getStoreSettings();
+    setBrandName((v) => v || st.storeName);
+    setWhatsappNumber((v) => v || st.supportPhone);
+    setGuaranteeDays((v) => (v && v !== '30' ? v : String(st.guaranteeDays || 30)));
     fetch('/api/landing/generate')
       .then((r) => r.json())
       .then((d) => setServerKey(Boolean(d.serverKey)))
@@ -144,9 +156,14 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const handleGenerate = async () => {
     setError(null);
     if (!productImage) return setError('Sube la foto principal del producto.');
-    const regular = Number(regularPrice) || 0;
-    const promo = Number(promoPrice) || 0;
-    if (promo <= 0) return setError('Indica el precio de oferta.');
+    const regularUnit = Number(regularPrice) || 0;
+    const offerList = offers
+      .map((o, i) => ({ units: Number(o.units) || 0, price: Number(o.price) || 0, label: o.label.trim(), popular: i === popularIdx }))
+      .filter((o) => o.units > 0 && o.price > 0)
+      .sort((a, b) => a.units - b.units);
+    if (!offerList.length) return setError('Añade al menos una oferta con unidades y precio.');
+    const promo = offerList[0].price;
+    const regular = regularUnit > 0 ? regularUnit * offerList[0].units : promo;
     if (!serverKey && !apiKey.trim()) return setError('Introduce tu API Key de Google Gemini.');
     if (apiKey.trim()) logiStore.saveGeminiApiKey(apiKey);
 
@@ -174,10 +191,12 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         imageBase64: productImage,
         extraImages,
         productName,
+        brandName: brandName.trim(),
         description,
         audience,
-        regularPrice: regular || promo,
+        regularPrice: regular,
         promoPrice: promo,
+        offers: offerList,
         currency,
         country,
         shippingType,
@@ -247,10 +266,11 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
       copy,
       {
         productName,
+        brandName: brandName.trim(),
         productImage,
         extraImages,
-        regularPrice: regular || promo,
-        promoPrice: promo,
+        regularUnitPrice: regularUnit,
+        offers: offerList,
         currency,
         country,
         whatsappNumber,
@@ -399,14 +419,18 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
 
               {/* Data */}
               <div className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid sm:grid-cols-3 gap-3">
                   <div>
                     <label className={label}>Nombre del producto</label>
                     <input className={input} value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Si lo dejas vacío, la IA lo deduce" />
                   </div>
                   <div>
+                    <label className={label}>Tu marca o tienda</label>
+                    <input className={input} value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Aparece arriba a la izquierda" />
+                  </div>
+                  <div>
                     <label className={label}>Público objetivo</label>
-                    <input className={input} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Ej. mamás primerizas, gamers…" />
+                    <input className={input} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Ej. mamás, deportistas…" />
                   </div>
                 </div>
 
@@ -430,13 +454,9 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className={label}>Precio normal ({currency})</label>
-                    <input className={input} inputMode="numeric" value={regularPrice} onChange={(e) => setRegularPrice(e.target.value.replace(/\D/g, ''))} />
-                  </div>
-                  <div>
-                    <label className={label}>Precio oferta ({currency}) *</label>
-                    <input className={input} inputMode="numeric" value={promoPrice} onChange={(e) => setPromoPrice(e.target.value.replace(/\D/g, ''))} />
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className={label}>Precio normal por unidad ({currency}, opcional)</label>
+                    <input className={input} inputMode="numeric" value={regularPrice} onChange={(e) => setRegularPrice(e.target.value.replace(/\D/g, ''))} placeholder="Se muestra tachado. Déjalo vacío si no hay descuento" />
                   </div>
                   <div>
                     <label className={label}>Envío</label>
@@ -453,6 +473,83 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                     <label className={label}>WhatsApp</label>
                     <input className={input} value={whatsappNumber} onChange={(e) => setWhatsappNumber(e.target.value)} placeholder="+57 300 000 0000" />
                   </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={label}>Ofertas *</span>
+                    <span className="text-[11px] text-slate-500">La primera fila es la compra mínima</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
+                    <div className="grid grid-cols-[64px_1fr_1fr_auto_28px] gap-2 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                      <span>Unidades</span>
+                      <span>Precio total ({currency})</span>
+                      <span>Etiqueta (opcional)</span>
+                      <span title="Oferta destacada">Destacar</span>
+                      <span />
+                    </div>
+                    {offers.map((o, i) => (
+                      <div key={i} className="grid grid-cols-[64px_1fr_1fr_auto_28px] gap-2 px-3 py-2 items-center">
+                        <input
+                          className={`${input} px-2.5`}
+                          inputMode="numeric"
+                          value={o.units}
+                          onChange={(e) => setOffers((p) => p.map((x, j) => (j === i ? { ...x, units: e.target.value.replace(/\D/g, '') } : x)))}
+                          aria-label="Unidades"
+                        />
+                        <input
+                          className={input}
+                          inputMode="numeric"
+                          value={o.price}
+                          placeholder="Ej. 119900"
+                          onChange={(e) => setOffers((p) => p.map((x, j) => (j === i ? { ...x, price: e.target.value.replace(/\D/g, '') } : x)))}
+                          aria-label="Precio total"
+                        />
+                        <input
+                          className={input}
+                          value={o.label}
+                          placeholder="Ej. Más vendido"
+                          onChange={(e) => setOffers((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                          aria-label="Etiqueta"
+                        />
+                        <input
+                          type="radio"
+                          name="popular-offer"
+                          checked={popularIdx === i}
+                          onChange={() => setPopularIdx(i)}
+                          className="justify-self-center w-4 h-4 accent-[#FF252B]"
+                          aria-label="Destacar esta oferta"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOffers((p) => p.filter((_, j) => j !== i));
+                            setPopularIdx((p) => (p === i ? 0 : p > i ? p - 1 : p));
+                          }}
+                          disabled={offers.length === 1}
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center disabled:opacity-30"
+                          aria-label="Quitar oferta"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOffers((p) => {
+                        const last = Number(p[p.length - 1]?.units) || 0;
+                        return [...p, { units: last ? String(last * 2) : '', price: '', label: '' }];
+                      })
+                    }
+                    className="mt-2 text-xs font-semibold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1"
+                  >
+                    + Añadir oferta
+                  </button>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Ej. shorts: 6 unidades por $90.000 y 12 por $160.000. La IA no inventará otras ofertas ni descuentos.
+                  </p>
                 </div>
 
                 <div>
@@ -550,12 +647,12 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute bottom-0 p-6">
                   <span
-                    className="inline-block text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full text-white mb-2"
+                    className="inline-block text-[11px] font-semibold px-2.5 py-1 rounded-full text-white mb-2"
                     style={{ background: result.design?.primary }}
                   >
-                    {result.sales?.eyebrow}
+                    {result.sales?.eyebrow?.replace(/\*\*/g, '')}
                   </span>
-                  <h3 className="text-xl sm:text-3xl font-black text-white leading-tight">{result.headline}</h3>
+                  <h3 className="text-xl sm:text-3xl font-black text-white leading-tight">{result.headline.replace(/\*\*/g, '')}</h3>
                 </div>
               </div>
               <h3 className="text-xl font-black text-slate-900">¡Tu landing está lista!</h3>

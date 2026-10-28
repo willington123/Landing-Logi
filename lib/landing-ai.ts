@@ -44,12 +44,20 @@ export interface GeneratedCopy {
   solutionImagePrompt: string;
 }
 
+export interface OfferInput {
+  units: number;
+  price: number; // total price for all units
+  label?: string; // optional badge, e.g. "Más vendido"
+  popular?: boolean;
+}
+
 export interface SalesLandingInput {
   productName: string;
+  brandName: string;
   productImage: string;
   extraImages: string[];
-  regularPrice: number;
-  promoPrice: number;
+  regularUnitPrice: number; // optional "before" price per unit, 0 = none
+  offers: OfferInput[];
   currency: string;
   country: string;
   whatsappNumber: string;
@@ -78,17 +86,31 @@ export function slugify(text: string): string {
   );
 }
 
-function buildCombos(name: string, regular: number, promo: number, currency: string): ProductCombo[] {
-  const round = (n: number) => Math.round(n / 100) * 100;
-  const fmt = (n: number) => `$${n.toLocaleString('es-CO')} ${currency}`;
-  const two = round(promo * 1.7);
-  const three = round(promo * 2.3);
+export const unitsLabel = (u: number) => `${u} ${u === 1 ? 'unidad' : 'unidades'}`;
+
+// Turns the seller's offers into the combos shown on the page. Nothing is invented:
+// prices, quantities and badges come from the seller.
+export function buildCombos(offers: OfferInput[], regularUnit: number, currency: string): ProductCombo[] {
+  const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
   const t = Date.now();
-  return [
-    { id: `c1-${t}`, name: `1 ${name}`, units: 1, regularPrice: regular, promoPrice: promo, savingsText: `Ahorras ${fmt(regular - promo)}`, badge: 'Individual', isPopular: false },
-    { id: `c2-${t}`, name: `2 ${name}`, units: 2, regularPrice: regular * 2, promoPrice: two, savingsText: `Ahorras ${fmt(regular * 2 - two)}`, badge: 'MÁS ELEGIDO', isPopular: true },
-    { id: `c3-${t}`, name: `3 ${name}`, units: 3, regularPrice: regular * 3, promoPrice: three, savingsText: `Ahorras ${fmt(regular * 3 - three)}`, badge: 'MEJOR PRECIO', isPopular: false },
-  ];
+  const valid = offers.filter((o) => o.units > 0 && o.price > 0);
+  const popularIdx = Math.max(0, valid.findIndex((o) => o.popular));
+  return valid.map((o, i) => {
+    const regular = regularUnit > 0 ? regularUnit * o.units : o.price;
+    const parts: string[] = [];
+    if (o.units > 1) parts.push(`${fmt(o.price / o.units)} ${currency} c/u`);
+    if (regular > o.price) parts.push(`Ahorras ${fmt(regular - o.price)} ${currency}`);
+    return {
+      id: `c${i}-${t}`,
+      name: unitsLabel(o.units),
+      units: o.units,
+      regularPrice: regular,
+      promoPrice: o.price,
+      savingsText: parts.join(' · '),
+      badge: o.label?.trim() || undefined,
+      isPopular: i === popularIdx && valid.length > 1,
+    };
+  });
 }
 
 export function buildSalesLanding(
@@ -134,7 +156,7 @@ export function buildSalesLanding(
     comparison: copy.comparison || [],
     finalCtaTitle: copy.finalCtaTitle,
     finalCtaText: copy.finalCtaText,
-    brandName: copy.brandName,
+    brandName: input.brandName.trim() || name,
     featureChips: copy.featureChips || [],
     painTags: copy.painTags || [],
     productDetails: copy.productDetails,
@@ -142,10 +164,12 @@ export function buildSalesLanding(
   };
 
   const generatedGallery = [images.hero, images.solution, ...images.benefits].filter(Boolean) as string[];
-  const discount = Math.max(
-    0,
-    Math.round(((input.regularPrice - input.promoPrice) / (input.regularPrice || 1)) * 100)
-  );
+  const combos = buildCombos(input.offers, input.regularUnitPrice, input.currency);
+  // Headline price = the cheapest entry offer (usually the minimum quantity).
+  const entry = combos[0];
+  const promoPrice = entry?.promoPrice || 0;
+  const regularPrice = entry?.regularPrice || promoPrice;
+  const discount = Math.max(0, Math.round(((regularPrice - promoPrice) / (regularPrice || 1)) * 100));
 
   return {
     id: `lp-${slug}`,
@@ -161,14 +185,14 @@ export function buildSalesLanding(
     category: copy.category || 'General',
     mainImage: input.productImage,
     galleryImages: [...input.extraImages, ...generatedGallery].slice(0, 6),
-    regularPrice: input.regularPrice,
-    promoPrice: input.promoPrice,
+    regularPrice,
+    promoPrice,
     currency: input.currency,
-    discountBadge: copy.discountBadge || (discount > 0 ? `-${discount}%` : 'OFERTA'),
+    discountBadge: discount > 0 ? `-${discount}%` : '',
     urgencyText: copy.urgencyText,
     countdownMinutes: 0,
     stockLeft: 0,
-    combos: buildCombos(name, input.regularPrice, input.promoPrice, input.currency),
+    combos,
     benefits: (copy.benefits || []).map((b, i) => ({ id: `b-${i}-${t}`, ...b })),
     features: (copy.benefitBlocks || []).map((b, i) => ({
       id: `f-${i}-${t}`,
