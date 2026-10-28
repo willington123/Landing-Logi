@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import PublicLanding from '@/components/landings/PublicLanding';
 import { cloudEnabled, getPublicLanding } from '@/lib/server/db';
 import type { LandingPageConfig } from '@/lib/types';
@@ -33,5 +34,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function PublicLandingPage({ params }: { params: { slug: string } }) {
   const cloud = cloudEnabled();
   const landing = await load(params.slug);
+  // With the database on, a missing landing is a real 404 (better for Google and ads review).
+  if (cloud && !landing) notFound();
   return <PublicLanding initial={landing} slug={params.slug} cloud={cloud} />;
 }

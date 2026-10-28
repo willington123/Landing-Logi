@@ -126,7 +126,7 @@ export default function LandingsPage() {
 
                     <div className="p-4 flex-1 flex flex-col">
                       <h3 className="text-[15px] font-semibold text-slate-900 truncate">{landing.productName}</h3>
-                      <p className="text-sm text-slate-500 line-clamp-2 mt-1 min-h-[40px]">{landing.headline}</p>
+                      <p className="text-sm text-slate-500 line-clamp-2 mt-1 min-h-[40px]">{landing.headline?.replace(/\*\*/g, '')}</p>
 
                       <dl className="grid grid-cols-3 gap-2 mt-4 mb-4">
                         {[

@@ -90,7 +90,7 @@ Sin base de datos, las landings y los pedidos se guardan solo en tu navegador. P
 ### 1. Supabase (base de datos, gratis)
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. Abre **SQL Editor → New query**, pega el contenido de [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**.
-3. En **Project Settings → API** copia la **Project URL** y la clave **service_role** (es secreta: nunca la compartas ni la subas al código).
+3. En **Project Settings → API Keys** copia la URL del proyecto y una **Secret key** (`sb_secret_…`, o la clave legacy **service_role**). Es secreta: nunca la compartas ni la subas al código. La clave *publishable* no sirve.
 
 ### 2. Variables de entorno
 Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment Variables**):
@@ -98,7 +98,7 @@ Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment
 | Variable | Para qué |
 |---|---|
 | `SUPABASE_URL` | URL del proyecto de Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Clave service_role de Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta de Supabase (`sb_secret_…`) |
 | `ADMIN_PASSWORD` | Contraseña del panel (obligatoria al publicar) |
 | `GEMINI_API_KEY` | Textos con IA |
 | `REPLICATE_API_TOKEN` | Imágenes con nano-banana |
