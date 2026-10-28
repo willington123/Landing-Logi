@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Inter, Playfair_Display, Fraunces } from 'next/font/google';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
+import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import {
   Check,
   X as XIcon,
@@ -153,17 +154,8 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<any | null>(null);
-  // wa.me link with the order details, shown on the thank-you screen.
+  // wa.me link with the order details; the thank-you step opens it after a countdown.
   const doneWhatsApp = done ? orderWhatsAppUrl(config, done) : '';
-
-  // After a real order, open WhatsApp automatically (short delay so the pixel's Purchase gets out).
-  useEffect(() => {
-    if (!doneWhatsApp || previewMode) return;
-    const t = setTimeout(() => {
-      window.location.href = doneWhatsApp;
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [doneWhatsApp, previewMode]);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -831,6 +823,17 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
             </div>
 
             {done ? (
+              doneWhatsApp ? (
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center">
+                <WhatsAppConfirmStep
+                  url={doneWhatsApp}
+                  firstName={done.customerName?.split(' ')[0]}
+                  orderNumber={done.orderNumber}
+                  previewMode={previewMode}
+                  onClose={() => { setDrawer(false); setDone(null); }}
+                />
+              </div>
+              ) : (
               <div className="flex-1 p-6 text-center flex flex-col items-center justify-center">
                 <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: d.primary, color: onPrimary }}>
                   <Check className="w-8 h-8" strokeWidth={3} />
@@ -840,22 +843,11 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                 <p className="text-sm text-slate-600 mt-3 leading-relaxed">
                   Te contactaremos al {done.phone} para confirmar la entrega. Pagarás {money(done.totalAmount)} cuando lo recibas.
                 </p>
-                {doneWhatsApp && (
-                  <>
-                    {!previewMode && <p className="text-sm font-medium text-slate-800 mt-4">Te estamos llevando a WhatsApp para enviarnos tu pedido…</p>}
-                    <a
-                      href={doneWhatsApp}
-                      className="mt-4 h-12 px-6 rounded-full font-semibold text-white inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] transition"
-                    >
-                      <MessageCircle className="w-5 h-5" />
-                      Enviar mi pedido por WhatsApp
-                    </a>
-                  </>
-                )}
                 <button onClick={() => { setDrawer(false); setDone(null); }} className="mt-6 h-12 px-8 rounded-full font-semibold text-white" style={{ background: d.dark }}>
                   Listo
                 </button>
               </div>
+              )
             ) : (
               <form onSubmit={submit} className="flex-1 overflow-y-auto p-5 space-y-3">
                 <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: d.light }}>
