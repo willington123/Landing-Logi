@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -40,7 +40,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     id: 'whatsapp_cloud',
     name: 'WhatsApp Business Cloud API (Oficial)',
     category: 'crm',
-    description: 'Conecta la API oficial de Meta para enviar plantillas HSM aprobadas y recibir mensajes de clientes sin riesgo de bloqueo.',
+    description: 'Envía una plantilla de confirmación a cada pedido nuevo, recibe las respuestas en Mensajes y actualiza el estado del pedido cuando el cliente toca "Confirmar pedido" o "Cancelar".',
     iconBg: 'bg-emerald-500',
     status: 'coming_soon',
     requiresKeysText: 'Token permanente y WABA ID configurables.',
@@ -123,7 +123,114 @@ const INTEGRATIONS: IntegrationItem[] = [
   },
 ];
 
+interface WaStatus {
+  sending: boolean;
+  confirmTemplate: boolean;
+  webhook: boolean;
+  missing: string[];
+}
+
+const WA_VARS: { name: string; hint: string }[] = [
+  { name: 'WHATSAPP_TOKEN', hint: 'Token permanente de un usuario del sistema' },
+  { name: 'WHATSAPP_PHONE_NUMBER_ID', hint: 'Identificador del número (WhatsApp Manager)' },
+  { name: 'WHATSAPP_VERIFY_TOKEN', hint: 'Texto que inventas y pegas también en Meta' },
+  { name: 'WHATSAPP_APP_SECRET', hint: 'Clave secreta de tu app de Meta' },
+  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido' },
+];
+
+// WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
+function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
+  const ready = status && status.sending && status.confirmTemplate && status.webhook;
+  const partial = status && !ready && status.missing.length < WA_VARS.length;
+  const [webhookUrl, setWebhookUrl] = useState('https://<tu-dominio>/api/whatsapp/webhook');
+  useEffect(() => setWebhookUrl(`${window.location.origin}/api/whatsapp/webhook`), []);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col space-y-4 md:col-span-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md">
+            <MessageSquare className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-slate-900">WhatsApp Business Cloud API (Oficial)</h3>
+            <span className="text-[11px] text-slate-400">Confirmación de pedidos y bandeja de Mensajes</span>
+          </div>
+        </div>
+        {status === undefined ? (
+          <span className="text-[11px] text-slate-400">Comprobando…</span>
+        ) : status === null ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">No se pudo comprobar</span>
+        ) : ready ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Configurado
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            <Key className="w-3 h-3 text-amber-600" /> {partial ? 'Configuración incompleta' : 'No configurado'}
+          </span>
+        )}
+      </div>
+
+      <p className="text-xs text-slate-600 leading-relaxed">
+        Envía una plantilla de confirmación a cada pedido nuevo, recibe las respuestas en Mensajes y actualiza el pedido a
+        &quot;Confirmado&quot; o &quot;Cancelado&quot; cuando el cliente toca un botón. Las credenciales se guardan como variables de entorno en Vercel
+        (nunca en el navegador) y después hay que volver a desplegar.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+        {WA_VARS.map((v) => {
+          const missing = !status || status.missing.includes(v.name);
+          return (
+            <div key={v.name} className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2">
+              {missing ? <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />}
+              <div className="min-w-0">
+                <code className="text-[11px] font-mono font-semibold text-slate-800 break-all">{v.name}</code>
+                <p className="text-[11px] text-slate-500">{v.hint}</p>
+              </div>
+            </div>
+          );
+        })}
+        <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2">
+          <Globe className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <code className="text-[11px] font-mono font-semibold text-slate-800">WHATSAPP_TEMPLATE_LANG</code>
+            <p className="text-[11px] text-slate-500">Opcional. Idioma de la plantilla (por defecto es)</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-slate-600 space-y-1">
+        <p>
+          URL del webhook en Meta (campo <code className="font-mono">messages</code>):{' '}
+          <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded break-all">{webhookUrl}</code>
+        </p>
+        <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
+      </div>
+
+      <div className="pt-3 border-t border-slate-100">
+        <a
+          href="https://developers.facebook.com/docs/whatsapp/cloud-api"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
+        >
+          <span>Ver documentación de Meta</span>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
+  const [waStatus, setWaStatus] = useState<WaStatus | null | undefined>(undefined);
+  useEffect(() => {
+    fetch('/api/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => setWaStatus(d.whatsapp || null))
+      .catch(() => setWaStatus(null));
+  }, []);
+
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
@@ -157,7 +264,7 @@ export default function IntegrationsPage() {
                 Integraciones
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">
-                Estas conexiones están en desarrollo y todavía no funcionan. El píxel de Meta ya funciona: configúralo en Configuración.
+                WhatsApp ya funciona cuando configuras sus variables de entorno. El resto de conexiones están en desarrollo. El píxel de Meta se configura en Configuración.
               </p>
             </div>
 
@@ -208,7 +315,9 @@ export default function IntegrationsPage() {
 
           {/* Integrations Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filtered.map((item) => (
+            {filtered.map((item) => item.id === 'whatsapp_cloud' ? (
+              <WhatsAppCard key={item.id} status={waStatus} />
+            ) : (
               <div
                 key={item.id}
                 className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-5"

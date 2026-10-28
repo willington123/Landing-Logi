@@ -25,7 +25,9 @@ import {
   ChevronDown,
   Sparkles,
   Phone,
+  Download,
 } from 'lucide-react';
+import { downloadOrdersExcel } from '@/lib/orders-export';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -168,6 +170,16 @@ export default function OrdersPage() {
                 <option value="retry_scheduled">Reintento</option>
                 <option value="cancelled">Cancelados</option>
               </select>
+              <button
+                type="button"
+                onClick={() => downloadOrdersExcel(filteredOrders)}
+                disabled={filteredOrders.length === 0}
+                title="Descarga los pedidos que ves en la tabla (con los filtros aplicados)"
+                className="h-9 px-3 text-sm font-medium whitespace-nowrap shrink-0 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                Descargar Excel
+              </button>
             </div>
           </div>
 

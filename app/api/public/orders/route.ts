@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, createOrder, getPublicLanding, patchOrderData } from '@/lib/server/db';
 import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
+import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
+import { sendOrderConfirmation } from '@/lib/server/wa-actions';
 import type { OrderItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -72,6 +74,16 @@ export async function POST(req: NextRequest) {
         externalId: phone.replace(/\D/g, ''),
       });
       await patchOrderData(order.id, { capi: { ok: capi.ok, error: capi.error, at: new Date().toISOString() } }).catch(() => {});
+    }
+
+    // WhatsApp order confirmation (template with "Confirmar pedido" / "Cancelar"). Never blocks the order.
+    if (confirmTemplateEnabled()) {
+      const whatsapp = await sendOrderConfirmation(order, { currency: landing.currency, country: landing.country }).catch((e: any) => ({
+        ok: false,
+        error: e?.message || String(e),
+        at: new Date().toISOString(),
+      }));
+      if (whatsapp) await patchOrderData(order.id, { whatsapp }).catch(() => {});
     }
 
     return NextResponse.json({ success: true, order });
