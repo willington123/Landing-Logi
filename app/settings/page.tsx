@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [currency, setCurrency] = useState('COP');
   const [defaultGuaranteeDays, setDefaultGuaranteeDays] = useState(30);
   const [metaPixelId, setMetaPixelId] = useState('');
+  const [capiOn, setCapiOn] = useState<boolean | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,10 @@ export default function SettingsPage() {
     setMetaPixelId(st.metaPixelId);
     };
     load();
+    fetch('/api/status')
+      .then((r) => r.json())
+      .then((d) => setCapiOn(Boolean(d.capi)))
+      .catch(() => setCapiOn(false));
     window.addEventListener(CLOUD_SYNC_EVENT, load);
     return () => window.removeEventListener(CLOUD_SYNC_EVENT, load);
   }, []);
@@ -193,6 +198,14 @@ export default function SettingsPage() {
                   Se aplica a cada landing nueva (puedes cambiarlo por landing en el editor). Lo encuentras en Meta Events Manager → Orígenes de datos → tu píxel.
                 </p>
               </div>
+              {capiOn !== null && (
+                <div className={`rounded-xl px-4 py-3 text-xs leading-relaxed ${capiOn ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                  <strong className="block text-[13px] mb-0.5">{capiOn ? 'Conversions API activa' : 'Conversions API desactivada'}</strong>
+                  {capiOn
+                    ? 'Cada pedido se envía también desde el servidor como Purchase (deduplicado con el píxel), así Meta no pierde compras por bloqueadores o iPhone.'
+                    : 'Para activarla, añade la variable META_CAPI_ACCESS_TOKEN (token de Events Manager → Configuración → Conversions API) en Vercel y en tu .env.local.'}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between">

@@ -131,6 +131,13 @@ export async function createOrder(order: OrderItem) {
   return order;
 }
 
+// Merges extra fields into an order's JSON (e.g. the Conversions API result).
+export async function patchOrderData(id: string, patch: Record<string, unknown>) {
+  const { data: row } = await db().from('orders').select('data').eq('id', id).maybeSingle();
+  if (!row) return;
+  await db().from('orders').update({ data: { ...(row.data as object), ...patch } }).eq('id', id);
+}
+
 export async function listOrders(limit = 500): Promise<OrderItem[]> {
   const { data, error } = await db().from('orders').select('data, status').order('created_at', { ascending: false }).limit(limit);
   if (error) throw new Error(error.message);

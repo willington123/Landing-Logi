@@ -103,6 +103,7 @@ Ponlas en `.env.local` (en tu ordenador) y en Vercel (**Settings → Environment
 | `GEMINI_API_KEY` | Textos con IA |
 | `REPLICATE_API_TOKEN` | Imágenes con nano-banana |
 | `IMAGE_PROVIDER` | `replicate`, `gemini`, `cloudflare` o `auto` |
+| `META_CAPI_ACCESS_TOKEN` | (Opcional) Conversions API de Meta: envía cada pedido desde el servidor |
 
 ### 3. GitHub y Vercel
 1. Sube el proyecto a un repositorio **privado** de GitHub.

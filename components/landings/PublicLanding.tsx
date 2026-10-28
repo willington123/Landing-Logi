@@ -67,7 +67,14 @@ export default function PublicLanding({ initial, slug, cloud }: { initial: Landi
     const res = await fetch('/api/public/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...order, landingId: config!.id, utmSource: q.get('utm_source'), utmCampaign: q.get('utm_campaign') }),
+      body: JSON.stringify({
+        ...order,
+        landingId: config!.id,
+        utmSource: q.get('utm_source'),
+        utmCampaign: q.get('utm_campaign'),
+        fbclid: q.get('fbclid'),
+        pageUrl: window.location.href,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) throw new Error(data.error || 'No pudimos registrar tu pedido. Inténtalo de nuevo.');

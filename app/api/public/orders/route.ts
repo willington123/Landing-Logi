@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cloudEnabled, createOrder, getPublicLanding } from '@/lib/server/db';
+import { cloudEnabled, createOrder, getPublicLanding, patchOrderData } from '@/lib/server/db';
+import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
 import type { OrderItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +48,32 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
     await createOrder(order);
+
+    // Meta Conversions API: same event_id (order.id) as the browser pixel's Purchase.
+    if (capiEnabled() && landing.metaPixelId) {
+      const fbclid = clean(b.fbclid, 500);
+      const fbc = req.cookies.get('_fbc')?.value || (fbclid ? `fb.1.${Date.now()}.${fbclid}` : undefined);
+      const capi = await sendCapiPurchase({
+        pixelId: landing.metaPixelId,
+        eventId: order.id,
+        eventSourceUrl: clean(b.pageUrl, 500) || req.headers.get('referer') || undefined,
+        value: order.totalAmount,
+        currency: landing.currency || 'COP',
+        contentIds: [landing.id],
+        contentName: landing.productName,
+        numItems: order.units,
+        customer: { name, phone, city, region: order.department, country: landing.country },
+        client: {
+          ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || undefined,
+          userAgent: req.headers.get('user-agent') || undefined,
+          fbp: req.cookies.get('_fbp')?.value,
+          fbc,
+        },
+        externalId: phone.replace(/\D/g, ''),
+      });
+      await patchOrderData(order.id, { capi: { ok: capi.ok, error: capi.error, at: new Date().toISOString() } }).catch(() => {});
+    }
+
     return NextResponse.json({ success: true, order });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
