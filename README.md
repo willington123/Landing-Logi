@@ -197,6 +197,15 @@ Si el número de WhatsApp de la landing (editor → campo WhatsApp) es **el mism
 
 > WhatsApp solo permite texto libre dentro de las 24 h siguientes al último mensaje del cliente. Fuera de esa ventana la bandeja lo indica y no envía nada.
 
+### Asistente con IA
+En **Automatizaciones → Asistente de WhatsApp con IA** activas un asistente (Claude, de Anthropic) que responde a los clientes: dudas de productos, precios, envío y pago (con la *Información del negocio* que escribes y tus landings publicadas) y el estado de sus pedidos y guías. Pasa el chat a una persona cuando hay reclamos, cambios, cancelaciones o algo que no sabe (queda en *Sin responder*, con nota y etiqueta).
+1. Crea una clave en **console.anthropic.com → API Keys** y agrégala en Vercel como `ANTHROPIC_API_KEY`. Redeploy.
+2. Escribe la información del negocio y pruébalo en el simulador de la misma tarjeta (no envía nada por WhatsApp).
+3. Actívalo. Puede responder siempre o solo fuera de horario (el horario de *Respuestas automáticas*).
+- Si una persona responde un chat desde **Mensajes**, el asistente se calla en ese chat; se devuelve con **Devolver al asistente**.
+- Espera unos segundos antes de responder, para contestar varios mensajes seguidos juntos. Tiene un límite de respuestas por cliente al día.
+- Se cobra por uso en tu cuenta de Anthropic (el simulador muestra el costo aproximado de cada prueba).
+
 ## Llamadas IA (Vapi)
 
 Un agente de voz llama al cliente después del pedido, confirma producto, cantidad, total a pagar y dirección, y deja el pedido en *Confirmado*, *Cancelado*, *Reintento* (pidió que lo llamen después o no contestó) o *Revisar* (dudas, cambios o una situación poco clara). Todo se ve en **Llamadas IA**: resumen, transcripción, grabación y costo de cada llamada. Sin las variables `VAPI_*` no se hace ninguna llamada.

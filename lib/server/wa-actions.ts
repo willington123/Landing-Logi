@@ -6,6 +6,7 @@ import { dueWaFallbackOrders, findOrderByNumber, findPendingOrder, linkConversat
 import { getLandingInfo } from '@/lib/server/voice-store';
 import { autoSentRecently, getAutoSettings, noteAutoSent } from '@/lib/server/crm-store';
 import { fillQuickReply, isWorkingTime, matchRule } from '@/lib/crm';
+import { botTakesMessage } from '@/lib/server/bot-inbound';
 import type { OrderItem } from '@/lib/types';
 
 const firstName = (name: string) => (name || '').trim().split(/\s+/)[0] || 'cliente';
@@ -107,7 +108,13 @@ export async function handleInbound(m: InboundMessage) {
   }
   if (!m.intent) {
     // A normal chat message: answer it automatically if a rule or the out-of-hours message applies.
-    await autoReply(m).catch((e) => console.error('WhatsApp: respuesta automática falló', e));
+    // The AI assistant answers if it's on; otherwise (or if it fails) the keyword / out-of-hours replies.
+    const fallback = () => autoReply(m).catch((e) => console.error('WhatsApp: respuesta automática falló', e));
+    const byBot = await botTakesMessage(m, fallback).catch((e) => {
+      console.error('Asistente IA: no se pudo iniciar', e);
+      return false;
+    });
+    if (!byBot) await fallback();
     return;
   }
 
