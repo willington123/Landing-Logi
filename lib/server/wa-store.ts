@@ -48,13 +48,21 @@ async function upsertConversation(id: string, patch: Partial<WaConversation>) {
   return row as WaConversation;
 }
 
+// Only ids of orders that exist can be linked (test buttons use "prueba"; an order may have been deleted).
+async function existingOrderId(id?: string): Promise<string | null> {
+  if (!id) return null;
+  const { data } = await db().from('orders').select('id').eq('id', id).maybeSingle();
+  return (data?.id as string) || null;
+}
+
 // Saves a message we sent (template, auto-reply or manual reply).
 export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult }) {
   const now = new Date().toISOString();
   const existing = await getConversation(p.phone);
+  const orderId = await existingOrderId(p.orderId);
   await upsertConversation(p.phone, {
     name: existing?.name || p.name || null,
-    order_id: p.orderId || existing?.order_id || null,
+    order_id: orderId || existing?.order_id || null,
     last_message: preview(p.body),
     last_message_at: now,
   });
@@ -67,7 +75,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
     body: p.body,
     status: p.result.ok ? 'sent' : 'failed',
     error: p.result.error || null,
-    order_id: p.orderId || existing?.order_id || null,
+    order_id: orderId || existing?.order_id || null,
     created_at: now,
   });
   if (error) throw new Error(error.message);
@@ -77,6 +85,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
 export async function recordInbound(m: InboundMessage): Promise<{ isNew: boolean; conversation: WaConversation }> {
   const existing = await getConversation(m.from);
   if (!existing) await upsertConversation(m.from, { name: m.profileName || null });
+  const orderId = await existingOrderId(m.orderId);
   const { data, error } = await db()
     .from('wa_messages')
     .upsert(
@@ -88,7 +97,7 @@ export async function recordInbound(m: InboundMessage): Promise<{ isNew: boolean
         type: m.type,
         body: m.text,
         status: 'received',
-        order_id: m.orderId || existing?.order_id || null,
+        order_id: orderId || existing?.order_id || null,
         payload: m.raw,
         created_at: m.timestamp,
       },
