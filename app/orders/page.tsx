@@ -394,6 +394,20 @@ export default function OrdersPage() {
                 )}
               </div>
 
+              {(selectedOrder.trackingNumber || selectedOrder.carrier) && (
+                <div className="p-3 rounded-xl bg-sky-50/60 border border-sky-100">
+                  <span className="text-sky-800 text-xs font-semibold">Envío</span>
+                  <p className="text-slate-700">
+                    {selectedOrder.carrier || 'Transportadora'}
+                    {selectedOrder.trackingNumber && (
+                      <>
+                        {' '}· guía <span className="font-mono">{selectedOrder.trackingNumber}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
               <WhatsAppOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
 
               {(selectedOrder.callNotes || selectedOrder.previousAddress) && (

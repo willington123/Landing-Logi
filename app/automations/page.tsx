@@ -5,6 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import AutomationBuilder from '@/components/automations/AutomationBuilder';
+import WhatsAppAutoReplies from '@/components/automations/WhatsAppAutoReplies';
 
 export default function AutomationsPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -17,6 +18,7 @@ export default function AutomationsPage() {
         <Header onOpenWizard={() => setIsWizardOpen(true)} title="Automatizaciones" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+          <WhatsAppAutoReplies />
           <AutomationBuilder />
         </main>
       </div>

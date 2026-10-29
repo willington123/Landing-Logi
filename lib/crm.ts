@@ -4,7 +4,7 @@ export interface QuickReply {
   id: string;
   shortcut: string; // typed after "/" in the reply box, e.g. "envio"
   title: string;
-  body: string; // may contain {nombre} {pedido} {producto} {total} {ciudad} {direccion}
+  body: string; // may contain {nombre} {pedido} {producto} {total} {ciudad} {direccion} {transportadora} {guia}
 }
 
 export interface CrmTag {
@@ -68,15 +68,21 @@ export const DEFAULT_QUICK_REPLIES: QuickReply[] = [
     title: 'Garantía',
     body: 'Tu producto tiene garantía ✅ Si llega con algún problema, escríbenos por aquí con una foto y lo solucionamos.',
   },
+  {
+    id: 'guia',
+    shortcut: 'guia',
+    title: 'Número de guía',
+    body: 'Hola {nombre} 🚚 Tu pedido {pedido} va con {transportadora}. Tu número de guía es {guia}. Ten listo el pago de {total} para cuando lo recibas.',
+  },
   { id: 'gracias', shortcut: 'gracias', title: 'Gracias', body: '¡Gracias por tu compra, {nombre}! Cualquier duda, aquí estamos 🙌' },
 ];
 
-export const QUICK_REPLY_VARS = ['nombre', 'pedido', 'producto', 'total', 'ciudad', 'direccion'] as const;
+export const QUICK_REPLY_VARS = ['nombre', 'pedido', 'producto', 'total', 'ciudad', 'direccion', 'transportadora', 'guia'] as const;
 
 // Fills {nombre}, {pedido}… with the conversation's data. Unknown values become an empty string.
 export function fillQuickReply(body: string, vars: Partial<Record<(typeof QUICK_REPLY_VARS)[number], string>>) {
   return body
-    .replace(/\{(nombre|pedido|producto|total|ciudad|direccion)\}/g, (_, k: (typeof QUICK_REPLY_VARS)[number]) => vars[k] || '')
+    .replace(/\{(nombre|pedido|producto|total|ciudad|direccion|transportadora|guia)\}/g, (_, k: (typeof QUICK_REPLY_VARS)[number]) => vars[k] || '')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/ ([,.!?])/g, '$1');
 }
@@ -126,4 +132,141 @@ export function cleanTags(input: unknown): CrmTag[] | string {
     out.push({ id, name, color: isTagColor(t?.color) ? t.color : 'slate' });
   }
   return out;
+}
+
+// ---------- team (who handles each chat) ----------
+// Same shape as tags: a name and a color.
+export type Agent = CrmTag;
+export const cleanAgents = (input: unknown): Agent[] | string => {
+  const r = cleanTags(input);
+  return typeof r === 'string' ? r.replace('etiqueta', 'persona').replace('etiquetas', 'personas') : r;
+};
+
+// ---------- shipping ----------
+
+export const CARRIERS = ['Servientrega', 'Interrapidísimo', 'Coordinadora', 'Envía', 'TCC', 'Deprisa', '99 Minutos', 'Mensajería propia'];
+
+// ---------- automatic replies ----------
+
+export interface AutoRule {
+  id: string;
+  enabled: boolean;
+  keywords: string[]; // any of them, as whole words ("precio", "cuanto cuesta")
+  reply: string; // may use {nombre}
+}
+
+export interface AwaySettings {
+  enabled: boolean;
+  days: number[]; // working days, 0 = Sunday … 6 = Saturday
+  start: string; // "08:00"
+  end: string; // "18:00"
+  message: string;
+}
+
+export interface AutoSettings {
+  timezone: string;
+  away: AwaySettings;
+  rules: AutoRule[];
+}
+
+export const TIMEZONES = [
+  { id: 'America/Bogota', label: 'Colombia' },
+  { id: 'America/Mexico_City', label: 'México (centro)' },
+  { id: 'America/Lima', label: 'Perú' },
+  { id: 'America/Guayaquil', label: 'Ecuador' },
+  { id: 'America/Panama', label: 'Panamá' },
+  { id: 'America/Santiago', label: 'Chile' },
+  { id: 'America/Argentina/Buenos_Aires', label: 'Argentina' },
+  { id: 'America/Caracas', label: 'Venezuela' },
+  { id: 'America/Guatemala', label: 'Guatemala' },
+  { id: 'Europe/Madrid', label: 'España' },
+];
+
+export const DEFAULT_AUTO: AutoSettings = {
+  timezone: 'America/Bogota',
+  away: {
+    enabled: false,
+    days: [1, 2, 3, 4, 5, 6],
+    start: '08:00',
+    end: '18:00',
+    message: '¡Hola {nombre}! 👋 Gracias por escribirnos. En este momento estamos fuera de horario (lunes a sábado, 8 a. m. a 6 p. m.). Te respondemos apenas volvamos. 🙌',
+  },
+  rules: [
+    {
+      id: 'precio',
+      enabled: false,
+      keywords: ['precio', 'cuanto cuesta', 'cuanto vale', 'valor'],
+      reply: '¡Hola {nombre}! Los precios y ofertas vigentes están en la página del producto. El pago es contraentrega 💵 y el envío es gratis. ¿Te ayudo con tu pedido?',
+    },
+    {
+      id: 'envio',
+      enabled: false,
+      keywords: ['envio', 'domicilio', 'cuanto demora', 'cuando llega'],
+      reply: 'Hacemos envíos a toda Colombia 🚚 Llega en 2 a 5 días hábiles y pagas al recibir.',
+    },
+    {
+      id: 'pago',
+      enabled: false,
+      keywords: ['contraentrega', 'como pago', 'formas de pago', 'medios de pago'],
+      reply: 'El pago es contraentrega 💵: pagas en efectivo cuando recibes el producto en tu casa.',
+    },
+  ],
+};
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const normText = (s: string) =>
+  (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9ñ ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export function cleanAuto(input: any): AutoSettings | string {
+  const tz = TIMEZONES.some((t) => t.id === input?.timezone) ? input.timezone : DEFAULT_AUTO.timezone;
+  const a = input?.away || {};
+  const days = Array.isArray(a.days) ? Array.from(new Set(a.days.map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6))) : [];
+  if (a.enabled && !days.length) return 'Elige al menos un día de atención.';
+  if (!HHMM.test(String(a.start)) || !HHMM.test(String(a.end))) return 'Escribe las horas como 08:00.';
+  if (String(a.start) === String(a.end)) return 'La hora de inicio y de cierre no pueden ser iguales.';
+  const message = String(a.message ?? '').trim().slice(0, 1000);
+  if (a.enabled && !message) return 'Escribe el mensaje de fuera de horario.';
+  if (!Array.isArray(input?.rules) || input.rules.length > 30) return 'Máximo 30 respuestas automáticas.';
+  const rules: AutoRule[] = [];
+  for (const r of input.rules) {
+    const keywords = Array.from(new Set((Array.isArray(r?.keywords) ? r.keywords : String(r?.keywords ?? '').split(',')).map((k: unknown) => normText(String(k))).filter(Boolean))).slice(0, 20) as string[];
+    const reply = String(r?.reply ?? '').trim().slice(0, 1000);
+    if (!keywords.length && !reply) continue; // empty row
+    if (!keywords.length) return 'Cada respuesta automática necesita al menos una palabra clave.';
+    if (!reply) return `Escribe la respuesta para "${keywords[0]}".`;
+    const id = /^[\w-]{1,40}$/.test(String(r?.id ?? '')) ? String(r.id) : `r-${Math.random().toString(36).slice(2, 8)}`;
+    rules.push({ id, enabled: Boolean(r?.enabled), keywords, reply });
+  }
+  return { timezone: tz, away: { enabled: Boolean(a.enabled), days: days as number[], start: String(a.start), end: String(a.end), message }, rules };
+}
+
+// Local day and "HH:MM" in a time zone.
+export function localTime(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || '';
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+  return { day, hhmm: `${get('hour')}:${get('minute')}` };
+}
+
+// Inside working hours? Supports overnight ranges (e.g. 20:00–02:00).
+export function isWorkingTime(away: AwaySettings, timeZone: string, date = new Date()): boolean {
+  const { day, hhmm } = localTime(date, timeZone);
+  if (away.start < away.end) return away.days.includes(day) && hhmm >= away.start && hhmm < away.end;
+  // overnight: the late part belongs to "day", the early part to the day before
+  if (hhmm >= away.start) return away.days.includes(day);
+  return hhmm < away.end && away.days.includes((day + 6) % 7);
+}
+
+// First enabled rule with a keyword in the message (whole words, accents ignored).
+export function matchRule(rules: AutoRule[], text: string): AutoRule | null {
+  const t = ` ${normText(text)} `;
+  if (!t.trim()) return null;
+  return rules.find((r) => r.enabled && r.keywords.some((k) => k && t.includes(` ${k} `))) || null;
 }

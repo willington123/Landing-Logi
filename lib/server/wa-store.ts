@@ -75,7 +75,8 @@ async function existingOrderId(id?: string): Promise<string | null> {
 }
 
 // Saves a message we sent (template, auto-reply or manual reply).
-export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult }) {
+// auto: an automatic reply. It doesn't count as answered, so the chat stays in "Sin responder".
+export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult; auto?: boolean }) {
   const now = new Date().toISOString();
   const existing = await getConversation(p.phone);
   const orderId = await existingOrderId(p.orderId);
@@ -83,7 +84,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
     name: existing?.name || p.name || null,
     order_id: orderId || existing?.order_id || null,
     last_message: preview(p.body),
-    last_message_at: now,
+    last_message_at: p.auto && existing?.last_message_at ? existing.last_message_at : now,
   });
   const { error } = await db().from('wa_messages').insert({
     id: randomUUID(),
@@ -189,7 +190,7 @@ export async function findOrderByNumber(orderNumber: string, pendingOnly = false
 
 export type OrderSummary = Pick<
   OrderItem,
-  'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'department' | 'address' | 'customerName' | 'phone' | 'createdAt'
+  'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'department' | 'address' | 'customerName' | 'phone' | 'createdAt' | 'carrier' | 'trackingNumber'
 >;
 
 async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummary>> {
@@ -212,6 +213,8 @@ async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummar
       customerName: o.customerName,
       phone: o.phone,
       createdAt: o.createdAt,
+      carrier: o.carrier || null,
+      trackingNumber: o.trackingNumber || null,
     };
   }
   return out;
