@@ -127,6 +127,7 @@ interface WaStatus {
   sending: boolean;
   confirmTemplate: boolean;
   webhook: boolean;
+  cron?: boolean;
   missing: string[];
 }
 
@@ -135,7 +136,7 @@ const WA_VARS: { name: string; hint: string }[] = [
   { name: 'WHATSAPP_PHONE_NUMBER_ID', hint: 'Identificador del número (WhatsApp Manager)' },
   { name: 'WHATSAPP_VERIFY_TOKEN', hint: 'Texto que inventas y pegas también en Meta' },
   { name: 'WHATSAPP_APP_SECRET', hint: 'Clave secreta de tu app de Meta' },
-  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido' },
+  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido (solo para la plantilla automática)' },
 ];
 
 interface WaNumber {
@@ -301,9 +302,191 @@ function WhatsAppTester() {
   );
 }
 
+type WaMode = 'customer_first' | 'template';
+
+interface SchedulerInfo {
+  lastRunAt?: string;
+  lastSource?: 'cron' | 'visita' | 'panel';
+  lastCronAt?: string;
+  cronSecret: boolean;
+  baseUrl: string;
+  sql: string | null;
+}
+
+const SOURCE: Record<string, string> = { cron: 'la tarea programada', visita: 'una visita a una landing', panel: 'el panel' };
+
+// Status of the automatic check (every 5 min) and the SQL to schedule it in Supabase.
+function SchedulerSetup() {
+  const [info, setInfo] = useState<SchedulerInfo | null>(null);
+  const [showSql, setShowSql] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const load = () =>
+    fetch('/api/scheduler', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(setInfo)
+      .catch(() => setInfo(null));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!info) return null;
+  const cronWorks = Boolean(info.lastCronAt && Date.now() - new Date(info.lastCronAt).getTime() < 15 * 60 * 1000);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(info.sql || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShowSql(true);
+    }
+  };
+  return (
+    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700">Revisión automática (cada 5 min)</p>
+        <button onClick={load} className="text-[11px] font-semibold text-slate-600 underline underline-offset-2">
+          Actualizar
+        </button>
+      </div>
+      {cronWorks ? (
+        <p className="text-[11px] text-emerald-700">✓ La tarea programada funciona. Última revisión {ago(info.lastCronAt!)}.</p>
+      ) : (
+        <p className="text-[11px] text-amber-800">
+          La tarea programada aún no está activa.
+          {info.lastRunAt ? ` Mientras tanto se revisa con las visitas y el panel (última vez ${ago(info.lastRunAt)}, por ${SOURCE[info.lastSource || ''] || 'el sistema'}).` : ' Mientras tanto se revisa con las visitas y el panel.'}
+          {' '}Actívala para que funcione también cuando no hay movimiento:
+        </p>
+      )}
+      {!cronWorks && !info.cronSecret && (
+        <p className="text-[11px] text-slate-700">
+          1. En Vercel agrega la variable <strong>CRON_SECRET</strong> con un texto que inventes (sin espacios) y haz <strong>Redeploy</strong>. Luego vuelve aquí: aparecerá el
+          código para Supabase.
+        </p>
+      )}
+      {!cronWorks && info.cronSecret && info.sql && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-700">
+            Copia este código y pégalo en <strong>Supabase → SQL Editor → New query → Run</strong>. Solo se hace una vez. Contiene tu CRON_SECRET: no lo compartas.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={copy} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold">
+              {copied ? '¡Copiado!' : 'Copiar código SQL'}
+            </button>
+            <button onClick={() => setShowSql((v) => !v)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-700">
+              {showSql ? 'Ocultar' : 'Ver código'}
+            </button>
+          </div>
+          {showSql && (
+            <textarea readOnly value={info.sql} className="w-full h-48 text-[11px] font-mono bg-white border border-slate-200 rounded-lg p-2 text-slate-700" />
+          )}
+          <p className="text-[11px] text-slate-500">Después de 5–10 minutos pulsa Actualizar: debe decir que la tarea programada funciona.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// How orders get confirmed: the customer writes first from the landing, or an automatic template.
+function WhatsAppModePicker({
+  mode,
+  fallback,
+  cron,
+  templateReady,
+  onChange,
+}: {
+  mode: WaMode | null;
+  fallback: number;
+  cron: boolean;
+  templateReady: boolean;
+  onChange: (m: WaMode, fallback: number) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async (m: WaMode, fb: number) => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/whatsapp/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m, fallbackMinutes: fb }) });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
+      onChange(d.mode, d.fallbackMinutes);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const choose = (m: WaMode) => m !== mode && save(m, fallback);
+  const option = (m: WaMode, title: string, text: React.ReactNode) => (
+    <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${mode === m ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
+      <input type="radio" name="wa-mode" className="mt-0.5" checked={mode === m} disabled={saving || mode === null} onChange={() => choose(m)} />
+      <span>
+        <span className="block text-xs font-semibold text-slate-900">{title}</span>
+        <span className="block text-[11px] text-slate-500 mt-0.5 leading-relaxed">{text}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+      <p className="text-xs font-semibold text-slate-700">Cómo se confirman los pedidos</p>
+      {option(
+        'customer_first',
+        'El cliente me escribe desde la landing (gratis)',
+        <>
+          Al terminar el pedido, la landing lo lleva a WhatsApp con el mensaje ya escrito. Cuando lo envía, el pedido pasa a Confirmado y se le responde solo.
+          No usa plantilla. <strong>Pon este número de la API en el campo WhatsApp de cada landing.</strong>
+        </>,
+      )}
+      {mode === 'customer_first' && (
+        <div className="ml-7 space-y-1.5">
+          <label className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            Si el cliente no escribe en
+            <select
+              value={fallback}
+              disabled={saving}
+              onChange={(e) => save('customer_first', Number(e.target.value))}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
+            >
+              <option value={0}>— no enviar nada —</option>
+              <option value={10}>10 minutos</option>
+              <option value={15}>15 minutos</option>
+              <option value={30}>30 minutos</option>
+              <option value={60}>1 hora</option>
+              <option value={120}>2 horas</option>
+            </select>
+            {fallback > 0 && 'le envío la plantilla con los botones.'}
+          </label>
+          {fallback > 0 && !templateReady && (
+            <p className="text-[11px] text-amber-700">Falta la plantilla aprobada (WHATSAPP_CONFIRM_TEMPLATE) para poder enviarla.</p>
+          )}
+          {fallback > 0 && <SchedulerSetup />}
+        </div>
+      )}
+      {option(
+        'template',
+        'Enviar la plantilla con botones a cada pedido',
+        'Tu número le escribe al cliente apenas hace el pedido, con los botones Confirmar pedido / Cancelar. Funciona aunque el cliente no escriba, pero cada plantilla tiene un costo pequeño.',
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 // WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
 function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
-  const ready = status && status.sending && status.confirmTemplate && status.webhook;
+  const [mode, setMode] = useState<WaMode | null>(null);
+  const [fallback, setFallback] = useState(0);
+  useEffect(() => {
+    fetch('/api/whatsapp/settings', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        setMode(d.mode === 'customer_first' ? 'customer_first' : 'template');
+        setFallback(Number(d.fallbackMinutes) || 0);
+      })
+      .catch(() => setMode('template'));
+  }, []);
+  // The template is only required when it is sent automatically.
+  const ready = status && status.sending && status.webhook && (mode === 'customer_first' || status.confirmTemplate);
   const partial = status && !ready && status.missing.length < WA_VARS.length;
   const [webhookUrl, setWebhookUrl] = useState('https://<tu-dominio>/api/whatsapp/webhook');
   useEffect(() => setWebhookUrl(`${window.location.origin}/api/whatsapp/webhook`), []);
@@ -370,6 +553,18 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
         <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
       </div>
 
+      {status?.sending && (
+        <WhatsAppModePicker
+          mode={mode}
+          fallback={fallback}
+          cron={Boolean(status.cron)}
+          templateReady={Boolean(status.confirmTemplate)}
+          onChange={(m, fb) => {
+            setMode(m);
+            setFallback(fb);
+          }}
+        />
+      )}
       {status?.sending && <WhatsAppTester />}
 
       <div className="pt-3 border-t border-slate-100">

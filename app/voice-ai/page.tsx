@@ -151,7 +151,7 @@ export default function VoiceAiPage() {
   const cloud = Boolean(status?.cloud);
   const ready = Boolean(status?.ready && cloud);
   const webhookUrl = `${status?.baseUrl || 'https://<tu-dominio>'}/api/vapi/webhook`;
-  const cronUrl = `${status?.baseUrl || 'https://<tu-dominio>'}/api/cron/calls`;
+  const cronUrl = `${status?.baseUrl || 'https://<tu-dominio>'}/api/cron/run`;
 
   return (
     <div className="flex min-h-screen bg-slate-50">

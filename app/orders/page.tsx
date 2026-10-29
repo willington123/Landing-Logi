@@ -5,6 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
+import { WhatsAppOrderStatus } from '@/components/orders/WhatsAppOrderStatus';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT, deleteOrders, pullFromCloud } from '@/lib/cloud';
 import { OrderItem, OrderStatus } from '@/lib/types';
@@ -375,6 +376,8 @@ export default function OrdersPage() {
                   </p>
                 )}
               </div>
+
+              <WhatsAppOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
 
               {(selectedOrder.callNotes || selectedOrder.previousAddress) && (
                 <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">

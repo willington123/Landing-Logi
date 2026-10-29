@@ -23,6 +23,7 @@ export function whatsappStatus() {
     sending: whatsappEnabled(),
     confirmTemplate: confirmTemplateEnabled(),
     webhook: Boolean(env('WHATSAPP_VERIFY_TOKEN') && env('WHATSAPP_APP_SECRET')),
+    cron: Boolean(env('CRON_SECRET')), // scheduled task, needed for the fallback template
     missing: WHATSAPP_ENV.filter((k) => !env(k)),
   };
 }

@@ -2,7 +2,8 @@
 import { patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendText, type InboundMessage } from '@/lib/server/whatsapp';
-import { findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
+import { dueWaFallbackOrders, findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
+import { getLandingInfo } from '@/lib/server/voice-store';
 import type { OrderItem } from '@/lib/types';
 
 const firstName = (name: string) => (name || '').trim().split(/\s+/)[0] || 'cliente';
@@ -26,6 +27,29 @@ export async function sendOrderConfirmation(order: OrderItem, opts: { currency?:
     console.error('WhatsApp: no se pudo guardar el mensaje enviado', e),
   );
   return { ok: result.ok, to, messageId: result.messageId, error: result.error, at: new Date().toISOString() };
+}
+
+// Sends the confirmation template for an order and saves the result on it (manual button and fallback).
+export async function sendConfirmationForOrder(order: OrderItem) {
+  const landing = await getLandingInfo(order.landingPageId);
+  const whatsapp = await sendOrderConfirmation(order, { currency: landing.currency, country: landing.country });
+  if (whatsapp) await patchOrderData(order.id, { whatsapp, waFallbackAt: null });
+  return whatsapp;
+}
+
+// Cron: customers who didn't write after the landing's redirect get the template.
+export async function processWaFallback() {
+  const out = { sent: 0, failed: 0 };
+  if (!confirmTemplateEnabled()) return out;
+  for (const order of await dueWaFallbackOrders()) {
+    // Clear first so an overlapping run can't send it twice.
+    await patchOrderData(order.id, { waFallbackAt: null });
+    if (order.whatsapp) continue; // a template already went out (e.g. sent by hand)
+    const r = await sendConfirmationForOrder(order).catch(() => null);
+    if (r?.ok) out.sent++;
+    else out.failed++;
+  }
+  return out;
 }
 
 async function reply(phone: string, text: string, orderId?: string) {

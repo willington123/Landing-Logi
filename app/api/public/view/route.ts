@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, incrementLandingViews } from '@/lib/server/db';
+import { maybeRunScheduled } from '@/lib/server/scheduled';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,9 @@ export async function POST(req: NextRequest) {
   try {
     const { landingId } = await req.json();
     await incrementLandingViews(String(landingId || '').slice(0, 120));
+    // Backup for the scheduled task: visits also check pending work (at most every few minutes).
+    // The landing doesn't wait for this response, so the visitor never notices.
+    await maybeRunScheduled(req.nextUrl.origin, 'visita');
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ success: false }, { status: 500 });
