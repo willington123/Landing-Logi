@@ -62,8 +62,9 @@ export function TagPicker({
       <button
         onClick={() => setOpen((v) => !v)}
         className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+        aria-label="Etiquetas"
       >
-        <Tag className="w-3.5 h-3.5" /> Etiquetas
+        <Tag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Etiquetas</span>
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-30 w-60 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5">

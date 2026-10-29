@@ -3,12 +3,14 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Loader2, MessageSquare, Package, Search, Send, X, Zap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, BellOff, Check, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
 import { QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
-import { OrderPanel, type OrderAction } from '@/components/crm/OrderPanel';
+import { type OrderAction } from '@/components/crm/OrderPanel';
+import { CustomerPanel } from '@/components/crm/CustomerPanel';
+import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
 
 type Conversation = WaConversation & { order: OrderSummary | null; tags?: string[] };
 type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed';
@@ -51,6 +53,12 @@ const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
+// "[image] hola" → "📷 Foto: hola" in the chat list.
+const MEDIA_LABEL: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento', sticker: '🙂 Sticker' };
+const preview = (t: string | null) => {
+  const m = /^\[(image|audio|video|document|sticker)\]\s*(.*)$/.exec(t || '');
+  return m ? `${MEDIA_LABEL[m[1]]}${m[2] ? `: ${m[2]}` : ''}` : t || '';
+};
 const phoneLabel = (p: string) => `+${p}`;
 
 function timeLabel(iso?: string | null) {
@@ -81,6 +89,56 @@ function Ticks({ m }: { m: WaMessage }) {
   return <Clock className="w-3.5 h-3.5 text-slate-300" />;
 }
 
+// Photo, voice note, video, document or sticker the customer sent (streamed through /api/whatsapp/media).
+function MediaView({ m }: { m: WaMessage }) {
+  const [failed, setFailed] = useState(false);
+  const media = m.media!;
+  const src = `/api/whatsapp/media/${media.id}`;
+  if (failed) return <p className="text-xs text-slate-500 italic">El archivo ya no está disponible en WhatsApp (se guarda unos 30 días).</p>;
+  if (media.kind === 'image' || media.kind === 'sticker')
+    return (
+      <a href={src} target="_blank" rel="noreferrer" className="block">
+        <img src={src} alt={media.caption || 'Foto del cliente'} onError={() => setFailed(true)} className={`rounded-xl ${media.kind === 'sticker' ? 'w-28 h-28 object-contain' : 'max-h-72 w-auto max-w-full object-cover'}`} />
+      </a>
+    );
+  if (media.kind === 'audio') return <audio controls preload="none" src={src} onError={() => setFailed(true)} className="w-64 max-w-full h-10" />;
+  if (media.kind === 'video') return <video controls preload="metadata" src={src} onError={() => setFailed(true)} className="rounded-xl max-h-72 max-w-full" />;
+  const name = media.filename || 'documento';
+  return (
+    <a href={`${src}?name=${encodeURIComponent(name)}`} className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 hover:bg-slate-100">
+      <FileText className="w-5 h-5 text-slate-500 shrink-0" />
+      <span className="text-[13px] text-slate-800 truncate">{name}</span>
+      <span className="text-[11px] font-semibold text-slate-500 shrink-0">Descargar</span>
+    </a>
+  );
+}
+
+// WhatsApp's free 24-hour reply window, counted from the customer's last message.
+function windowLeft(lastInboundAt: string | null | undefined, now: number) {
+  return lastInboundAt ? WINDOW_MS - (now - new Date(lastInboundAt).getTime()) : -1;
+}
+function WindowChip({ left }: { left: number }) {
+  const title = 'WhatsApp deja escribir gratis durante 24 horas después del último mensaje del cliente. Después solo se puede usar una plantilla aprobada.';
+  if (left <= 0)
+    return (
+      <span title={title} className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-500/15">
+        <Clock className="w-3 h-3" /> Ventana cerrada
+      </span>
+    );
+  const h = Math.floor(left / 3600000);
+  const m = Math.floor((left % 3600000) / 60000);
+  const urgent = left < 2 * 3600000;
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${urgent ? 'bg-amber-50 text-amber-800 ring-amber-600/20' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'}`}
+    >
+      <Clock className="w-3 h-3" /> {h ? `${h} h ${m} min` : `${m} min`}
+      <span className="hidden sm:inline"> para responder</span>
+    </span>
+  );
+}
+
 export default function OmnichannelInbox() {
   const [cloud, setCloud] = useState<boolean | null>(null);
   const [wa, setWa] = useState<WaStatus | null>(null);
@@ -100,7 +158,11 @@ export default function OmnichannelInbox() {
   const [manage, setManage] = useState<'tags' | 'replies' | null>(null);
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
-  const [orderOpen, setOrderOpen] = useState(false); // order drawer on small screens
+  const [orderOpen, setOrderOpen] = useState(false); // customer drawer on small screens
+  const [now, setNow] = useState(() => Date.now());
+  const [sound, setSound] = useState(true);
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(activeId);
@@ -108,6 +170,14 @@ export default function OmnichannelInbox() {
 
   useEffect(() => {
     isCloud().then(setCloud);
+    setSound(soundOn());
+    const sync = () => setSound(soundOn());
+    window.addEventListener(SOUND_EVENT, sync);
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => {
+      window.removeEventListener(SOUND_EVENT, sync);
+      clearInterval(t);
+    };
   }, []);
 
   const loadConversations = useCallback(async () => {
@@ -133,6 +203,7 @@ export default function OmnichannelInbox() {
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
+        window.dispatchEvent(new Event(UNREAD_REFRESH_EVENT));
       }
     } catch {
       // Keep what is on screen; the next poll retries.
@@ -164,6 +235,7 @@ export default function OmnichannelInbox() {
     setText('');
     setQr({ open: false, slash: false, highlight: 0 });
     setOrderOpen(false);
+    setTplMsg(null);
     if (!activeId) return;
     setThreadLoading(true);
     loadMessages(activeId).finally(() => setThreadLoading(false));
@@ -182,7 +254,24 @@ export default function OmnichannelInbox() {
   }, [text]);
 
   const active = conversations.find((c) => c.id === activeId) || null;
-  const canReply = Boolean(active?.last_inbound_at && Date.now() - new Date(active.last_inbound_at).getTime() < WINDOW_MS);
+  const left = windowLeft(active?.last_inbound_at, now);
+  const canReply = left > 0;
+
+  const sendTemplate = async () => {
+    if (!active?.order) return;
+    setTplBusy(true);
+    setTplMsg(null);
+    try {
+      await crmApi('/api/whatsapp/confirm', { method: 'POST', body: JSON.stringify({ orderId: active.order.id }) });
+      setTplMsg({ ok: true, text: 'Plantilla enviada. Cuando el cliente responda, se abre de nuevo la ventana de 24 horas.' });
+      loadMessages(active.id);
+      loadConversations();
+    } catch (e: any) {
+      setTplMsg({ ok: false, text: e.message });
+    } finally {
+      setTplBusy(false);
+    }
+  };
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags]);
   const counts = useMemo(
@@ -354,9 +443,21 @@ export default function OmnichannelInbox() {
         {/* Conversation list */}
         <div className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 border-r border-slate-200 flex-col min-h-0`}>
           <div className="p-4 border-b border-slate-100">
-            <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-              <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+                <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
+              </h2>
+              <button
+                onClick={() => {
+                  setSoundOn(!sound);
+                  if (!sound) playMessageSound();
+                }}
+                className={`h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 ${sound ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'}`}
+                title={sound ? 'Sonido de mensaje nuevo activado' : 'Sonido de mensaje nuevo desactivado'}
+              >
+                {sound ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />} {sound ? 'Sonido' : 'Silencio'}
+              </button>
+            </div>
             <p className="text-xs text-slate-500">{conversations.length} conversaciones</p>
             <div className="relative mt-3">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -442,7 +543,7 @@ export default function OmnichannelInbox() {
                     <span className="text-[11px] text-slate-400 shrink-0">{timeLabel(c.last_message_at)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <span className="text-xs text-slate-500 truncate">{c.last_message || ''}</span>
+                    <span className="text-xs text-slate-500 truncate">{preview(c.last_message)}</span>
                     {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center">{c.unread_count}</span>}
                   </div>
                   {(c.order || isUnanswered(c) || (c.tags || []).length > 0) && (
@@ -481,17 +582,16 @@ export default function OmnichannelInbox() {
                   <p className="text-sm font-semibold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
                   <div className="flex items-center gap-1 flex-wrap">
                     <span className="text-xs text-slate-500 mr-1">{phoneLabel(active.id)}</span>
+                    <WindowChip left={left} />
                     {(active.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
                   </div>
                 </div>
-                {active.order && (
-                  <button
-                    onClick={() => setOrderOpen(true)}
-                    className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
-                  >
-                    <Package className="w-3.5 h-3.5" /> Pedido
-                  </button>
-                )}
+                <button
+                  onClick={() => setOrderOpen(true)}
+                  className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+                >
+                  <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Cliente</span>
+                </button>
                 <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
               </div>
 
@@ -509,7 +609,14 @@ export default function OmnichannelInbox() {
                       }`}
                     >
                       {m.type === 'template' && <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Plantilla</p>}
-                      {m.body}
+                      {m.media ? (
+                        <div className="space-y-1">
+                          <MediaView m={m} />
+                          {m.media.caption && <p>{m.media.caption}</p>}
+                        </div>
+                      ) : (
+                        m.body
+                      )}
                       <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-400">
                         <span>{timeLabel(m.created_at)}</span>
                         <Ticks m={m} />
@@ -523,11 +630,24 @@ export default function OmnichannelInbox() {
 
               <div className="border-t border-slate-100 p-3">
                 {!canReply ? (
-                  <p className="text-xs text-slate-600 bg-slate-100 rounded-xl px-3 py-2.5">
-                    {active.last_inbound_at
-                      ? 'Han pasado más de 24 horas desde el último mensaje del cliente. WhatsApp solo permite escribirle con una plantilla aprobada.'
-                      : 'El cliente aún no ha escrito. WhatsApp solo permite iniciar la conversación con una plantilla aprobada.'}
-                  </p>
+                  <div className="text-xs text-slate-600 bg-slate-100 rounded-xl px-3 py-2.5 space-y-2">
+                    <p>
+                      {active.last_inbound_at
+                        ? 'Pasaron más de 24 horas desde el último mensaje del cliente: WhatsApp solo deja escribirle con una plantilla aprobada.'
+                        : 'El cliente aún no ha escrito: WhatsApp solo deja iniciar la conversación con una plantilla aprobada.'}
+                    </p>
+                    {active.order && PENDING_ORDER.includes(active.order.status) && wa?.confirmTemplate && (
+                      <button
+                        onClick={sendTemplate}
+                        disabled={tplBusy}
+                        className="h-8 px-3 rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+                      >
+                        {tplBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <WhatsAppIcon className="w-3.5 h-3.5" />}
+                        Enviar plantilla de confirmación ({active.order.orderNumber})
+                      </button>
+                    )}
+                    {tplMsg && <p className={tplMsg.ok ? 'text-emerald-700' : 'text-red-600'}>{tplMsg.text}</p>}
+                  </div>
                 ) : !wa?.sending ? (
                   <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">Conecta WhatsApp en Integraciones para poder responder.</p>
                 ) : (
@@ -563,7 +683,7 @@ export default function OmnichannelInbox() {
                         onChange={(e) => onTextChange(e.target.value)}
                         onKeyDown={onKeyDown}
                         rows={1}
-                        placeholder="Escribe una respuesta… (/ para respuestas rápidas)"
+                        placeholder="Escribe… o / para respuestas rápidas"
                         className="flex-1 resize-none text-[13px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:bg-white"
                       />
                       <button
@@ -582,27 +702,21 @@ export default function OmnichannelInbox() {
           )}
         </div>
 
-        {/* Linked order */}
+        {/* Customer: linked order, history and notes */}
         {active && (
-          <div className="hidden xl:flex w-72 shrink-0 border-l border-slate-200 flex-col p-4 gap-3 overflow-y-auto">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pedido vinculado</h3>
-            {active.order ? (
-              <OrderPanel order={active.order} chip={<OrderChip status={active.order.status} />} onChanged={onOrderChanged} />
-            ) : (
-              <p className="text-[13px] text-slate-500">Esta conversación no está vinculada a ningún pedido.</p>
-            )}
+          <div className="hidden xl:block w-80 shrink-0 border-l border-slate-200 p-4 overflow-y-auto">
+            <CustomerPanel conversationId={active.id} order={active.order} orderChip={(st) => <OrderChip status={st} />} onOrderChanged={onOrderChanged} />
           </div>
         )}
-        {active?.order && orderOpen && (
+        {active && orderOpen && (
           <div className="xl:hidden fixed inset-0 z-40 flex justify-end bg-slate-900/40" onMouseDown={(e) => e.target === e.currentTarget && setOrderOpen(false)}>
-            <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pedido vinculado</h3>
+            <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto">
+              <div className="flex justify-end -mb-2">
                 <button onClick={() => setOrderOpen(false)} className="w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center" aria-label="Cerrar">
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <OrderPanel order={active.order} chip={<OrderChip status={active.order.status} />} onChanged={onOrderChanged} />
+              <CustomerPanel conversationId={active.id} order={active.order} orderChip={(st) => <OrderChip status={st} />} onOrderChanged={onOrderChanged} />
             </div>
           </div>
         )}

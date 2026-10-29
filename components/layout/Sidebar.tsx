@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { pullFromCloud, CLOUD_SYNC_EVENT } from '@/lib/cloud';
+import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
+import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -80,6 +81,56 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
     return () => window.removeEventListener(CLOUD_SYNC_EVENT, readName);
   }, []);
 
+  // Unread WhatsApp messages: badge on "Mensajes", count in the tab title and a sound when a new one arrives.
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let stop = false;
+    const SEEN = 'lp_last_inbound_seen';
+    const check = async () => {
+      try {
+        const d = await fetch('/api/whatsapp/unread', { cache: 'no-store' }).then((r) => r.json());
+        if (stop || !d.success) return;
+        setUnread(d.unread || 0);
+        const last: string | null = d.lastInboundAt;
+        let seen: string | null = null;
+        try {
+          seen = sessionStorage.getItem(SEEN);
+        } catch {}
+        if (last && (!seen || last > seen)) {
+          // First check in this browser tab only remembers; later ones mean a new message arrived.
+          if (seen && soundOn()) playMessageSound();
+          try {
+            sessionStorage.setItem(SEEN, last);
+          } catch {}
+        } else if (!seen) {
+          try {
+            sessionStorage.setItem(SEEN, last || new Date(0).toISOString());
+          } catch {}
+        }
+      } catch {
+        // offline or no WhatsApp tables yet: try again later
+      }
+    };
+    let t: ReturnType<typeof setInterval> | undefined;
+    isCloud().then((cloud) => {
+      if (!cloud || stop) return;
+      check();
+      t = setInterval(check, 20000);
+    });
+    window.addEventListener(UNREAD_REFRESH_EVENT, check);
+    return () => {
+      stop = true;
+      if (t) clearInterval(t);
+      window.removeEventListener(UNREAD_REFRESH_EVENT, check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\)\s*/, '');
+    document.title = unread > 0 ? `(${unread}) ${base}` : base;
+  }, [unread, pathname]);
+
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login';
@@ -148,6 +199,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                       {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-brand-gradient" />}
                       <Icon className={`w-[18px] h-[18px] ${active ? 'text-brand-navy' : 'text-slate-400'}`} strokeWidth={2} />
                       <span className="flex-1">{item.label}</span>
+                      {item.href === '/crm' && unread > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

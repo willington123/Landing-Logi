@@ -28,6 +28,25 @@ export interface WaMessage {
   error: string | null;
   order_id: string | null;
   created_at: string;
+  media?: WaMedia | null; // photo, voice note, video, document or sticker sent by the customer
+}
+
+export interface WaMedia {
+  id: string;
+  kind: 'image' | 'audio' | 'video' | 'document' | 'sticker';
+  mime?: string;
+  caption?: string;
+  filename?: string;
+}
+
+const MEDIA_KINDS = ['image', 'audio', 'video', 'document', 'sticker'] as const;
+
+// Media details from the raw webhook message saved in "payload".
+export function mediaFromPayload(payload: any): WaMedia | null {
+  const kind = MEDIA_KINDS.find((k) => k === payload?.type);
+  const m = kind && payload?.[kind];
+  if (!kind || !m?.id || !/^\d{5,40}$/.test(String(m.id))) return null;
+  return { id: String(m.id), kind, mime: m.mime_type, caption: m.caption, filename: m.filename };
 }
 
 export const PENDING_STATUSES: OrderStatus[] = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered'];
@@ -132,7 +151,7 @@ export async function applyStatus(s: StatusUpdate) {
 
 const digits = (v: string) => (v || '').replace(/\D/g, '');
 
-function samePhone(order: OrderItem & { whatsapp?: { to?: string } }, phone: string): boolean {
+export function samePhone(order: OrderItem & { whatsapp?: { to?: string } }, phone: string): boolean {
   if (order.whatsapp?.to === phone) return true;
   if (normalizePhone(order.phone) === phone) return true;
   const d = digits(order.phone);
@@ -216,12 +235,26 @@ export async function getConversationWithOrder(id: string) {
 export async function listMessages(conversationId: string, limit = 300): Promise<WaMessage[]> {
   const { data, error } = await db()
     .from('wa_messages')
-    .select('id, conversation_id, wa_message_id, direction, type, body, status, error, order_id, created_at')
+    .select('id, conversation_id, wa_message_id, direction, type, body, status, error, order_id, created_at, payload')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
-  return ((data || []) as WaMessage[]).reverse();
+  return (data || [])
+    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null }) as WaMessage)
+    .reverse();
+}
+
+// For the menu badge and the new-message sound.
+export async function unreadSummary() {
+  const { data, error } = await db().from('wa_conversations').select('unread_count, last_inbound_at, last_message_at').gt('unread_count', 0).limit(1000);
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  return {
+    unread: rows.reduce((n, r) => n + (Number(r.unread_count) || 0), 0),
+    chats: rows.length,
+    lastInboundAt: rows.reduce<string | null>((max, r) => (r.last_inbound_at && (!max || r.last_inbound_at > max) ? r.last_inbound_at : max), null),
+  };
 }
 
 export async function markConversationRead(id: string) {

@@ -49,3 +49,36 @@ export async function setConversationTags(conversationId: string, tagIds: string
   await writeSetting('wa_conv_tags', all);
   return clean;
 }
+
+// ---------- internal notes (only the team sees them) ----------
+
+export interface CrmNote {
+  id: string;
+  text: string;
+  at: string;
+}
+
+async function allNotes(): Promise<Record<string, CrmNote[]>> {
+  return (await readSetting<Record<string, CrmNote[]>>('wa_notes')) || {};
+}
+
+export async function getNotes(conversationId: string): Promise<CrmNote[]> {
+  return (await allNotes())[conversationId] || [];
+}
+
+export async function addNote(conversationId: string, text: string): Promise<CrmNote[]> {
+  const all = await allNotes();
+  const note: CrmNote = { id: `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, text, at: new Date().toISOString() };
+  all[conversationId] = [note, ...(all[conversationId] || [])].slice(0, 100);
+  await writeSetting('wa_notes', all);
+  return all[conversationId];
+}
+
+export async function deleteNote(conversationId: string, noteId: string): Promise<CrmNote[]> {
+  const all = await allNotes();
+  const left = (all[conversationId] || []).filter((n) => n.id !== noteId);
+  if (left.length) all[conversationId] = left;
+  else delete all[conversationId];
+  await writeSetting('wa_notes', all);
+  return left;
+}
