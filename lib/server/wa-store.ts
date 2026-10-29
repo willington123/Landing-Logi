@@ -249,14 +249,48 @@ export async function getWebhookHealth(): Promise<WebhookHealth | null> {
 
 export type WaConfirmMode = 'customer_first' | 'template';
 
-export async function getWaMode(): Promise<WaConfirmMode> {
-  const { data } = await db().from('settings').select('data').eq('id', 'whatsapp').maybeSingle();
-  const mode = (data?.data as { mode?: string } | undefined)?.mode;
-  return mode === 'customer_first' ? 'customer_first' : 'template';
+export interface WaSettings {
+  mode: WaConfirmMode;
+  // customer_first only: send the template if the customer hasn't confirmed after this many minutes (0 = never).
+  fallbackMinutes: number;
 }
 
-export async function saveWaMode(mode: WaConfirmMode) {
-  const { error } = await db().from('settings').upsert({ id: 'whatsapp', data: { mode } });
+const FALLBACK_OPTIONS = [0, 10, 15, 30, 60, 120];
+
+export async function getWaSettings(): Promise<WaSettings> {
+  const { data } = await db().from('settings').select('data').eq('id', 'whatsapp').maybeSingle();
+  const d = (data?.data || {}) as Partial<WaSettings>;
+  return {
+    mode: d.mode === 'customer_first' ? 'customer_first' : 'template',
+    fallbackMinutes: FALLBACK_OPTIONS.includes(Number(d.fallbackMinutes)) ? Number(d.fallbackMinutes) : 0,
+  };
+}
+
+export async function getWaMode(): Promise<WaConfirmMode> {
+  return (await getWaSettings()).mode;
+}
+
+export async function saveWaSettings(input: Partial<WaSettings>) {
+  const current = await getWaSettings();
+  const next: WaSettings = {
+    mode: input.mode === 'customer_first' || input.mode === 'template' ? input.mode : current.mode,
+    fallbackMinutes: FALLBACK_OPTIONS.includes(Number(input.fallbackMinutes)) ? Number(input.fallbackMinutes) : current.fallbackMinutes,
+  };
+  const { error } = await db().from('settings').upsert({ id: 'whatsapp', data: next });
   if (error) throw new Error(error.message);
+  return next;
+}
+
+// Orders whose fallback template time has come (set in order data as waFallbackAt).
+export async function dueWaFallbackOrders(limit = 20): Promise<OrderItem[]> {
+  const { data, error } = await db()
+    .from('orders')
+    .select('data, status')
+    .lte('data->>waFallbackAt', new Date().toISOString())
+    .in('status', PENDING_STATUSES)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data || []).map((r) => ({ ...(r.data as OrderItem), status: r.status as OrderStatus }));
 }
 

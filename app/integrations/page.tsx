@@ -127,6 +127,7 @@ interface WaStatus {
   sending: boolean;
   confirmTemplate: boolean;
   webhook: boolean;
+  cron?: boolean;
   missing: string[];
 }
 
@@ -304,24 +305,37 @@ function WhatsAppTester() {
 type WaMode = 'customer_first' | 'template';
 
 // How orders get confirmed: the customer writes first from the landing, or an automatic template.
-function WhatsAppModePicker({ mode, onChange }: { mode: WaMode | null; onChange: (m: WaMode) => void }) {
+function WhatsAppModePicker({
+  mode,
+  fallback,
+  cron,
+  templateReady,
+  onChange,
+}: {
+  mode: WaMode | null;
+  fallback: number;
+  cron: boolean;
+  templateReady: boolean;
+  onChange: (m: WaMode, fallback: number) => void;
+}) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const choose = async (m: WaMode) => {
-    if (m === mode || saving) return;
+  const save = async (m: WaMode, fb: number) => {
+    if (saving) return;
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/whatsapp/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m }) });
+      const res = await fetch('/api/whatsapp/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m, fallbackMinutes: fb }) });
       const d = await res.json();
       if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
-      onChange(m);
+      onChange(d.mode, d.fallbackMinutes);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setSaving(false);
     }
   };
+  const choose = (m: WaMode) => m !== mode && save(m, fallback);
   const option = (m: WaMode, title: string, text: React.ReactNode) => (
     <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${mode === m ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
       <input type="radio" name="wa-mode" className="mt-0.5" checked={mode === m} disabled={saving || mode === null} onChange={() => choose(m)} />
@@ -342,6 +356,36 @@ function WhatsAppModePicker({ mode, onChange }: { mode: WaMode | null; onChange:
           No usa plantilla. <strong>Pon este número de la API en el campo WhatsApp de cada landing.</strong>
         </>,
       )}
+      {mode === 'customer_first' && (
+        <div className="ml-7 space-y-1.5">
+          <label className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            Si el cliente no escribe en
+            <select
+              value={fallback}
+              disabled={saving}
+              onChange={(e) => save('customer_first', Number(e.target.value))}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
+            >
+              <option value={0}>— no enviar nada —</option>
+              <option value={10}>10 minutos</option>
+              <option value={15}>15 minutos</option>
+              <option value={30}>30 minutos</option>
+              <option value={60}>1 hora</option>
+              <option value={120}>2 horas</option>
+            </select>
+            {fallback > 0 && 'le envío la plantilla con los botones.'}
+          </label>
+          {fallback > 0 && !templateReady && (
+            <p className="text-[11px] text-amber-700">Falta la plantilla aprobada (WHATSAPP_CONFIRM_TEMPLATE) para poder enviarla.</p>
+          )}
+          {fallback > 0 && !cron && (
+            <p className="text-[11px] text-amber-700">
+              Para enviarla sola hace falta la tarea programada: pon <strong>CRON_SECRET</strong> en Vercel y crea en cron-job.org un trabajo cada 5 min a{' '}
+              <code>/api/cron/run</code> (pasos en el README). Mientras tanto, puedes enviarla a mano desde el detalle del pedido.
+            </p>
+          )}
+        </div>
+      )}
       {option(
         'template',
         'Enviar la plantilla con botones a cada pedido',
@@ -355,10 +399,14 @@ function WhatsAppModePicker({ mode, onChange }: { mode: WaMode | null; onChange:
 // WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
 function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
   const [mode, setMode] = useState<WaMode | null>(null);
+  const [fallback, setFallback] = useState(0);
   useEffect(() => {
     fetch('/api/whatsapp/settings', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => setMode(d.mode === 'customer_first' ? 'customer_first' : 'template'))
+      .then((d) => {
+        setMode(d.mode === 'customer_first' ? 'customer_first' : 'template');
+        setFallback(Number(d.fallbackMinutes) || 0);
+      })
       .catch(() => setMode('template'));
   }, []);
   // The template is only required when it is sent automatically.
@@ -429,7 +477,18 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
         <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
       </div>
 
-      {status?.sending && <WhatsAppModePicker mode={mode} onChange={setMode} />}
+      {status?.sending && (
+        <WhatsAppModePicker
+          mode={mode}
+          fallback={fallback}
+          cron={Boolean(status.cron)}
+          templateReady={Boolean(status.confirmTemplate)}
+          onChange={(m, fb) => {
+            setMode(m);
+            setFallback(fb);
+          }}
+        />
+      )}
       {status?.sending && <WhatsAppTester />}
 
       <div className="pt-3 border-t border-slate-100">

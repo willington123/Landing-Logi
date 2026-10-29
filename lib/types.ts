@@ -223,6 +223,8 @@ export interface OrderItem {
   confirmedAt?: string;
   callNotes?: string; // what the AI call or a call error reported
   previousAddress?: string; // address before the customer corrected it on the call
+  whatsapp?: { ok: boolean; to?: string; messageId?: string; error?: string; at: string }; // confirmation template result
+  waFallbackAt?: string | null; // when to send the template if the customer hasn't written (mode "customer writes first")
 }
 
 export interface VoiceAgentSettings {
