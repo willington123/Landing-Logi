@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cloudEnabled, updateOrderAddress, updateOrderStatus } from '@/lib/server/db';
+import { cloudEnabled, patchOrderData, updateOrderAddress, updateOrderStatus } from '@/lib/server/db';
 import type { OrderStatus } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if (!STATUSES.includes(status)) return NextResponse.json({ success: false, error: 'Estado inválido.' }, { status: 400 });
     await updateOrderStatus(params.id, status);
+    // Shipping details given with "Marcar enviado".
+    if (status === 'shipped' && (body.carrier !== undefined || body.trackingNumber !== undefined)) {
+      await patchOrderData(params.id, {
+        carrier: String(body.carrier ?? '').trim().slice(0, 60) || null,
+        trackingNumber: String(body.trackingNumber ?? '').trim().slice(0, 60) || null,
+        shippedAt: new Date().toISOString(),
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });

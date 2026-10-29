@@ -1,6 +1,6 @@
 // Server-only storage for CRM quick replies and tags (Supabase "settings" table, no extra migration).
 import { db } from '@/lib/server/db';
-import { DEFAULT_QUICK_REPLIES, DEFAULT_TAGS, type CrmTag, type QuickReply } from '@/lib/crm';
+import { DEFAULT_AUTO, DEFAULT_QUICK_REPLIES, DEFAULT_TAGS, type Agent, type AutoSettings, type CrmTag, type QuickReply } from '@/lib/crm';
 
 async function readSetting<T>(id: string): Promise<T | null> {
   const { data, error } = await db().from('settings').select('data').eq('id', id).maybeSingle();
@@ -81,4 +81,65 @@ export async function deleteNote(conversationId: string, noteId: string): Promis
   else delete all[conversationId];
   await writeSetting('wa_notes', all);
   return left;
+}
+
+// ---------- team: people who handle chats ----------
+
+
+export async function getAgents(): Promise<Agent[]> {
+  const d = await readSetting<{ items?: Agent[] }>('wa_agents');
+  return Array.isArray(d?.items) ? d!.items : [];
+}
+
+export async function saveAgents(items: Agent[]) {
+  await writeSetting('wa_agents', { items });
+}
+
+// Who handles each conversation: { "<phone>": "<agentId>" }.
+export async function getAssignments(): Promise<Record<string, string>> {
+  return (await readSetting<Record<string, string>>('wa_conv_assign')) || {};
+}
+
+export async function setAssignment(conversationId: string, agentId: string | null): Promise<string | null> {
+  const all = await getAssignments();
+  const valid = agentId && (await getAgents()).some((a) => a.id === agentId) ? agentId : null;
+  if (valid) all[conversationId] = valid;
+  else delete all[conversationId];
+  await writeSetting('wa_conv_assign', all);
+  return valid;
+}
+
+// ---------- automatic replies ----------
+
+export async function getAutoSettings(): Promise<AutoSettings> {
+  const d = await readSetting<AutoSettings>('wa_auto');
+  if (!d) return DEFAULT_AUTO;
+  return { ...DEFAULT_AUTO, ...d, away: { ...DEFAULT_AUTO.away, ...(d.away || {}) }, rules: Array.isArray(d.rules) ? d.rules : [] };
+}
+
+export async function saveAutoSettings(s: AutoSettings) {
+  await writeSetting('wa_auto', s);
+}
+
+// When each automatic reply last went to each customer, so they aren't repeated: { phone: { key: iso } }.
+const AUTO_LOG = 'wa_auto_log';
+const WEEK = 7 * 24 * 3600 * 1000;
+
+export async function autoSentRecently(conversationId: string, key: string, withinMs: number): Promise<boolean> {
+  const log = (await readSetting<Record<string, Record<string, string>>>(AUTO_LOG)) || {};
+  const at = log[conversationId]?.[key];
+  return Boolean(at && Date.now() - new Date(at).getTime() < withinMs);
+}
+
+export async function noteAutoSent(conversationId: string, keys: string[]) {
+  const log = (await readSetting<Record<string, Record<string, string>>>(AUTO_LOG)) || {};
+  const now = Date.now();
+  // Drop entries older than a week so the log stays small.
+  for (const [c, entries] of Object.entries(log)) {
+    for (const [k, at] of Object.entries(entries)) if (now - new Date(at).getTime() > WEEK) delete entries[k];
+    if (!Object.keys(entries).length) delete log[c];
+  }
+  log[conversationId] = { ...(log[conversationId] || {}) };
+  for (const k of keys) log[conversationId][k] = new Date(now).toISOString();
+  await writeSetting(AUTO_LOG, log);
 }

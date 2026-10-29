@@ -3,17 +3,18 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Bell, BellOff, Check, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
-import { QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
+import { AgentBadge, AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
 import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
 
-type Conversation = WaConversation & { order: OrderSummary | null; tags?: string[] };
-type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed';
+type Conversation = WaConversation & { order: OrderSummary | null; tags?: string[]; assignee?: string | null };
+type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
+const ME_KEY = 'lp_agent'; // who is using this browser (for "Míos")
 const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 
 // The customer wrote last and nobody has answered yet.
@@ -152,10 +153,12 @@ export default function OmnichannelInbox() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [tags, setTags] = useState<CrmTag[]>([]);
+  const [agents, setAgents] = useState<CrmTag[]>([]);
+  const [me, setMe] = useState('');
   const [replies, setReplies] = useState<QuickReply[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [tagFilter, setTagFilter] = useState('');
-  const [manage, setManage] = useState<'tags' | 'replies' | null>(null);
+  const [manage, setManage] = useState<'tags' | 'replies' | 'team' | null>(null);
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
   const [orderOpen, setOrderOpen] = useState(false); // customer drawer on small screens
@@ -171,6 +174,9 @@ export default function OmnichannelInbox() {
   useEffect(() => {
     isCloud().then(setCloud);
     setSound(soundOn());
+    try {
+      setMe(localStorage.getItem(ME_KEY) || '');
+    } catch {}
     const sync = () => setSound(soundOn());
     window.addEventListener(SOUND_EVENT, sync);
     const t = setInterval(() => setNow(Date.now()), 30000);
@@ -182,9 +188,10 @@ export default function OmnichannelInbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; whatsapp: WaStatus }>('/api/whatsapp/conversations');
+      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: CrmTag[]; whatsapp: WaStatus }>('/api/whatsapp/conversations');
       setConversations(d.conversations);
       if (d.tags) setTags(d.tags);
+      if (d.agents) setAgents(d.agents);
       setWa(d.whatsapp);
       setListError(null);
     } catch (e: any) {
@@ -199,7 +206,7 @@ export default function OmnichannelInbox() {
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, unread_count: c.unread_count } : c)));
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, unread_count: c.unread_count } : c)));
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
@@ -280,8 +287,10 @@ export default function OmnichannelInbox() {
       unanswered: conversations.filter(isUnanswered).length,
       pending: conversations.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
       confirmed: conversations.filter((c) => c.order?.status === 'confirmed_by_voice').length,
+      mine: me ? conversations.filter((c) => c.assignee === me).length : 0,
+      unassigned: conversations.filter((c) => !c.assignee).length,
     }),
-    [conversations],
+    [conversations, me],
   );
 
   const filtered = useMemo(() => {
@@ -291,12 +300,23 @@ export default function OmnichannelInbox() {
       if (filter === 'unanswered' && !isUnanswered(c)) return false;
       if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
       if (filter === 'confirmed' && c.order?.status !== 'confirmed_by_voice') return false;
+      if (filter === 'mine' && (!me || c.assignee !== me)) return false;
+      if (filter === 'unassigned' && c.assignee) return false;
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
       if (!q) return true;
       const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
       return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [conversations, search, filter, tagFilter, tagById]);
+  }, [conversations, search, filter, tagFilter, tagById, me]);
+  const agentById = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a])), [agents]);
+  const meAgent = agentById[me] || null;
+  const chooseMe = (id: string) => {
+    setMe(id);
+    try {
+      if (id) localStorage.setItem(ME_KEY, id);
+      else localStorage.removeItem(ME_KEY);
+    } catch {}
+  };
 
   // ---------- quick replies ----------
 
@@ -309,6 +329,8 @@ export default function OmnichannelInbox() {
       total: o ? money(o.totalAmount) : '',
       ciudad: o?.city || '',
       direccion: o?.address || '',
+      transportadora: o?.carrier || '',
+      guia: o?.trackingNumber || '',
     };
   };
   const fillReply = (r: QuickReply) => fillQuickReply(r.body, replyVars(active));
@@ -361,6 +383,13 @@ export default function OmnichannelInbox() {
 
   // ---------- tags and order actions ----------
 
+  const assign = async (agentId: string | null) => {
+    if (!active) return;
+    const id = active.id;
+    const d = await crmApi<{ assignee: string | null }>(`/api/whatsapp/conversations/${id}/assign`, { method: 'PUT', body: JSON.stringify({ agentId }) });
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, assignee: d.assignee } : c)));
+  };
+
   const saveConvTags = async (ids: string[]) => {
     if (!active) return;
     const id = active.id;
@@ -368,12 +397,16 @@ export default function OmnichannelInbox() {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, tags: d.tags } : c)));
   };
 
-  const onOrderChanged = async (action: OrderAction) => {
+  const onOrderChanged = async (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => {
     await loadConversations();
-    // After shipping, leave the "despachado" message ready to send (the user still reviews and sends it).
+    // After shipping, leave the "despachado" message (with the tracking number if given) ready to review and send.
     if (action === 'shipped' && canReply && !text.trim()) {
-      const r = replies.find((x) => x.shortcut === 'envio');
-      if (r) setText(fillReply(r));
+      const vars = { ...replyVars(active), transportadora: extra?.carrier || '', guia: extra?.trackingNumber || '' };
+      const withGuide = extra?.trackingNumber ? replies.find((x) => x.shortcut === 'guia') : null;
+      const r = withGuide || replies.find((x) => x.shortcut === 'envio');
+      if (r) setText(fillQuickReply(r.body, vars));
+      else if (extra?.trackingNumber)
+        setText(fillQuickReply('Hola {nombre} 🚚 Tu pedido {pedido} ya va en camino con {transportadora}. Número de guía: {guia}.', vars));
     }
   };
 
@@ -447,6 +480,14 @@ export default function OmnichannelInbox() {
               <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
                 <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
               </h2>
+              <div className="flex items-center gap-0.5">
+              <Link
+                href="/automations"
+                className="h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 text-slate-600 hover:bg-slate-100"
+                title="Respuestas automáticas por palabra clave y fuera de horario"
+              >
+                <Bot className="w-3.5 h-3.5" /> Auto
+              </Link>
               <button
                 onClick={() => {
                   setSoundOn(!sound);
@@ -457,6 +498,7 @@ export default function OmnichannelInbox() {
               >
                 {sound ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />} {sound ? 'Sonido' : 'Silencio'}
               </button>
+              </div>
             </div>
             <p className="text-xs text-slate-500">{conversations.length} conversaciones</p>
             <div className="relative mt-3">
@@ -481,6 +523,12 @@ export default function OmnichannelInbox() {
                   ['unanswered', 'Sin responder', counts.unanswered],
                   ['pending', 'Pendientes', counts.pending],
                   ['confirmed', 'Confirmados', counts.confirmed],
+                  ...(agents.length
+                    ? ([
+                        ['mine', meAgent ? 'Míos' : 'Míos (elige quién eres)', counts.mine],
+                        ['unassigned', 'Sin asignar', counts.unassigned],
+                      ] as [Filter, string, number | null][])
+                    : []),
                 ] as [Filter, string, number | null][]
               ).map(([k, label, n]) => (
                 <button
@@ -515,6 +563,29 @@ export default function OmnichannelInbox() {
                 </button>
               </div>
             )}
+            <div className="mt-2 flex items-center gap-2">
+              {agents.length > 0 ? (
+                <select
+                  value={me}
+                  onChange={(e) => chooseMe(e.target.value)}
+                  className="flex-1 h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700"
+                  aria-label="¿Quién eres?"
+                  title="Se recuerda en este navegador. Sirve para el filtro Míos."
+                >
+                  <option value="">¿Quién eres? (para “Míos”)</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      Soy {a.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="flex-1 text-[11px] text-slate-400">¿Trabajas con más personas? Repártanse los chats.</span>
+              )}
+              <button onClick={() => setManage('team')} className="text-[11px] font-medium text-slate-500 hover:text-slate-800 whitespace-nowrap">
+                {agents.length ? 'Editar equipo' : 'Agregar equipo'}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -539,7 +610,10 @@ export default function OmnichannelInbox() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-slate-900 truncate">{c.name || phoneLabel(c.id)}</span>
+                    <span className="text-[13px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
+                      {c.assignee && agentById[c.assignee] && <AgentBadge agent={agentById[c.assignee]} />}
+                      <span className="truncate">{c.name || phoneLabel(c.id)}</span>
+                    </span>
                     <span className="text-[11px] text-slate-400 shrink-0">{timeLabel(c.last_message_at)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -592,6 +666,7 @@ export default function OmnichannelInbox() {
                 >
                   <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Cliente</span>
                 </button>
+                <AssignPicker agents={agents} assignee={active.assignee || null} onChange={assign} onManage={() => setManage('team')} />
                 <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
               </div>
 
@@ -609,6 +684,7 @@ export default function OmnichannelInbox() {
                       }`}
                     >
                       {m.type === 'template' && <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Plantilla</p>}
+                      {m.type === 'auto' && <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5">Respuesta automática</p>}
                       {m.media ? (
                         <div className="space-y-1">
                           <MediaView m={m} />
@@ -722,6 +798,18 @@ export default function OmnichannelInbox() {
         )}
       </div>
       {manage === 'tags' && <TagManager tags={tags} onClose={() => setManage(null)} onSaved={(t) => (setTags(t), loadConversations())} />}
+      {manage === 'team' && (
+        <TagManager
+          tags={agents}
+          title="Equipo"
+          endpoint="/api/whatsapp/agents"
+          intro="Las personas que responden los chats. Asigna cada chat a alguien y cada uno ve los suyos con el filtro “Míos”. Todos entran con la misma contraseña del panel."
+          addLabel="Agregar persona"
+          placeholder="Nombre"
+          onClose={() => setManage(null)}
+          onSaved={(a) => (setAgents(a), loadConversations())}
+        />
+      )}
       {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
     </div>
   );

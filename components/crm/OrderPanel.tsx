@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, Truck, XC
 import type { OrderSummary } from '@/lib/server/wa-store';
 import type { OrderStatus } from '@/lib/types';
 import { crmApi } from '@/components/crm/CrmParts';
+import { CARRIERS } from '@/lib/crm';
 
 const PENDING: string[] = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
@@ -20,18 +21,22 @@ export function OrderPanel({
 }: {
   order: OrderSummary;
   chip: React.ReactNode;
-  onChanged: (action: OrderAction) => void;
+  onChanged: (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => void;
 }) {
   const [busy, setBusy] = useState<OrderAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [askCancel, setAskCancel] = useState(false);
   const [editing, setEditing] = useState(false);
   const [addr, setAddr] = useState({ address: order.address || '', city: order.city || '', department: order.department || '' });
+  const [shipping, setShipping] = useState(false);
+  const [ship, setShip] = useState({ carrier: order.carrier || '', trackingNumber: order.trackingNumber || '' });
 
   useEffect(() => {
     setAskCancel(false);
     setEditing(false);
+    setShipping(false);
     setError(null);
+    setShip({ carrier: order.carrier || '', trackingNumber: order.trackingNumber || '' });
     setAddr({ address: order.address || '', city: order.city || '', department: order.department || '' });
   }, [order.id, order.address, order.city, order.department]);
 
@@ -42,7 +47,8 @@ export function OrderPanel({
       await crmApi(`/api/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       setAskCancel(false);
       setEditing(false);
-      onChanged(action);
+      setShipping(false);
+      onChanged(action, action === 'shipped' ? { carrier: String(body.carrier || ''), trackingNumber: String(body.trackingNumber || '') } : undefined);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -116,7 +122,51 @@ export function OrderPanel({
         </div>
       )}
 
-      {!editing && (
+      {order.trackingNumber && !shipping && (
+        <div className="flex gap-2 text-[13px] text-slate-700">
+          <Truck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <span className="flex-1 min-w-0">
+            Guía <strong className="font-mono text-[12px]">{order.trackingNumber}</strong>
+            {order.carrier && <span className="block text-xs text-slate-500">{order.carrier}</span>}
+          </span>
+        </div>
+      )}
+
+      {shipping && (
+        <div className="space-y-2 rounded-xl bg-sky-50/60 border border-sky-100 p-2.5">
+          <p className="text-[11px] text-slate-600">Datos del envío (opcionales). Se guardan en el pedido y en el Excel.</p>
+          <input
+            list="lp-carriers"
+            value={ship.carrier}
+            onChange={(e) => setShip({ ...ship, carrier: e.target.value })}
+            placeholder="Transportadora (ej. Servientrega)"
+            maxLength={60}
+            className="w-full h-9 text-[13px] border border-slate-200 rounded-lg px-2.5 bg-white"
+          />
+          <datalist id="lp-carriers">
+            {CARRIERS.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+          <input
+            value={ship.trackingNumber}
+            onChange={(e) => setShip({ ...ship, trackingNumber: e.target.value })}
+            placeholder="Número de guía"
+            maxLength={60}
+            className="w-full h-9 text-[13px] font-mono border border-slate-200 rounded-lg px-2.5 bg-white"
+          />
+          <div className="flex gap-2">
+            <button onClick={() => setShipping(false)} className={`${btn} flex-1 bg-white border border-slate-200 text-slate-600`}>
+              Volver
+            </button>
+            <button onClick={() => run('shipped', { status: 'shipped', ...ship })} disabled={busy !== null} className={`${btn} flex-1 bg-sky-600 hover:bg-sky-700 text-white`}>
+              {spin('shipped', <Truck className="w-3.5 h-3.5" />)} Guardar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!editing && !shipping && (
         <div className="grid grid-cols-2 gap-2">
           {pending && (
             <button onClick={() => setStatus('confirmed_by_voice')} disabled={busy !== null} className={`${btn} bg-emerald-600 hover:bg-emerald-700 text-white`}>
@@ -124,7 +174,7 @@ export function OrderPanel({
             </button>
           )}
           {status === 'confirmed_by_voice' && (
-            <button onClick={() => setStatus('shipped')} disabled={busy !== null} className={`${btn} col-span-2 bg-sky-600 hover:bg-sky-700 text-white`}>
+            <button onClick={() => setShipping(true)} disabled={busy !== null} className={`${btn} col-span-2 bg-sky-600 hover:bg-sky-700 text-white`}>
               {spin('shipped', <Truck className="w-3.5 h-3.5" />)} Marcar enviado
             </button>
           )}

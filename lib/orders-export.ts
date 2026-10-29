@@ -45,6 +45,8 @@ const COLUMNS: (SheetColumn & { value: (o: OrderItem & { whatsapp?: { ok?: boole
   { header: 'Total', width: 12, money: true, value: (o) => o.totalAmount },
   { header: 'Pago', width: 14, value: (o) => PAYMENT_LABEL[o.paymentMethod] || o.paymentMethod },
   { header: 'Confirmado el', width: 17, value: (o) => dateTime(o.confirmedAt) },
+  { header: 'Transportadora', width: 16, value: (o) => o.carrier || '' },
+  { header: 'Guía', width: 18, value: (o) => o.trackingNumber || '' },
   { header: 'WhatsApp', width: 11, value: (o) => (o.whatsapp ? (o.whatsapp.ok ? 'Enviado' : 'Falló') : '') },
   { header: 'UTM source', width: 14, value: (o) => o.utmSource },
   { header: 'UTM campaign', width: 18, value: (o) => o.utmCampaign },

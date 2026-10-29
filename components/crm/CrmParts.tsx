@@ -2,7 +2,7 @@
 
 // Pieces of the WhatsApp inbox: tags, quick replies and their editors.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, Pencil, Plus, Settings2, Tag, Trash2, X, Zap } from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, Settings2, Tag, Trash2, UserPlus, X, Zap } from 'lucide-react';
 import { TAG_COLORS, type CrmTag, type QuickReply, type TagColor, shortcutFrom } from '@/lib/crm';
 
 export async function crmApi<T = any>(url: string, init?: RequestInit): Promise<T> {
@@ -112,7 +112,26 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-export function TagManager({ tags, onClose, onSaved }: { tags: CrmTag[]; onClose: () => void; onSaved: (t: CrmTag[]) => void }) {
+// Editor for tags; also used for the team (same shape: name + color).
+export function TagManager({
+  tags,
+  onClose,
+  onSaved,
+  title = 'Etiquetas',
+  endpoint = '/api/whatsapp/tags',
+  intro = 'Úsalas para ordenar los chats y filtrarlos. Si borras una, se quita de todas las conversaciones.',
+  addLabel = 'Nueva etiqueta',
+  placeholder = '',
+}: {
+  tags: CrmTag[];
+  onClose: () => void;
+  onSaved: (t: CrmTag[]) => void;
+  title?: string;
+  endpoint?: string;
+  intro?: string;
+  addLabel?: string;
+  placeholder?: string;
+}) {
   const [items, setItems] = useState<CrmTag[]>(tags);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +140,7 @@ export function TagManager({ tags, onClose, onSaved }: { tags: CrmTag[]; onClose
     setSaving(true);
     setError(null);
     try {
-      const d = await crmApi<{ items: CrmTag[] }>('/api/whatsapp/tags', { method: 'PUT', body: JSON.stringify({ items }) });
+      const d = await crmApi<{ items: CrmTag[] }>(endpoint, { method: 'PUT', body: JSON.stringify({ items }) });
       onSaved(d.items);
       onClose();
     } catch (e: any) {
@@ -131,9 +150,10 @@ export function TagManager({ tags, onClose, onSaved }: { tags: CrmTag[]; onClose
     }
   };
   return (
-    <Modal title="Etiquetas" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-        <p className="text-xs text-slate-500">Úsalas para ordenar los chats y filtrarlos. Si borras una, se quita de todas las conversaciones.</p>
+        <p className="text-xs text-slate-500">{intro}</p>
+        {items.length === 0 && <p className="text-xs text-slate-400">Aún no hay ninguno.</p>}
         {items.map((t, i) => (
           <div key={t.id || `new-${i}`} className="flex items-center gap-2">
             <select
@@ -151,6 +171,7 @@ export function TagManager({ tags, onClose, onSaved }: { tags: CrmTag[]; onClose
             <input
               value={t.name}
               maxLength={30}
+              placeholder={placeholder}
               onChange={(e) => set(i, { name: e.target.value })}
               className="flex-1 h-9 text-[13px] border border-slate-200 rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             />
@@ -166,7 +187,7 @@ export function TagManager({ tags, onClose, onSaved }: { tags: CrmTag[]; onClose
           onClick={() => setItems((prev) => [...prev, { id: '', name: '', color: 'blue' }])}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 pt-1"
         >
-          <Plus className="w-3.5 h-3.5" /> Nueva etiqueta
+          <Plus className="w-3.5 h-3.5" /> {addLabel}
         </button>
       </div>
       <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -279,7 +300,7 @@ export function QuickReplyManager({ replies, onClose, onSaved }: { replies: Quic
       setSaving(false);
     }
   };
-  const vars = useMemo(() => ['{nombre}', '{pedido}', '{producto}', '{total}', '{ciudad}', '{direccion}'], []);
+  const vars = useMemo(() => ['{nombre}', '{pedido}', '{producto}', '{total}', '{ciudad}', '{direccion}', '{transportadora}', '{guia}'], []);
   return (
     <Modal title="Respuestas rápidas" onClose={onClose}>
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
@@ -367,5 +388,104 @@ export function QuickReplyManager({ replies, onClose, onSaved }: { replies: Quic
         </button>
       </div>
     </Modal>
+  );
+}
+
+// ---------- team ----------
+
+export function AgentBadge({ agent, size = 'sm' }: { agent: CrmTag; size?: 'sm' | 'md' }) {
+  const c = TAG_COLORS[agent.color] || TAG_COLORS.slate;
+  const initials = agent.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('');
+  return (
+    <span
+      title={`Atiende: ${agent.name}`}
+      className={`inline-flex items-center justify-center rounded-full ring-1 ring-inset font-bold ${c.chip} ${size === 'sm' ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'}`}
+    >
+      {initials || '?'}
+    </span>
+  );
+}
+
+// Chat header: who handles this chat.
+export function AssignPicker({
+  agents,
+  assignee,
+  onChange,
+  onManage,
+}: {
+  agents: CrmTag[];
+  assignee: string | null;
+  onChange: (id: string | null) => Promise<void>;
+  onManage: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const current = agents.find((a) => a.id === assignee) || null;
+  const pick = async (id: string | null) => {
+    setBusy(true);
+    try {
+      await onChange(id);
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Asignar chat"
+        className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 max-w-[150px]"
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : current ? <AgentBadge agent={current} /> : <UserPlus className="w-3.5 h-3.5" />}
+        <span className="hidden sm:inline truncate">{current ? current.name : 'Asignar'}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-9 z-30 w-56 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5">
+          {agents.length === 0 ? (
+            <p className="text-xs text-slate-500 p-2">Agrega a las personas de tu equipo para repartir los chats.</p>
+          ) : (
+            <>
+              <button onClick={() => pick(null)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-600">
+                <span className="w-5 h-5 rounded-full border border-dashed border-slate-300" /> Sin asignar
+                {!assignee && <Check className="w-3.5 h-3.5 ml-auto text-slate-900" />}
+              </button>
+              {agents.map((a) => (
+                <button key={a.id} onClick={() => pick(a.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-800">
+                  <AgentBadge agent={a} /> <span className="truncate">{a.name}</span>
+                  {assignee === a.id && <Check className="w-3.5 h-3.5 ml-auto text-slate-900" />}
+                </button>
+              ))}
+            </>
+          )}
+          <button
+            onClick={() => {
+              setOpen(false);
+              onManage();
+            }}
+            className="w-full mt-1 border-t border-slate-100 flex items-center gap-2 px-2 pt-2 pb-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
+          >
+            <Settings2 className="w-3.5 h-3.5" /> Administrar equipo
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

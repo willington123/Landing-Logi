@@ -36,7 +36,7 @@ export function CustomerPanel({
   conversationId: string;
   order: OrderSummary | null;
   orderChip: (status: string) => React.ReactNode;
-  onOrderChanged: (a: OrderAction) => void;
+  onOrderChanged: (a: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => void;
 }) {
   const [history, setHistory] = useState<HistoryOrder[] | null>(null);
   const [notes, setNotes] = useState<Note[] | null>(null);
@@ -97,9 +97,9 @@ export function CustomerPanel({
           <OrderPanel
             order={order}
             chip={orderChip(order.status)}
-            onChanged={(a) => {
+            onChanged={(a, extra) => {
               loadHistory();
-              onOrderChanged(a);
+              onOrderChanged(a, extra);
             }}
           />
         ) : (

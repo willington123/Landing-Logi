@@ -4,6 +4,8 @@ import { normalizePhone } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendText, type InboundMessage } from '@/lib/server/whatsapp';
 import { dueWaFallbackOrders, findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
 import { getLandingInfo } from '@/lib/server/voice-store';
+import { autoSentRecently, getAutoSettings, noteAutoSent } from '@/lib/server/crm-store';
+import { fillQuickReply, isWorkingTime, matchRule } from '@/lib/crm';
 import type { OrderItem } from '@/lib/types';
 
 const firstName = (name: string) => (name || '').trim().split(/\s+/)[0] || 'cliente';
@@ -65,6 +67,27 @@ async function reply(phone: string, text: string, orderId?: string) {
   await recordOutbound({ phone, orderId, type: 'text', body: text, result });
 }
 
+const RULE_EVERY_MS = 24 * 3600 * 1000; // the same automatic answer at most once a day per customer
+const AWAY_EVERY_MS = 12 * 3600 * 1000; // the out-of-hours message at most once every 12 h
+
+// Keyword answers (e.g. "precio") and the out-of-hours message. Never repeats them to the same customer too often.
+export async function autoReply(m: InboundMessage) {
+  const cfg = await getAutoSettings();
+  const vars = { nombre: firstName(m.profileName || '').replace(/^cliente$/, '') };
+  const outbox: { key: string; text: string }[] = [];
+  const rule = m.type === 'text' ? matchRule(cfg.rules, m.text) : null;
+  if (rule && !(await autoSentRecently(m.from, `rule:${rule.id}`, RULE_EVERY_MS))) outbox.push({ key: `rule:${rule.id}`, text: fillQuickReply(rule.reply, vars) });
+  if (cfg.away.enabled && cfg.away.message && !isWorkingTime(cfg.away, cfg.timezone, new Date(m.timestamp)) && !(await autoSentRecently(m.from, 'away', AWAY_EVERY_MS)))
+    outbox.push({ key: 'away', text: fillQuickReply(cfg.away.message, vars) });
+  if (!outbox.length) return [];
+  for (const o of outbox) {
+    const result = await sendText(m.from, o.text);
+    await recordOutbound({ phone: m.from, type: 'auto', body: o.text, result, auto: true });
+  }
+  await noteAutoSent(m.from, outbox.map((o) => o.key));
+  return outbox.map((o) => o.key);
+}
+
 // Stores an incoming message and acts on "Confirmar pedido" / "Cancelar".
 export async function handleInbound(m: InboundMessage) {
   const { isNew } = await recordInbound(m);
@@ -82,7 +105,11 @@ export async function handleInbound(m: InboundMessage) {
     const named = await findOrderByNumber(m.orderNumber);
     if (named) await linkConversationOrder(m.from, named.id);
   }
-  if (!m.intent) return; // a normal chat message
+  if (!m.intent) {
+    // A normal chat message: answer it automatically if a rule or the out-of-hours message applies.
+    await autoReply(m).catch((e) => console.error('WhatsApp: respuesta automática falló', e));
+    return;
+  }
 
   const order = m.orderNumber ? await findOrderByNumber(m.orderNumber, true) : await findPendingOrder(m.from, m.orderId);
   if (!order) {
