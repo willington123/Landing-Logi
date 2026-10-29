@@ -155,6 +155,64 @@ const NAME_STATUS: Record<string, string> = {
 };
 const QUALITY: Record<string, string> = { GREEN: 'Alta', YELLOW: 'Media', RED: 'Baja', UNKNOWN: 'Sin datos' };
 
+interface WebhookHealth {
+  lastOkAt?: string;
+  lastMessages?: number;
+  lastStatuses?: number;
+  lastInvalidAt?: string;
+  lastErrorAt?: string;
+  lastError?: string;
+}
+
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return 'hace menos de un minuto';
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+};
+const newer = (a?: string, b?: string) => Boolean(a && (!b || new Date(a) > new Date(b)));
+
+// Tells whether Meta's notices (button taps, replies) reach the panel, and why not.
+function WebhookStatus({ h }: { h: WebhookHealth | null }) {
+  const box = 'text-xs rounded-lg p-2.5';
+  if (!h || (!h.lastOkAt && !h.lastInvalidAt)) {
+    return (
+      <p className={`${box} text-amber-800 bg-amber-50`}>
+        Todavía no ha llegado ningún aviso de Meta. Revisa en Meta → Webhooks que la URL esté guardada y verificada, que el campo <strong>messages</strong> esté
+        suscrito y que la app esté publicada.
+      </p>
+    );
+  }
+  if (newer(h.lastInvalidAt, h.lastOkAt)) {
+    return (
+      <p className={`${box} text-red-700 bg-red-50`}>
+        Meta envía avisos ({ago(h.lastInvalidAt!)}) pero se rechazan porque la firma no coincide. Pon en <strong>WHATSAPP_APP_SECRET</strong> la clave secreta de
+        la <strong>misma app</strong> donde configuraste el webhook (Configuración de la app → Básica) y vuelve a desplegar.
+      </p>
+    );
+  }
+  if (h.lastError && h.lastErrorAt && !newer(h.lastOkAt, h.lastErrorAt)) {
+    const missingTables = /wa_conversations|wa_messages|relation|does not exist|schema cache/i.test(h.lastError);
+    return (
+      <p className={`${box} text-red-700 bg-red-50`}>
+        El aviso llegó {ago(h.lastErrorAt)} pero falló al procesarse: {h.lastError}
+        {missingTables && (
+          <>
+            {' '}
+            → Ejecuta <strong>supabase/migrations/002_whatsapp.sql</strong> en Supabase (SQL Editor).
+          </>
+        )}
+      </p>
+    );
+  }
+  return (
+    <p className={`${box} text-emerald-700 bg-emerald-50`}>
+      Último aviso de Meta recibido {ago(h.lastOkAt!)} ({h.lastMessages || 0} mensajes, {h.lastStatuses || 0} estados). El webhook funciona.
+    </p>
+  );
+}
+
 // Number details from Meta and test messages (only once the token and number ID are set).
 function WhatsAppTester() {
   const [num, setNum] = useState<WaNumber | null | undefined>(undefined);
@@ -162,15 +220,20 @@ function WhatsAppTester() {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [health, setHealth] = useState<WebhookHealth | null>(null);
 
-  useEffect(() => {
+  const load = () =>
     fetch('/api/whatsapp/test', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         setNum(d.number || null);
         setNumError(d.error || null);
+        setHealth(d.webhook || null);
       })
       .catch(() => setNumError('No se pudo consultar a Meta.'));
+
+  useEffect(() => {
+    load();
   }, []);
 
   const send = async (kind: 'hello' | 'confirm') => {
@@ -180,7 +243,10 @@ function WhatsAppTester() {
       const res = await fetch('/api/whatsapp/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, kind }) });
       const d = await res.json();
       if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
-      setMsg({ ok: true, text: kind === 'hello' ? 'Enviado. Debe llegarte "Hello World" en unos segundos.' : 'Enviado. Toca un botón del mensaje: si el webhook funciona, recibirás una respuesta automática.' });
+      setMsg({
+        ok: true,
+        text: d.note || (kind === 'hello' ? 'Enviado. Debe llegarte "Hello World" en unos segundos.' : 'Enviado. Toca un botón del mensaje: si el webhook funciona, recibirás una respuesta automática.'),
+      });
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
     } finally {
@@ -222,6 +288,14 @@ function WhatsAppTester() {
         &quot;Probar conexión&quot; envía la plantilla hello_world de Meta. &quot;Probar mi plantilla&quot; envía tu plantilla de confirmación con datos de ejemplo; no cambia ningún pedido.
       </p>
       {msg && <p className={`text-xs rounded-lg p-2.5 ${msg.ok ? 'text-emerald-700 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{msg.text}</p>}
+
+      <div className="flex items-center justify-between pt-1">
+        <p className="text-xs font-semibold text-slate-700">Avisos de Meta (webhook)</p>
+        <button onClick={load} className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline underline-offset-2">
+          Actualizar
+        </button>
+      </div>
+      <WebhookStatus h={health} />
     </div>
   );
 }

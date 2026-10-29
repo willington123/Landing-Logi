@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { parseWebhook, verifySignature, verifyToken } from '@/lib/server/whatsapp';
 import { handleInbound } from '@/lib/server/wa-actions';
-import { applyStatus } from '@/lib/server/wa-store';
+import { applyStatus, noteWebhook } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
 // Incoming messages and delivery statuses. Only requests signed with the app secret are accepted.
 export async function POST(req: NextRequest) {
   const raw = await req.text();
-  if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
+  const signature = req.headers.get('x-hub-signature-256');
+  if (!verifySignature(raw, signature)) {
+    // Meta always signs; a signed notice that fails means WHATSAPP_APP_SECRET is wrong (shown in Integrations).
+    if (signature && cloudEnabled()) await noteWebhook({ lastInvalidAt: new Date().toISOString() });
     return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
   }
   let body: unknown;
@@ -32,7 +35,14 @@ export async function POST(req: NextRequest) {
   if (!cloudEnabled()) return NextResponse.json({ ok: true, stored: false, messages: messages.length, statuses: statuses.length });
 
   // Errors are logged, not returned: a non-200 makes Meta retry the same batch.
-  for (const m of messages) await handleInbound(m).catch((e) => console.error('WhatsApp webhook: mensaje', m.waMessageId, e));
-  for (const s of statuses) await applyStatus(s).catch((e) => console.error('WhatsApp webhook: estado', s.waMessageId, e));
+  let lastError: string | undefined;
+  const fail = (what: string, id: string) => (e: any) => {
+    console.error(`WhatsApp webhook: ${what}`, id, e);
+    lastError = e?.message || String(e);
+  };
+  for (const m of messages) await handleInbound(m).catch(fail('mensaje', m.waMessageId));
+  for (const s of statuses) await applyStatus(s).catch(fail('estado', s.waMessageId));
+  const now = new Date().toISOString();
+  await noteWebhook({ lastOkAt: now, lastMessages: messages.length, lastStatuses: statuses.length, ...(lastError ? { lastErrorAt: now, lastError: lastError.slice(0, 300) } : {}) });
   return NextResponse.json({ ok: true, messages: messages.length, statuses: statuses.length });
 }

@@ -207,3 +207,30 @@ export async function markConversationRead(id: string) {
 export async function linkConversationOrder(id: string, orderId: string) {
   await db().from('wa_conversations').update({ order_id: orderId }).eq('id', id);
 }
+
+// ---------- webhook health (shown in Integrations) ----------
+
+export interface WebhookHealth {
+  lastOkAt?: string; // last notice from Meta with a valid signature
+  lastMessages?: number;
+  lastStatuses?: number;
+  lastInvalidAt?: string; // last notice rejected because the signature didn't match WHATSAPP_APP_SECRET
+  lastErrorAt?: string;
+  lastError?: string; // last error while processing a valid notice (e.g. missing tables)
+}
+
+export async function noteWebhook(patch: WebhookHealth) {
+  try {
+    const { data } = await db().from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
+    await db().from('settings').upsert({ id: 'wa_webhook', data: { ...((data?.data as WebhookHealth) || {}), ...patch } });
+  } catch {
+    // Diagnostics must never break the webhook.
+  }
+}
+
+export async function getWebhookHealth(): Promise<WebhookHealth | null> {
+  const { data, error } = await db().from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.data as WebhookHealth) || null;
+}
+

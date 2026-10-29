@@ -3,16 +3,17 @@ import { cloudEnabled } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/phone';
 import { confirmTemplateEnabled, formatMoney, phoneNumberInfo, sendConfirmTemplate, sendHelloWorld, whatsappEnabled, whatsappStatus } from '@/lib/server/whatsapp';
 import { TEST_ORDER_ID } from '@/lib/server/wa-actions';
-import { recordOutbound } from '@/lib/server/wa-store';
+import { getWebhookHealth, recordOutbound } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
 
 // Admin: connection check (number details straight from Meta).
 export async function GET() {
   const status = whatsappStatus();
-  if (!whatsappEnabled()) return NextResponse.json({ success: true, status, number: null });
+  const webhook = cloudEnabled() ? await getWebhookHealth().catch(() => null) : null;
+  if (!whatsappEnabled()) return NextResponse.json({ success: true, status, number: null, webhook });
   const r = await phoneNumberInfo();
-  return NextResponse.json({ success: true, status, number: r.ok ? r.info : null, error: r.ok ? undefined : r.error });
+  return NextResponse.json({ success: true, status, number: r.ok ? r.info : null, error: r.ok ? undefined : r.error, webhook });
 }
 
 // Admin: send a test message. Body: { phone, kind: 'hello' | 'confirm' }.
@@ -32,6 +33,15 @@ export async function POST(req: NextRequest) {
   } else {
     result = await sendHelloWorld(to);
     body = 'Prueba: plantilla hello_world de Meta';
+  }
+  // New (non-test) WhatsApp accounts don't have Meta's sample "hello_world" template. If Meta got as far as
+  // looking for it, the token and the number work: report the connection as OK.
+  if (kind !== 'confirm' && !result.ok && /hello_world|does not exist|no existe/i.test(result.error || '')) {
+    return NextResponse.json({
+      success: true,
+      connectionOnly: true,
+      note: 'Conexión correcta: Meta reconoce tu token y tu número. Tu cuenta no tiene la plantilla de ejemplo "hello_world" (es normal en cuentas nuevas). Usa "Probar mi plantilla" cuando tu plantilla esté aprobada.',
+    });
   }
   if (cloudEnabled()) await recordOutbound({ phone: to, type: 'template', body, result }).catch(() => {});
   if (!result.ok) return NextResponse.json({ success: false, error: `Meta respondió: ${result.error}` }, { status: 502 });
