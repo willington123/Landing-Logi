@@ -48,6 +48,7 @@ const COLUMNS: (SheetColumn & { value: (o: OrderItem & { whatsapp?: { ok?: boole
   { header: 'Transportadora', width: 16, value: (o) => o.carrier || '' },
   { header: 'Guía', width: 18, value: (o) => o.trackingNumber || '' },
   { header: 'WhatsApp', width: 11, value: (o) => (o.whatsapp ? (o.whatsapp.ok ? 'Enviado' : 'Falló') : '') },
+  { header: 'Origen', width: 16, value: (o) => (o.source === 'whatsapp_bot' ? 'Asistente WhatsApp' : 'Landing') },
   { header: 'UTM source', width: 14, value: (o) => o.utmSource },
   { header: 'UTM campaign', width: 18, value: (o) => o.utmCampaign },
 ];

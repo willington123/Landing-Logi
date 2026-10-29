@@ -216,6 +216,7 @@ export interface OrderItem {
   notes?: string;
   paymentMethod: PaymentMethodType;
   status: OrderStatus;
+  source?: 'landing' | 'whatsapp_bot'; // where the order was taken (landing form by default)
   utmSource?: string;
   utmCampaign?: string;
   callTaskId?: string;

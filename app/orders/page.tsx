@@ -415,6 +415,12 @@ export default function OrdersPage() {
                 )}
               </div>
 
+              {selectedOrder.source === 'whatsapp_bot' && (
+                <p className="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                  ✨ Pedido tomado por el asistente de WhatsApp (el cliente confirmó el resumen en el chat).
+                </p>
+              )}
+
               {(selectedOrder.trackingNumber || selectedOrder.carrier) && (
                 <div className="p-3 rounded-xl bg-sky-50/60 border border-sky-100">
                   <span className="text-sky-800 text-xs font-semibold">Envío</span>
