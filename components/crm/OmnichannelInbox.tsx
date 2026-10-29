@@ -3,7 +3,7 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
@@ -12,7 +12,17 @@ import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
 
-type Conversation = WaConversation & { order: OrderSummary | null; tags?: string[]; assignee?: string | null };
+type Conversation = WaConversation & {
+  order: OrderSummary | null;
+  tags?: string[];
+  assignee?: string | null;
+  bot?: { paused: boolean; reason: string | null; note: string | null } | null;
+};
+interface BotInfo {
+  enabled: boolean;
+  mode: 'always' | 'away';
+  name: string;
+}
 type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
 const ME_KEY = 'lp_agent'; // who is using this browser (for "Míos")
 const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
@@ -154,6 +164,8 @@ export default function OmnichannelInbox() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [tags, setTags] = useState<CrmTag[]>([]);
   const [agents, setAgents] = useState<CrmTag[]>([]);
+  const [botInfo, setBotInfo] = useState<BotInfo | null>(null);
+  const [botBusy, setBotBusy] = useState(false);
   const [me, setMe] = useState('');
   const [replies, setReplies] = useState<QuickReply[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -188,7 +200,8 @@ export default function OmnichannelInbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: CrmTag[]; whatsapp: WaStatus }>('/api/whatsapp/conversations');
+      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: CrmTag[]; bot?: BotInfo; whatsapp: WaStatus }>('/api/whatsapp/conversations');
+      setBotInfo(d.bot || null);
       setConversations(d.conversations);
       if (d.tags) setTags(d.tags);
       if (d.agents) setAgents(d.agents);
@@ -206,7 +219,7 @@ export default function OmnichannelInbox() {
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, unread_count: c.unread_count } : c)));
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, bot: c.bot, unread_count: c.unread_count } : c)));
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
@@ -383,6 +396,18 @@ export default function OmnichannelInbox() {
 
   // ---------- tags and order actions ----------
 
+  const setBotPaused = async (paused: boolean) => {
+    if (!active) return;
+    const id = active.id;
+    setBotBusy(true);
+    try {
+      await crmApi(`/api/whatsapp/conversations/${id}/bot`, { method: 'POST', body: JSON.stringify({ action: paused ? 'pause' : 'resume' }) });
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: paused ? { paused: true, reason: 'human', note: null } : null } : c)));
+    } finally {
+      setBotBusy(false);
+    }
+  };
+
   const assign = async (agentId: string | null) => {
     if (!active) return;
     const id = active.id;
@@ -419,6 +444,10 @@ export default function OmnichannelInbox() {
       await api(`/api/whatsapp/conversations/${active.id}/messages`, { method: 'POST', body: JSON.stringify({ text: body }) });
       setText('');
       setQr({ open: false, slash: false, highlight: 0 });
+      if (botInfo?.enabled) {
+        const id = active.id;
+        setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: { paused: true, reason: 'human', note: null } } : c)));
+      }
       await loadMessages(active.id);
       loadConversations();
     } catch (e: any) {
@@ -670,6 +699,37 @@ export default function OmnichannelInbox() {
                 <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
               </div>
 
+              {botInfo?.enabled && (
+                <div
+                  className={`px-4 py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    {active.bot?.paused ? (
+                      <>
+                        <strong>{botInfo.name} está en pausa</strong> en este chat
+                        {active.bot.reason === 'handoff' ? ' — lo pasó a una persona' : active.bot.reason === 'limit' ? ' — llegó al límite del día' : ' — lo estás atendiendo tú'}
+                        {active.bot.reason === 'handoff' && active.bot.note ? `: ${active.bot.note}` : '.'}
+                      </>
+                    ) : (
+                      <>
+                        <strong>{botInfo.name}</strong> responde este chat{botInfo.mode === 'away' ? ' fuera de horario' : ''}. Si escribes tú, se pausa.
+                      </>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => setBotPaused(!active.bot?.paused)}
+                    disabled={botBusy}
+                    className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${
+                      active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'
+                    }`}
+                  >
+                    {botBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : active.bot?.paused ? <Sparkles className="w-3 h-3" /> : <Hand className="w-3 h-3" />}
+                    {active.bot?.paused ? 'Devolver al asistente' : 'Tomar el control'}
+                  </button>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 space-y-2">
                 {threadLoading && messages.length === 0 && (
                   <div className="flex justify-center py-6 text-slate-400">
@@ -685,6 +745,11 @@ export default function OmnichannelInbox() {
                     >
                       {m.type === 'template' && <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Plantilla</p>}
                       {m.type === 'auto' && <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5">Respuesta automática</p>}
+                      {m.type === 'bot' && (
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5 inline-flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> {botInfo?.name || 'Asistente'} · IA
+                        </p>
+                      )}
                       {m.media ? (
                         <div className="space-y-1">
                           <MediaView m={m} />

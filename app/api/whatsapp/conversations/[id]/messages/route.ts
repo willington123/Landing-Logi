@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { getConversationWithOrder, listMessages, recordOutbound } from '@/lib/server/wa-store';
 import { insideServiceWindow, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
+import { getBotSettings, setBotState } from '@/lib/server/bot';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const result = await sendText(params.id, body);
     await recordOutbound({ phone: params.id, type: 'text', body, result });
     if (!result.ok) return NextResponse.json({ success: false, error: `WhatsApp rechazó el mensaje: ${result.error}` }, { status: 502 });
+    // A person answered: the AI assistant stops answering this chat until it's handed back.
+    if ((await getBotSettings().catch(() => null))?.enabled) {
+      await setBotState(params.id, { paused: true, pausedAt: new Date().toISOString(), reason: 'human', note: undefined }).catch(() => {});
+    }
     return NextResponse.json({ success: true, messageId: result.messageId });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });

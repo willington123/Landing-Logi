@@ -5,6 +5,7 @@ import { handleInbound } from '@/lib/server/wa-actions';
 import { applyStatus, noteWebhook } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // the AI assistant answers right after the reply to Meta
 
 // Meta webhook verification: echo hub.challenge when the verify token matches.
 export async function GET(req: NextRequest) {
