@@ -180,7 +180,10 @@ function WhatsAppTester() {
       const res = await fetch('/api/whatsapp/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, kind }) });
       const d = await res.json();
       if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
-      setMsg({ ok: true, text: kind === 'hello' ? 'Enviado. Debe llegarte "Hello World" en unos segundos.' : 'Enviado. Toca un botón del mensaje: si el webhook funciona, recibirás una respuesta automática.' });
+      setMsg({
+        ok: true,
+        text: d.note || (kind === 'hello' ? 'Enviado. Debe llegarte "Hello World" en unos segundos.' : 'Enviado. Toca un botón del mensaje: si el webhook funciona, recibirás una respuesta automática.'),
+      });
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
     } finally {

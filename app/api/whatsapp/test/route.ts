@@ -33,6 +33,15 @@ export async function POST(req: NextRequest) {
     result = await sendHelloWorld(to);
     body = 'Prueba: plantilla hello_world de Meta';
   }
+  // New (non-test) WhatsApp accounts don't have Meta's sample "hello_world" template. If Meta got as far as
+  // looking for it, the token and the number work: report the connection as OK.
+  if (kind !== 'confirm' && !result.ok && /hello_world|does not exist|no existe/i.test(result.error || '')) {
+    return NextResponse.json({
+      success: true,
+      connectionOnly: true,
+      note: 'Conexión correcta: Meta reconoce tu token y tu número. Tu cuenta no tiene la plantilla de ejemplo "hello_world" (es normal en cuentas nuevas). Usa "Probar mi plantilla" cuando tu plantilla esté aprobada.',
+    });
+  }
   if (cloudEnabled()) await recordOutbound({ phone: to, type: 'template', body, result }).catch(() => {});
   if (!result.ok) return NextResponse.json({ success: false, error: `Meta respondió: ${result.error}` }, { status: 502 });
   return NextResponse.json({ success: true, messageId: result.messageId, to });
