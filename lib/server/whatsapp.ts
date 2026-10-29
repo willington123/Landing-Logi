@@ -125,6 +125,23 @@ export async function phoneNumberInfo(): Promise<{ ok: true; info: PhoneNumberIn
   }
 }
 
+// Downloads a file the customer sent (photo, voice note…). Meta's file URL needs the token and expires in minutes,
+// so the panel always goes through this with the media id.
+export async function fetchMedia(mediaId: string): Promise<{ ok: true; res: Response; mime: string } | { ok: false; status: number; error: string }> {
+  if (!whatsappEnabled()) return { ok: false, status: 503, error: 'WhatsApp no está configurado' };
+  try {
+    const auth = { Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` };
+    const meta = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, { headers: auth, signal: AbortSignal.timeout(8000), cache: 'no-store' });
+    const info = await meta.json().catch(() => ({}));
+    if (!meta.ok || !info?.url) return { ok: false, status: meta.status === 404 ? 404 : 502, error: info?.error?.message || 'El archivo ya no está disponible en WhatsApp.' };
+    const res = await fetch(info.url, { headers: auth, signal: AbortSignal.timeout(20000), cache: 'no-store' });
+    if (!res.ok || !res.body) return { ok: false, status: 502, error: `No se pudo descargar el archivo (HTTP ${res.status}).` };
+    return { ok: true, res, mime: info.mime_type || res.headers.get('content-type') || 'application/octet-stream' };
+  } catch (e: any) {
+    return { ok: false, status: 502, error: e?.name === 'TimeoutError' ? 'WhatsApp no respondió a tiempo' : e?.message || String(e) };
+  }
+}
+
 // ---------- webhook parsing ----------
 
 export type Intent = 'confirm' | 'cancel' | null;
