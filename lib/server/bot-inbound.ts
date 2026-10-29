@@ -71,6 +71,14 @@ async function answer(m: InboundMessage) {
   }
   state = await setBotState(m.from, { day, replies: replies + (run.reply ? 1 : 0), ...(run.handoff ? {} : { reason: undefined, note: undefined }) });
 
+  if (run.order) {
+    await addNote(m.from, `🛒 El asistente tomó el pedido ${run.order} (confirmado en el chat).`).catch(() => {});
+    if ((await getTags()).some((t) => t.id === 'confirmado')) {
+      const current = (await getConversationTags())[m.from] || [];
+      if (!current.includes('confirmado')) await setConversationTags(m.from, [...current, 'confirmado']).catch(() => {});
+    }
+  }
+
   if (run.handoff) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'handoff', note: run.handoff.motivo });
     await addNote(m.from, `🤖 El asistente pasó el chat a una persona: ${run.handoff.motivo}`).catch(() => {});

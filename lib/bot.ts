@@ -7,6 +7,7 @@ export interface BotSettings {
   formal: boolean; // usted instead of tú
   businessInfo: string; // shipping, payment, guarantee, returns, hours… written by the owner
   maxRepliesPerDay: number; // per customer; after that the chat goes to a person
+  takeOrders: boolean; // close the sale in the chat (creates the order) instead of sending the customer to the landing
 }
 
 export const DEFAULT_BOT: BotSettings = {
@@ -22,6 +23,7 @@ export const DEFAULT_BOT: BotSettings = {
     'Horario de atención de personas: lunes a sábado de 8 a. m. a 6 p. m.',
   ].join('\n'),
   maxRepliesPerDay: 30,
+  takeOrders: true,
 };
 
 export function cleanBot(input: any): BotSettings | string {
@@ -37,6 +39,7 @@ export function cleanBot(input: any): BotSettings | string {
     formal: Boolean(input?.formal),
     businessInfo,
     maxRepliesPerDay: Number.isFinite(max) ? Math.min(100, Math.max(5, max)) : DEFAULT_BOT.maxRepliesPerDay,
+    takeOrders: input?.takeOrders === undefined ? DEFAULT_BOT.takeOrders : Boolean(input.takeOrders),
   };
 }
 

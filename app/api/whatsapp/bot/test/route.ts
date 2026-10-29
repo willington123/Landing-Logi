@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       .map((h: any) => ({ direction: h?.direction === 'out' ? 'out' : 'in', text: String(h?.text ?? '').slice(0, 2000) }) as const);
     if (!history.length || history[history.length - 1].direction !== 'in') return NextResponse.json({ success: false, error: 'Escribe un mensaje como cliente.' }, { status: 400 });
     const phone = String(body.phone || '').replace(/\D/g, '').slice(0, 15) || '570000000000';
-    const run = await runBot({ settings, phone, customerName: 'Cliente de prueba', history });
+    const run = await runBot({ settings, phone, customerName: 'Cliente de prueba', history, dryRun: true });
     return NextResponse.json({ success: true, ...run });
   } catch (e: any) {
     if (e instanceof Anthropic.AuthenticationError) return NextResponse.json({ success: false, error: 'La clave ANTHROPIC_API_KEY no es válida.' }, { status: 502 });

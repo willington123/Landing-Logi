@@ -1,8 +1,10 @@
 // WhatsApp AI assistant built on Claude: answers customers with the store's information,
 // looks up their orders and hands the chat to a person when needed.
 import Anthropic from '@anthropic-ai/sdk';
-import { db, getSettings } from '@/lib/server/db';
-import { listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
+import { createOrder, db, getSettings } from '@/lib/server/db';
+import { linkConversationOrder, listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
+import { publicBaseUrl } from '@/lib/server/vapi';
+import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
 import { DEFAULT_BOT, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 
@@ -64,15 +66,19 @@ const STATUS_TEXT: Record<OrderStatus, string> = {
 
 const money = (v: number, currency = 'COP') => `$${Math.round(v || 0).toLocaleString('es-CO')} ${currency}`;
 
-function landingText(l: LandingPageConfig): string {
+function landingText(l: LandingPageConfig, base: string): string {
   const cur = l.currency || 'COP';
-  const lines = [`## ${l.productName}`];
+  const lines = [`## ${l.productName}`, `(landing_id para crear_pedido: ${l.id}; país: ${l.country || 'Colombia'}${base ? `; página con fotos: ${base}/p/${l.slug}` : ''})`];
   if (l.headline) lines.push(l.headline);
   if (l.subheadline) lines.push(l.subheadline);
   const combos = (l.combos || []).filter((c) => c.promoPrice > 0);
   if (combos.length) {
     lines.push('Ofertas (precio final, pago contraentrega):');
-    for (const c of combos) lines.push(`- ${c.name} (${c.units} ${c.units === 1 ? 'unidad' : 'unidades'}): ${money(c.promoPrice, cur)}${c.regularPrice > c.promoPrice ? ` (antes ${money(c.regularPrice, cur)})` : ''}`);
+    const recommended = combos.find((c) => c.isDefault) || combos.find((c) => c.isPopular);
+    for (const c of combos)
+      lines.push(
+        `- ${c.name} (${c.units} ${c.units === 1 ? 'unidad' : 'unidades'}): ${money(c.promoPrice, cur)}${c.regularPrice > c.promoPrice ? ` (antes ${money(c.regularPrice, cur)})` : ''}${c.savingsText ? ` - ${c.savingsText}` : ''}${c === recommended ? ' ← la más elegida' : ''}`,
+      );
   } else if (l.promoPrice) lines.push(`Precio: ${money(l.promoPrice, cur)}`);
   const benefits = (l.benefits || []).filter((b) => b.title);
   if (benefits.length) lines.push('Beneficios:', ...benefits.map((b) => `- ${b.title}${b.description ? `: ${b.description}` : ''}`));
@@ -85,33 +91,51 @@ function landingText(l: LandingPageConfig): string {
   return lines.join('\n');
 }
 
-async function storeKnowledge(): Promise<{ storeName: string; products: string }> {
+async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
   const [{ data }, settings] = await Promise.all([
     db().from('landings').select('data, published').order('updated_at', { ascending: false }).limit(20),
     getSettings<{ storeName?: string }>().catch(() => null),
   ]);
   const landings = (data || []).filter((r: any) => r.published !== false).map((r: any) => r.data as LandingPageConfig);
+  const base = publicBaseUrl();
   return {
     storeName: settings?.storeName?.trim() || 'nuestra tienda',
-    products: landings.length ? landings.map(landingText).join('\n\n') : '(No hay productos publicados todavía.)',
+    products: landings.length ? landings.map((l) => landingText(l, base)).join('\n\n') : '(No hay productos publicados todavía.)',
+    landings,
   };
 }
 
 function systemPrompt(s: BotSettings, k: { storeName: string; products: string }): string {
-  return `Eres ${s.name}, asesora de servicio al cliente de ${k.storeName}, una tienda en línea que vende con pago contraentrega. Atiendes a los clientes por WhatsApp.
+  const sell = s.takeOrders
+    ? `Tu objetivo principal es vender: llevar cada conversación hasta un pedido confirmado aquí mismo en el chat, sin mandar al cliente a otra página.
+
+Cómo cierras la venta:
+1. Entiende qué busca y resuelve sus dudas en pocas palabras, conectando los beneficios del producto con lo que te dice.
+2. Recomienda una oferta concreta (normalmente la marcada como "la más elegida", o la que mejor le sirve) con su precio final. Si es natural, menciona una sola vez el ahorro de llevar más unidades.
+3. Resuelve objeciones con hechos reales: pago contraentrega (paga al recibir, sin riesgo), envío, garantía.
+4. En cuanto muestre interés ("me interesa", "lo quiero", "cómo compro", pregunta por envío a su ciudad…), pide los datos del envío en un solo mensaje corto: nombre y apellido; celular (puede ser este mismo WhatsApp); departamento y ciudad; dirección completa con tipo de vía (calle, carrera, avenida, transversal, diagonal…), números y barrio, y si aplica apartamento o casa. Luego pide solo lo que falte o esté incompleto.
+5. Con todo listo, muéstrale un resumen corto (producto y oferta, total a pagar al recibir, nombre, ciudad y dirección) y pregúntale si confirmas el pedido.
+6. Solo cuando diga que sí, usa crear_pedido con cliente_confirmo = true. Si la herramienta devuelve un error de datos, pídele al cliente exactamente lo que falta.
+7. Cuando el pedido quede creado, dale el número de pedido, cuándo le llega y recuérdale tener el dinero listo para pagar al recibir. Agradécele.
+- Si el cliente quiere ver fotos o más detalles, puedes compartir el enlace de la página del producto, pero sigue tomando el pedido aquí.
+- Nunca inventes urgencia, descuentos, stock limitado ni regalos que no estén en la información. No presiones: si el cliente no quiere, despídete con amabilidad.
+- No crees dos pedidos para lo mismo. Si ya hizo un pedido y quiere otro producto o más unidades, confírmalo antes de crearlo.`
+    : `- Si el cliente quiere comprar, invítalo a hacer el pedido desde la página del producto (ahí elige la oferta y deja sus datos).`;
+
+  return `Eres ${s.name}, asesora de ventas y servicio al cliente de ${k.storeName}, una tienda en línea que vende con pago contraentrega. Atiendes a los clientes por WhatsApp.
 
 Cómo escribes:
-- En español, ${s.formal ? 'tratando al cliente de usted' : 'tuteando al cliente'}, con calidez y de forma breve: mensajes cortos como en WhatsApp (1 a 4 frases), sin listas largas ni formato de documento. Puedes usar algún emoji con moderación.
+- En español, ${s.formal ? 'tratando al cliente de usted' : 'tuteando al cliente'}, con calidez y de forma breve: mensajes cortos como en WhatsApp (1 a 4 frases), sin formato de documento. Puedes usar algún emoji con moderación.
 - Una sola respuesta por mensaje del cliente. Si el cliente mandó varios mensajes seguidos, respóndelos juntos.
 
-Qué puedes hacer:
-- Resolver dudas sobre los productos, precios, ofertas, envío, pago y garantía usando solo la información de abajo.
-- Consultar los pedidos de este cliente con la herramienta consultar_pedidos (solo ve los pedidos hechos con su número de WhatsApp) y decirle en qué estado van, y el número de guía si ya fue despachado.
-- Si el cliente quiere comprar, invítalo a hacer el pedido desde la página del producto (ahí elige la oferta y deja sus datos).
+${sell}
+
+También puedes:
+- Consultar los pedidos de este cliente con consultar_pedidos (solo los hechos con su número de WhatsApp) y decirle en qué estado van y el número de guía si ya fue despachado.
 
 Reglas importantes:
-- Nunca inventes precios, ofertas, tiempos, políticas ni datos de pedidos. Si algo no está en la información de abajo o en lo que devuelven las herramientas, dile que lo vas a consultar con el equipo y usa pasar_a_humano.
-- Usa pasar_a_humano cuando: el cliente pida hablar con una persona; tenga un reclamo, esté molesto o el producto llegó mal; quiera cancelar, cambiar la dirección o modificar un pedido; pida algo que no puedes resolver; o hable de pagos por adelantado, devoluciones de dinero o temas legales. Después de usarla, despídete diciendo que una persona del equipo le escribirá pronto por este mismo chat.
+- Nunca inventes precios, ofertas, tiempos, políticas ni datos de pedidos. Los precios son solo los de la sección Productos. Si algo no está en la información de abajo o en lo que devuelven las herramientas, dile que lo vas a consultar con el equipo y usa pasar_a_humano.
+- Usa pasar_a_humano cuando: el cliente pida hablar con una persona; tenga un reclamo, esté molesto o el producto llegó mal; quiera cancelar, cambiar la dirección o modificar un pedido ya hecho; pida algo que no puedes resolver; o hable de pagos por adelantado, devoluciones de dinero o temas legales. Después de usarla, despídete diciendo que una persona del equipo le escribirá pronto por este mismo chat.
 - No pidas datos sensibles (cédula, tarjetas, contraseñas). No compartas datos de otros clientes.
 - Si escriben algo que no tiene que ver con la tienda, responde con amabilidad y vuelve al tema.
 - No menciones que eres una inteligencia artificial salvo que te lo pregunten; si te lo preguntan, dilo con naturalidad.
@@ -124,6 +148,31 @@ ${k.products}`;
 }
 
 // ---------- tools ----------
+
+const CREATE_ORDER_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'crear_pedido',
+  description:
+    'Crea el pedido contraentrega del cliente con la oferta elegida. Úsala solo después de mostrarle el resumen y que el cliente confirme. El precio lo pone la tienda según la oferta (no lo envíes). Si falta o está mal algún dato, devuelve un error que dice qué pedirle al cliente.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      landing_id: { type: 'string', description: 'landing_id del producto (aparece en la sección Productos).' },
+      unidades: { type: 'integer', description: 'Unidades de la oferta elegida (la oferta se identifica por sus unidades).' },
+      nombre: { type: 'string', description: 'Nombre y apellido del cliente.' },
+      celular: { type: 'string', description: 'Celular de contacto para la entrega (puede ser el mismo WhatsApp).' },
+      departamento: { type: 'string' },
+      ciudad: { type: 'string', description: 'Ciudad o municipio.' },
+      direccion: { type: 'string', description: 'Dirección con tipo de vía y números, ej. "Calle 45A # 10-20". Para zonas rurales: vereda, finca o kilómetro.' },
+      barrio: { type: 'string' },
+      complemento: { type: 'string', description: 'Apartamento, torre, casa, conjunto o punto de referencia. Vacío si no aplica.' },
+      notas: { type: 'string', description: 'Indicaciones para la entrega que dio el cliente. Vacío si no hay.' },
+      cliente_confirmo: { type: 'boolean', description: 'true solo si el cliente confirmó el resumen del pedido.' },
+    },
+    required: ['landing_id', 'unidades', 'nombre', 'celular', 'departamento', 'ciudad', 'direccion', 'barrio', 'complemento', 'notas', 'cliente_confirmo'],
+    additionalProperties: false,
+  },
+  strict: true,
+};
 
 const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
@@ -169,6 +218,96 @@ async function ordersFor(phone: string) {
     }));
 }
 
+// ---------- taking the order in the chat ----------
+
+const STREET_RE = new RegExp(`\\b(${[...STREET_TYPES, 'cl', 'cll', 'cra', 'kr', 'kra', 'cr', 'av', 'ak', 'ac', 'tv', 'trans', 'dg', 'diag', 'cir', 'via', 'vía', 'manzana', 'mz', 'km', 'kilometro', 'kilómetro', 'vereda', 'finca', 'sector', 'lote'].map((t) => t.toLowerCase().replace(/ /g, '\\s+')).join('|')})(?=[^a-zñáéíóú]|$)`, 'i');
+
+interface CreateOrderInput {
+  landing_id: string;
+  unidades: number;
+  nombre: string;
+  celular: string;
+  departamento: string;
+  ciudad: string;
+  direccion: string;
+  barrio: string;
+  complemento: string;
+  notas: string;
+  cliente_confirmo: boolean;
+}
+
+const clean = (v: unknown, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+// Validates like the landing form, prices from the landing, and creates the order already confirmed.
+async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; landings: LandingPageConfig[]; dryRun: boolean }) {
+  if (!input.cliente_confirmo) return { error: 'Antes de crear el pedido muéstrale el resumen y espera a que el cliente confirme.' };
+  const landing = ctx.landings.find((l) => l.id === input.landing_id);
+  if (!landing) return { error: 'landing_id no existe. Usa uno de la sección Productos.' };
+  const combos = (landing.combos || []).filter((c) => c.promoPrice > 0);
+  const combo = combos.find((c) => c.units === Number(input.unidades));
+  if (!combo) return { error: `Esa oferta no existe. Ofertas disponibles: ${combos.map((c) => `${c.units} unidades`).join(', ')}.` };
+  const country = landing.country || 'Colombia';
+  const name = clean(input.nombre, 120);
+  const phoneError = validatePhone(input.celular, country);
+  const address = clean(input.direccion, 160);
+  const neighborhood = clean(input.barrio, 60).replace(/^barrio\s+/i, '');
+  const city = clean(input.ciudad, 80);
+  const missing: string[] = [];
+  const nameError = validateName(name);
+  if (nameError) missing.push('nombre y apellido');
+  if (phoneError) missing.push(`celular (${phoneError})`);
+  if (city.length < 2) missing.push('ciudad o municipio');
+  if (country === 'Colombia') {
+    if (!clean(input.departamento)) missing.push('departamento');
+    if (!STREET_RE.test(address) || !/\d/.test(address) || address.length < 6)
+      missing.push('dirección completa con tipo de vía (calle, carrera, avenida…) y números, ej. Calle 45A # 10-20');
+    if (neighborhood.length < 3 && !/vereda|finca|km|kil[oó]metro/i.test(address)) missing.push('barrio');
+  } else if (address.length < 8) missing.push('dirección completa');
+  if (missing.length) return { error: `Faltan o están incompletos estos datos: ${missing.join('; ')}. Pídeselos al cliente.` };
+
+  const fullAddress = [address, clean(input.complemento, 80), neighborhood ? `Barrio ${neighborhood}` : ''].filter(Boolean).join(', ');
+  const phone = localPhoneDigits(input.celular, country);
+  const total = combo.promoPrice;
+  const summary = { producto: landing.productName, oferta: combo.name, unidades: combo.units, total: money(total, landing.currency || 'COP'), direccion: `${fullAddress}, ${city}` };
+  if (ctx.dryRun) return { ok: true, pedido: 'LP-PRUEBA', ...summary, nota: 'Simulador: no se creó ningún pedido real.' };
+
+  // Same customer, same product and offer in the last 30 minutes: it's the same order.
+  const { data: recent } = await db().from('orders').select('data').gte('created_at', new Date(Date.now() - 30 * 60000).toISOString()).limit(50);
+  const dup = (recent || [])
+    .map((r) => r.data as OrderItem)
+    .find((o) => o.source === 'whatsapp_bot' && o.landingPageId === landing.id && o.units === combo.units && samePhone(o, ctx.phone));
+  if (dup) return { ok: true, pedido: dup.orderNumber, ...summary, nota: 'Este pedido ya estaba creado; no se creó otro.' };
+
+  const now = new Date().toISOString();
+  const order: OrderItem = {
+    id: `ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    orderNumber: `LP-${Math.floor(10000 + Math.random() * 90000)}`,
+    landingPageId: landing.id,
+    productName: landing.productName,
+    comboName: combo.name,
+    units: combo.units,
+    totalAmount: total,
+    customerName: name,
+    phone,
+    department: clean(input.departamento, 80),
+    city,
+    address: fullAddress,
+    notes: clean(input.notas, 300),
+    paymentMethod: 'cash_on_delivery',
+    status: 'confirmed_by_voice', // the customer confirmed the summary in the chat
+    confirmedAt: now,
+    confirmedVia: 'whatsapp',
+    whatsappFrom: ctx.phone,
+    source: 'whatsapp_bot',
+    utmSource: 'whatsapp',
+    utmCampaign: 'asistente-ia',
+    createdAt: now,
+  };
+  await createOrder(order);
+  await linkConversationOrder(ctx.phone, order.id).catch(() => {});
+  return { ok: true, pedido: order.orderNumber, ...summary };
+}
+
 // ---------- the conversation ----------
 
 const MEDIA: Record<string, string> = { image: 'una foto', audio: 'una nota de voz', video: 'un video', document: 'un documento', sticker: 'un sticker' };
@@ -201,6 +340,7 @@ export interface BotRun {
   handoff: { motivo: string; tipo: string } | null;
   toolCalls: { name: string; input: unknown; result: unknown }[];
   refused?: boolean;
+  order?: string; // order number created in this run
   usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
@@ -210,6 +350,7 @@ export async function runBot(opts: {
   phone: string; // customer's WhatsApp (digits) for the order lookup
   customerName?: string | null;
   history: { direction: 'in' | 'out'; text: string }[];
+  dryRun?: boolean; // simulator: never creates orders
 }): Promise<BotRun> {
   const knowledge = await storeKnowledge();
   const messages = toMessages(opts.history);
@@ -231,7 +372,7 @@ export async function runBot(opts: {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default', // if the model declines, Anthropic retries on its recommended fallback model
       system,
-      tools: TOOLS,
+      tools: opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS,
       messages,
     });
     run.usage.input += response.usage.input_tokens || 0;
@@ -267,6 +408,9 @@ export async function runBot(opts: {
         if (t.name === 'consultar_pedidos') {
           const orders = await ordersFor(opts.phone);
           result = orders.length ? { pedidos: orders } : { pedidos: [], nota: 'No hay pedidos con este número de WhatsApp. Puede que el cliente haya usado otro número en el formulario: pídele el número del pedido (empieza por LP-) o pásalo a una persona.' };
+        } else if (t.name === 'crear_pedido' && opts.settings.takeOrders) {
+          result = await createBotOrder(t.input as CreateOrderInput, { phone: opts.phone, landings: knowledge.landings, dryRun: Boolean(opts.dryRun) });
+          if ((result as any).ok && !opts.dryRun) run.order = String((result as any).pedido);
         } else if (t.name === 'pasar_a_humano') {
           const input = (t.input || {}) as { motivo?: string; tipo?: string };
           run.handoff = { motivo: String(input.motivo || '').slice(0, 300) || 'Sin detalle', tipo: String(input.tipo || 'otro') };

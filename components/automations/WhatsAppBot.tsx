@@ -99,6 +99,12 @@ export default function WhatsAppBot() {
       for (const t of d.toolCalls || []) {
         if (t.name === 'consultar_pedidos') notes.push(`🔎 Consultó los pedidos del cliente (${t.result?.pedidos?.length ?? 0} encontrados)`);
         if (t.name === 'pasar_a_humano') notes.push(`👤 Pasó el chat a una persona: ${t.input?.motivo || ''}`);
+        if (t.name === 'crear_pedido')
+          notes.push(
+            t.result?.ok
+              ? `🛒 Tomó el pedido: ${t.result.oferta} · ${t.result.total} · ${t.result.direccion} (simulación: no se creó)`
+              : `📝 Faltaban datos: ${String(t.result?.error || '').replace(/ Pídeselos al cliente\.?/, '')}`,
+          );
       }
       if (d.refused) notes.push('⚠️ El asistente no quiso responder este mensaje: pasaría a una persona.');
       setCost((c) => c + usd(d.usage));
@@ -183,6 +189,16 @@ export default function WhatsAppBot() {
                 />
               </label>
             </div>
+            <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 cursor-pointer">
+              <Toggle on={cfg.takeOrders} onChange={(v) => set({ takeOrders: v })} label="Tomar pedidos en el chat" />
+              <span>
+                <span className="block text-[13px] font-semibold text-slate-900">Cerrar la venta en el chat</span>
+                <span className="block text-[11px] text-slate-600">
+                  Recomienda la oferta, resuelve objeciones, pide los datos de envío (con la dirección completa), confirma el resumen y crea el pedido ya confirmado en Pedidos. Si lo
+                  apagas, manda al cliente a comprar en la landing.
+                </span>
+              </span>
+            </label>
             {cfg.mode === 'away' && <p className="text-[11px] text-slate-500">Usa el horario del “Mensaje fuera de horario” de abajo. En horario de atención responden las personas.</p>}
             <label className="block">
               <span className="text-xs font-medium text-slate-600">Información del negocio</span>
@@ -233,7 +249,7 @@ export default function WhatsAppBot() {
               {sim.length === 0 && (
                 <div className="text-center text-xs text-slate-500 mt-10 space-y-1.5">
                   <p>Prueba preguntas como:</p>
-                  {['¿Cuánto cuesta?', '¿Hacen envíos a Pasto?', '¿Ya despacharon mi pedido?', 'Me llegó dañado, quiero hablar con alguien'].map((q) => (
+                  {['¿Cuánto cuesta?', 'Lo quiero, ¿cómo hago el pedido?', '¿Ya despacharon mi pedido?', 'Me llegó dañado, quiero hablar con alguien'].map((q) => (
                     <button key={q} onClick={() => setDraft(q)} className="block mx-auto px-3 py-1 rounded-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700">
                       {q}
                     </button>

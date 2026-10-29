@@ -202,6 +202,7 @@ En **Automatizaciones → Asistente de WhatsApp con IA** activas un asistente (C
 1. Crea una clave en **console.anthropic.com → API Keys** y agrégala en Vercel como `ANTHROPIC_API_KEY`. Redeploy.
 2. Escribe la información del negocio y pruébalo en el simulador de la misma tarjeta (no envía nada por WhatsApp).
 3. Actívalo. Puede responder siempre o solo fuera de horario (el horario de *Respuestas automáticas*).
+- **Cerrar la venta en el chat** (activado por defecto): recomienda la oferta, resuelve objeciones, pide los datos de envío (valida celular y dirección con tipo de vía, números y barrio, como el formulario de la landing), muestra el resumen y, cuando el cliente confirma, crea el pedido **ya confirmado** en Pedidos (origen *Asistente WhatsApp*, campaña `asistente-ia`). El precio sale siempre de la oferta de la landing. Si lo apagas, manda al cliente a comprar en la landing.
 - Si una persona responde un chat desde **Mensajes**, el asistente se calla en ese chat; se devuelve con **Devolver al asistente**.
 - Espera unos segundos antes de responder, para contestar varios mensajes seguidos juntos. Tiene un límite de respuestas por cliente al día.
 - Se cobra por uso en tu cuenta de Anthropic (el simulador muestra el costo aproximado de cada prueba).
