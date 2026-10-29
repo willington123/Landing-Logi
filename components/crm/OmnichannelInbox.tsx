@@ -3,11 +3,23 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Loader2, MessageSquare, Package, Search, Send, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Loader2, MessageSquare, Package, Search, Send, X, Zap } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
+import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
+import { QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
+import { OrderPanel, type OrderAction } from '@/components/crm/OrderPanel';
 
-type Conversation = WaConversation & { order: OrderSummary | null };
+type Conversation = WaConversation & { order: OrderSummary | null; tags?: string[] };
+type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed';
+const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
+
+// The customer wrote last and nobody has answered yet.
+const isUnanswered = (c: Conversation) => Boolean(c.last_inbound_at && (!c.last_message_at || c.last_inbound_at >= c.last_message_at));
+const waitingFor = (iso: string) => {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  return m < 1 ? 'ahora' : m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h` : `${Math.floor(m / 1440)} d`;
+};
 interface WaStatus {
   sending: boolean;
   confirmTemplate: boolean;
@@ -30,6 +42,8 @@ const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   pending_call: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
   retry_scheduled: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
   needs_review: { label: 'Revisar', cls: 'bg-blue-50 text-blue-700 ring-blue-600/15' },
+  unanswered: { label: 'No contesta', cls: 'bg-orange-50 text-orange-700 ring-orange-600/15' },
+  calling: { label: 'Llamando', cls: 'bg-violet-50 text-violet-700 ring-violet-600/15' },
   confirmed_by_voice: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15' },
   cancelled: { label: 'Cancelado', cls: 'bg-slate-100 text-slate-600 ring-slate-500/15' },
   shipped: { label: 'En camino', cls: 'bg-sky-50 text-sky-700 ring-sky-600/15' },
@@ -79,6 +93,15 @@ export default function OmnichannelInbox() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [tags, setTags] = useState<CrmTag[]>([]);
+  const [replies, setReplies] = useState<QuickReply[]>([]);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [tagFilter, setTagFilter] = useState('');
+  const [manage, setManage] = useState<'tags' | 'replies' | null>(null);
+  // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
+  const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
+  const [orderOpen, setOrderOpen] = useState(false); // order drawer on small screens
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
@@ -89,8 +112,9 @@ export default function OmnichannelInbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const d = await api<{ conversations: Conversation[]; whatsapp: WaStatus }>('/api/whatsapp/conversations');
+      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; whatsapp: WaStatus }>('/api/whatsapp/conversations');
       setConversations(d.conversations);
+      if (d.tags) setTags(d.tags);
       setWa(d.whatsapp);
       setListError(null);
     } catch (e: any) {
@@ -105,7 +129,7 @@ export default function OmnichannelInbox() {
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, unread_count: c.unread_count } : c)));
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, unread_count: c.unread_count } : c)));
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
@@ -128,9 +152,18 @@ export default function OmnichannelInbox() {
   }, [cloud, loadConversations, loadMessages]);
 
   useEffect(() => {
+    if (!cloud) return;
+    crmApi<{ items: QuickReply[] }>('/api/whatsapp/quick-replies')
+      .then((d) => setReplies(d.items))
+      .catch(() => {});
+  }, [cloud]);
+
+  useEffect(() => {
     setMessages([]);
     setSendError(null);
     setText('');
+    setQr({ open: false, slash: false, highlight: 0 });
+    setOrderOpen(false);
     if (!activeId) return;
     setThreadLoading(true);
     loadMessages(activeId).finally(() => setThreadLoading(false));
@@ -140,14 +173,120 @@ export default function OmnichannelInbox() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Grow the reply box with its text (up to ~6 lines).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
   const active = conversations.find((c) => c.id === activeId) || null;
   const canReply = Boolean(active?.last_inbound_at && Date.now() - new Date(active.last_inbound_at).getTime() < WINDOW_MS);
 
+  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags]);
+  const counts = useMemo(
+    () => ({
+      unread: conversations.filter((c) => c.unread_count > 0).length,
+      unanswered: conversations.filter(isUnanswered).length,
+      pending: conversations.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
+      confirmed: conversations.filter((c) => c.order?.status === 'confirmed_by_voice').length,
+    }),
+    [conversations],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter((c) => [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName].some((v) => v?.toLowerCase().includes(q)));
-  }, [conversations, search]);
+    return conversations.filter((c) => {
+      if (filter === 'unread' && !(c.unread_count > 0)) return false;
+      if (filter === 'unanswered' && !isUnanswered(c)) return false;
+      if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
+      if (filter === 'confirmed' && c.order?.status !== 'confirmed_by_voice') return false;
+      if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
+      if (!q) return true;
+      const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
+      return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
+    });
+  }, [conversations, search, filter, tagFilter, tagById]);
+
+  // ---------- quick replies ----------
+
+  const replyVars = (c: Conversation | null) => {
+    const o = c?.order;
+    return {
+      nombre: ((o?.customerName || c?.name || '').trim().split(/\s+/)[0] || '').replace(/^./, (x) => x.toUpperCase()),
+      pedido: o?.orderNumber || '',
+      producto: o ? [o.productName, o.comboName].filter(Boolean).join(' - ') : '',
+      total: o ? money(o.totalAmount) : '',
+      ciudad: o?.city || '',
+      direccion: o?.address || '',
+    };
+  };
+  const fillReply = (r: QuickReply) => fillQuickReply(r.body, replyVars(active));
+  const slashQuery = qr.slash ? (/^\/(\S*)$/.exec(text)?.[1] ?? '') : '';
+  const menuList = qr.open ? matchReplies(replies, slashQuery) : [];
+
+  const pickReply = (r: QuickReply) => {
+    const body = fillReply(r);
+    // "/atajo" is replaced; with ⚡ the reply is added after what is already written.
+    setText((cur) => (qr.slash || !cur.trim() ? body : `${cur.replace(/\s+$/, '')}\n${body}`));
+    setQr({ open: false, slash: false, highlight: 0 });
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  };
+
+  const onTextChange = (v: string) => {
+    setText(v);
+    if (/^\/\S*$/.test(v)) setQr({ open: true, slash: true, highlight: 0 });
+    else if (qr.slash) setQr({ open: false, slash: false, highlight: 0 });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (qr.open && menuList.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = menuList.length;
+        setQr((s) => ({ ...s, highlight: (s.highlight + (e.key === 'ArrowDown' ? 1 : n - 1)) % n }));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pickReply(menuList[Math.min(qr.highlight, menuList.length - 1)]);
+        return;
+      }
+    }
+    if (qr.open && e.key === 'Escape') {
+      e.preventDefault();
+      setQr({ open: false, slash: false, highlight: 0 });
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // ---------- tags and order actions ----------
+
+  const saveConvTags = async (ids: string[]) => {
+    if (!active) return;
+    const id = active.id;
+    const d = await crmApi<{ tags: string[] }>(`/api/whatsapp/conversations/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tags: ids }) });
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, tags: d.tags } : c)));
+  };
+
+  const onOrderChanged = async (action: OrderAction) => {
+    await loadConversations();
+    // After shipping, leave the "despachado" message ready to send (the user still reviews and sends it).
+    if (action === 'shipped' && canReply && !text.trim()) {
+      const r = replies.find((x) => x.shortcut === 'envio');
+      if (r) setText(fillReply(r));
+    }
+  };
 
   const handleSend = async () => {
     const body = text.trim();
@@ -157,6 +296,7 @@ export default function OmnichannelInbox() {
     try {
       await api(`/api/whatsapp/conversations/${active.id}/messages`, { method: 'POST', body: JSON.stringify({ text: body }) });
       setText('');
+      setQr({ open: false, slash: false, highlight: 0 });
       await loadMessages(active.id);
       loadConversations();
     } catch (e: any) {
@@ -232,13 +372,59 @@ export default function OmnichannelInbox() {
                 </button>
               )}
             </div>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Todos', null],
+                  ['unread', 'Sin leer', counts.unread],
+                  ['unanswered', 'Sin responder', counts.unanswered],
+                  ['pending', 'Pendientes', counts.pending],
+                  ['confirmed', 'Confirmados', counts.confirmed],
+                ] as [Filter, string, number | null][]
+              ).map(([k, label, n]) => (
+                <button
+                  key={k}
+                  onClick={() => setFilter(k)}
+                  className={`h-7 px-2.5 rounded-full text-[11px] font-medium inline-flex items-center gap-1 transition ${
+                    filter === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {label}
+                  {n ? <span className={`text-[10px] font-bold ${filter === k ? 'text-white/80' : k === 'unanswered' ? 'text-red-600' : 'text-slate-500'}`}>{n}</span> : null}
+                </button>
+              ))}
+            </div>
+            {tags.length > 0 && (
+              <div className="mt-2 flex items-center gap-2">
+                <select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  className="flex-1 h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700"
+                  aria-label="Filtrar por etiqueta"
+                >
+                  <option value="">Todas las etiquetas</option>
+                  {tags.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => setManage('tags')} className="text-[11px] font-medium text-slate-500 hover:text-slate-800 whitespace-nowrap">
+                  Editar etiquetas
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {listError && <p className="m-3 text-xs text-red-600 bg-red-50 rounded-xl p-3">No se pudieron cargar las conversaciones: {listError}</p>}
             {!listError && filtered.length === 0 && (
               <div className="p-6 text-center text-[13px] text-slate-500">
-                {conversations.length === 0 ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.' : 'Sin resultados.'}
+                {conversations.length === 0
+                  ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
+                  : filter === 'unanswered' && !search && !tagFilter
+                    ? '¡Al día! No hay chats esperando respuesta.'
+                    : 'Sin resultados.'}
               </div>
             )}
             {filtered.map((c) => (
@@ -259,10 +445,20 @@ export default function OmnichannelInbox() {
                     <span className="text-xs text-slate-500 truncate">{c.last_message || ''}</span>
                     {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center">{c.unread_count}</span>}
                   </div>
-                  {c.order && (
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                      <span className="text-[11px] text-slate-400">{c.order.orderNumber}</span>
-                      <OrderChip status={c.order.status} />
+                  {(c.order || isUnanswered(c) || (c.tags || []).length > 0) && (
+                    <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                      {isUnanswered(c) && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600" title="El cliente espera respuesta">
+                          <Clock className="w-3 h-3" /> {waitingFor(c.last_inbound_at!)}
+                        </span>
+                      )}
+                      {c.order && (
+                        <>
+                          <span className="text-[11px] text-slate-400">{c.order.orderNumber}</span>
+                          <OrderChip status={c.order.status} />
+                        </>
+                      )}
+                      {(c.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
                     </div>
                   )}
                 </div>
@@ -281,10 +477,22 @@ export default function OmnichannelInbox() {
                 <button onClick={() => setActiveId('')} className="md:hidden p-1 -ml-1 text-slate-500" aria-label="Volver">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
-                  <p className="text-xs text-slate-500">{phoneLabel(active.id)}</p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-xs text-slate-500 mr-1">{phoneLabel(active.id)}</span>
+                    {(active.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
+                  </div>
                 </div>
+                {active.order && (
+                  <button
+                    onClick={() => setOrderOpen(true)}
+                    className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+                  >
+                    <Package className="w-3.5 h-3.5" /> Pedido
+                  </button>
+                )}
+                <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
               </div>
 
               <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 space-y-2">
@@ -325,19 +533,38 @@ export default function OmnichannelInbox() {
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
-                    <div className="flex items-end gap-2">
+                    <div className="relative flex items-end gap-2">
+                      {qr.open && (
+                        <QuickReplyMenu
+                          replies={replies}
+                          query={slashQuery}
+                          highlight={qr.highlight}
+                          preview={fillReply}
+                          onPick={pickReply}
+                          onHover={(i) => setQr((s) => ({ ...s, highlight: i }))}
+                          onManage={() => {
+                            setQr({ open: false, slash: false, highlight: 0 });
+                            setManage('replies');
+                          }}
+                          onClose={() => setQr({ open: false, slash: false, highlight: 0 })}
+                        />
+                      )}
+                      <button
+                        onClick={() => setQr((s) => (s.open ? { open: false, slash: false, highlight: 0 } : { open: true, slash: false, highlight: 0 }))}
+                        className={`h-9 w-9 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+                        aria-label="Respuestas rápidas"
+                        title="Respuestas rápidas (o escribe /)"
+                      >
+                        <Zap className="w-4 h-4" />
+                      </button>
                       <textarea
+                        ref={inputRef}
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSend();
-                          }
-                        }}
+                        onChange={(e) => onTextChange(e.target.value)}
+                        onKeyDown={onKeyDown}
                         rows={1}
-                        placeholder="Escribe una respuesta…"
-                        className="flex-1 resize-none text-[13px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 max-h-32 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:bg-white"
+                        placeholder="Escribe una respuesta… (/ para respuestas rápidas)"
+                        className="flex-1 resize-none text-[13px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:bg-white"
                       />
                       <button
                         onClick={handleSend}
@@ -360,36 +587,28 @@ export default function OmnichannelInbox() {
           <div className="hidden xl:flex w-72 shrink-0 border-l border-slate-200 flex-col p-4 gap-3 overflow-y-auto">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pedido vinculado</h3>
             {active.order ? (
-              <div className="rounded-2xl border border-slate-200 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-semibold text-slate-900">{active.order.orderNumber}</span>
-                  <OrderChip status={active.order.status} />
-                </div>
-                <div className="flex gap-2 text-[13px] text-slate-700">
-                  <Package className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <span>
-                    {active.order.productName}
-                    <span className="block text-xs text-slate-500">{active.order.comboName}</span>
-                  </span>
-                </div>
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-slate-500">Total</span>
-                  <span className="font-semibold text-slate-900">{money(active.order.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-slate-500">Ciudad</span>
-                  <span className="text-slate-700">{active.order.city}</span>
-                </div>
-                <Link href="/orders" className="block text-center text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl py-2 transition">
-                  Ver pedidos
-                </Link>
-              </div>
+              <OrderPanel order={active.order} chip={<OrderChip status={active.order.status} />} onChanged={onOrderChanged} />
             ) : (
               <p className="text-[13px] text-slate-500">Esta conversación no está vinculada a ningún pedido.</p>
             )}
           </div>
         )}
+        {active?.order && orderOpen && (
+          <div className="xl:hidden fixed inset-0 z-40 flex justify-end bg-slate-900/40" onMouseDown={(e) => e.target === e.currentTarget && setOrderOpen(false)}>
+            <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pedido vinculado</h3>
+                <button onClick={() => setOrderOpen(false)} className="w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center" aria-label="Cerrar">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <OrderPanel order={active.order} chip={<OrderChip status={active.order.status} />} onChanged={onOrderChanged} />
+            </div>
+          </div>
+        )}
       </div>
+      {manage === 'tags' && <TagManager tags={tags} onClose={() => setManage(null)} onSaved={(t) => (setTags(t), loadConversations())} />}
+      {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
     </div>
   );
 }
