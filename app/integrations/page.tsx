@@ -135,7 +135,7 @@ const WA_VARS: { name: string; hint: string }[] = [
   { name: 'WHATSAPP_PHONE_NUMBER_ID', hint: 'Identificador del número (WhatsApp Manager)' },
   { name: 'WHATSAPP_VERIFY_TOKEN', hint: 'Texto que inventas y pegas también en Meta' },
   { name: 'WHATSAPP_APP_SECRET', hint: 'Clave secreta de tu app de Meta' },
-  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido' },
+  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido (solo para la plantilla automática)' },
 ];
 
 interface WaNumber {
@@ -301,9 +301,68 @@ function WhatsAppTester() {
   );
 }
 
+type WaMode = 'customer_first' | 'template';
+
+// How orders get confirmed: the customer writes first from the landing, or an automatic template.
+function WhatsAppModePicker({ mode, onChange }: { mode: WaMode | null; onChange: (m: WaMode) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const choose = async (m: WaMode) => {
+    if (m === mode || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/whatsapp/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m }) });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
+      onChange(m);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const option = (m: WaMode, title: string, text: React.ReactNode) => (
+    <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${mode === m ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
+      <input type="radio" name="wa-mode" className="mt-0.5" checked={mode === m} disabled={saving || mode === null} onChange={() => choose(m)} />
+      <span>
+        <span className="block text-xs font-semibold text-slate-900">{title}</span>
+        <span className="block text-[11px] text-slate-500 mt-0.5 leading-relaxed">{text}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+      <p className="text-xs font-semibold text-slate-700">Cómo se confirman los pedidos</p>
+      {option(
+        'customer_first',
+        'El cliente me escribe desde la landing (gratis)',
+        <>
+          Al terminar el pedido, la landing lo lleva a WhatsApp con el mensaje ya escrito. Cuando lo envía, el pedido pasa a Confirmado y se le responde solo.
+          No usa plantilla. <strong>Pon este número de la API en el campo WhatsApp de cada landing.</strong>
+        </>,
+      )}
+      {option(
+        'template',
+        'Enviar la plantilla con botones a cada pedido',
+        'Tu número le escribe al cliente apenas hace el pedido, con los botones Confirmar pedido / Cancelar. Funciona aunque el cliente no escriba, pero cada plantilla tiene un costo pequeño.',
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 // WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
 function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
-  const ready = status && status.sending && status.confirmTemplate && status.webhook;
+  const [mode, setMode] = useState<WaMode | null>(null);
+  useEffect(() => {
+    fetch('/api/whatsapp/settings', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => setMode(d.mode === 'customer_first' ? 'customer_first' : 'template'))
+      .catch(() => setMode('template'));
+  }, []);
+  // The template is only required when it is sent automatically.
+  const ready = status && status.sending && status.webhook && (mode === 'customer_first' || status.confirmTemplate);
   const partial = status && !ready && status.missing.length < WA_VARS.length;
   const [webhookUrl, setWebhookUrl] = useState('https://<tu-dominio>/api/whatsapp/webhook');
   useEffect(() => setWebhookUrl(`${window.location.origin}/api/whatsapp/webhook`), []);
@@ -370,6 +429,7 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
         <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
       </div>
 
+      {status?.sending && <WhatsAppModePicker mode={mode} onChange={setMode} />}
       {status?.sending && <WhatsAppTester />}
 
       <div className="pt-3 border-t border-slate-100">

@@ -243,3 +243,20 @@ export async function getWebhookHealth(): Promise<WebhookHealth | null> {
   return (data?.data as WebhookHealth) || null;
 }
 
+// ---------- confirmation mode ----------
+// customer_first: the landing sends the customer to WhatsApp and they write first (no template, free).
+// template: the confirmation template with buttons is sent to every new order.
+
+export type WaConfirmMode = 'customer_first' | 'template';
+
+export async function getWaMode(): Promise<WaConfirmMode> {
+  const { data } = await db().from('settings').select('data').eq('id', 'whatsapp').maybeSingle();
+  const mode = (data?.data as { mode?: string } | undefined)?.mode;
+  return mode === 'customer_first' ? 'customer_first' : 'template';
+}
+
+export async function saveWaMode(mode: WaConfirmMode) {
+  const { error } = await db().from('settings').upsert({ id: 'whatsapp', data: { mode } });
+  if (error) throw new Error(error.message);
+}
+

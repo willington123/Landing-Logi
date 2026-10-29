@@ -3,6 +3,7 @@ import { cloudEnabled, createOrder, getPublicLanding, patchOrderData } from '@/l
 import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
 import { sendOrderConfirmation } from '@/lib/server/wa-actions';
+import { getWaMode } from '@/lib/server/wa-store';
 import { onNewOrder } from '@/lib/server/voice-actions';
 import type { OrderItem } from '@/lib/types';
 import { serverOrderErrors } from '@/lib/order-form';
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest) {
     }
 
     // WhatsApp order confirmation (template with "Confirmar pedido" / "Cancelar"). Never blocks the order.
-    if (confirmTemplateEnabled()) {
+    // Skipped when the store lets customers write first from the landing (Integrations → mode).
+    if (confirmTemplateEnabled() && (await getWaMode().catch(() => 'template')) === 'template') {
       const whatsapp = await sendOrderConfirmation(order, { currency: landing.currency, country: landing.country }).catch((e: any) => ({
         ok: false,
         error: e?.message || String(e),

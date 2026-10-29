@@ -185,6 +185,11 @@ En **Integraciones → WhatsApp**, escribe tu celular y:
 
 Después haz un pedido de prueba real en una landing.
 
+### Modo de confirmación
+En **Integraciones → WhatsApp → Cómo se confirman los pedidos** eliges:
+- **El cliente me escribe desde la landing (gratis):** no se envía ninguna plantilla. La landing lleva al cliente a WhatsApp con el mensaje ya escrito; cuando lo envía, el pedido se confirma y se le responde dentro de la conversación que él abrió (sin costo de plantilla). Pon el número de la API en el campo WhatsApp de cada landing.
+- **Enviar la plantilla con botones a cada pedido:** tu número le escribe primero al cliente con *Confirmar pedido / Cancelar* (cada plantilla tiene un costo pequeño).
+
 ### Confirmación con el mensaje de la landing
 Si el número de WhatsApp de la landing (editor → campo WhatsApp) es **el mismo número conectado a la API**, el mensaje que el cliente envía al terminar el pedido ("Quiero confirmar mi pedido… *Pedido:* LP-12345…") llega a **Mensajes**, el pedido pasa solo a *Confirmado* y el cliente recibe una respuesta automática. Si el cliente solo pregunta por su pedido (por ejemplo "¿cuándo llega el LP-12345?"), la conversación se vincula al pedido sin cambiar su estado.
 
