@@ -3,16 +3,17 @@ import { cloudEnabled } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/phone';
 import { confirmTemplateEnabled, formatMoney, phoneNumberInfo, sendConfirmTemplate, sendHelloWorld, whatsappEnabled, whatsappStatus } from '@/lib/server/whatsapp';
 import { TEST_ORDER_ID } from '@/lib/server/wa-actions';
-import { recordOutbound } from '@/lib/server/wa-store';
+import { getWebhookHealth, recordOutbound } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
 
 // Admin: connection check (number details straight from Meta).
 export async function GET() {
   const status = whatsappStatus();
-  if (!whatsappEnabled()) return NextResponse.json({ success: true, status, number: null });
+  const webhook = cloudEnabled() ? await getWebhookHealth().catch(() => null) : null;
+  if (!whatsappEnabled()) return NextResponse.json({ success: true, status, number: null, webhook });
   const r = await phoneNumberInfo();
-  return NextResponse.json({ success: true, status, number: r.ok ? r.info : null, error: r.ok ? undefined : r.error });
+  return NextResponse.json({ success: true, status, number: r.ok ? r.info : null, error: r.ok ? undefined : r.error, webhook });
 }
 
 // Admin: send a test message. Body: { phone, kind: 'hello' | 'confirm' }.
