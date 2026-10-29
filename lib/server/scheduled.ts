@@ -12,6 +12,9 @@ export interface SchedulerInfo {
   lastRunAt?: string;
   lastSource?: RunSource;
   lastCronAt?: string; // last run started by the scheduled task itself
+  lastDeniedAt?: string; // last call to /api/cron/run with a wrong CRON_SECRET
+  lastWa?: { at: string; sent: number; failed: number; error?: string }; // last run that sent (or tried) fallback templates
+  lastError?: { at: string; error: string };
 }
 
 const BACKUP_EVERY_MS = 3 * 60 * 1000;
@@ -38,13 +41,37 @@ async function noteRun(source: RunSource) {
     .upsert({ id: 'scheduler', data: { ...current, lastRunAt: now, lastSource: source, ...(source === 'cron' ? { lastCronAt: now } : {}) } });
 }
 
+async function patchInfo(patch: Partial<SchedulerInfo>) {
+  const current = await getSchedulerInfo().catch(() => ({}) as SchedulerInfo);
+  await db().from('settings').upsert({ id: 'scheduler', data: { ...current, ...patch } });
+}
+
+// A call with the wrong secret (e.g. CRON_SECRET changed after the SQL was copied). At most once a minute.
+export async function noteDenied() {
+  try {
+    if (!cloudEnabled()) return;
+    const info = await getSchedulerInfo();
+    if (info.lastDeniedAt && Date.now() - new Date(info.lastDeniedAt).getTime() < 60 * 1000) return;
+    await patchInfo({ lastDeniedAt: new Date().toISOString() });
+  } catch {
+    // diagnostics only
+  }
+}
+
 export async function runScheduled(origin?: string, source: RunSource = 'cron') {
   if (!cloudEnabled()) return { calls: null, whatsapp: null };
   await noteRun(source).catch(() => {});
   const [calls, whatsapp] = await Promise.all([
     processCallQueue(origin).catch((e) => ({ error: String(e?.message || e) })),
-    processWaFallback().catch((e) => ({ error: String(e?.message || e) })),
+    processWaFallback().catch((e) => ({ sent: 0, failed: 0, error: String(e?.message || e) })),
   ]);
+  // Keep what happened so the panel can explain it.
+  const now = new Date().toISOString();
+  const patch: Partial<SchedulerInfo> = {};
+  if (whatsapp.sent || whatsapp.failed) patch.lastWa = { at: now, sent: whatsapp.sent, failed: whatsapp.failed, error: whatsapp.error };
+  const err = (whatsapp.error && !whatsapp.sent && !whatsapp.failed ? whatsapp.error : '') || ('error' in (calls || {}) ? String((calls as any).error) : '');
+  if (err) patch.lastError = { at: now, error: err };
+  if (Object.keys(patch).length) await patchInfo(patch).catch(() => {});
   return { calls, whatsapp };
 }
 

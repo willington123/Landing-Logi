@@ -30,7 +30,7 @@ export interface WaMessage {
   created_at: string;
 }
 
-export const PENDING_STATUSES: OrderStatus[] = ['pending_call', 'retry_scheduled', 'needs_review'];
+export const PENDING_STATUSES: OrderStatus[] = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered'];
 
 const preview = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 160);
 

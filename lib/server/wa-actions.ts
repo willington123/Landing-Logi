@@ -39,15 +39,23 @@ export async function sendConfirmationForOrder(order: OrderItem) {
 
 // Cron: customers who didn't write after the landing's redirect get the template.
 export async function processWaFallback() {
-  const out = { sent: 0, failed: 0 };
-  if (!confirmTemplateEnabled()) return out;
+  const out: { sent: number; failed: number; error?: string } = { sent: 0, failed: 0 };
+  if (!confirmTemplateEnabled()) return { ...out, error: 'La plantilla de confirmación no está configurada (WHATSAPP_CONFIRM_TEMPLATE).' };
   for (const order of await dueWaFallbackOrders()) {
     // Clear first so an overlapping run can't send it twice.
     await patchOrderData(order.id, { waFallbackAt: null });
     if (order.whatsapp) continue; // a template already went out (e.g. sent by hand)
-    const r = await sendConfirmationForOrder(order).catch(() => null);
+    const r = await sendConfirmationForOrder(order).catch(async (e: any) => {
+      // Keep the reason on the order so the panel shows why it wasn't sent.
+      const whatsapp = { ok: false, error: e?.message || String(e), at: new Date().toISOString() };
+      await patchOrderData(order.id, { whatsapp }).catch(() => {});
+      return whatsapp;
+    });
     if (r?.ok) out.sent++;
-    else out.failed++;
+    else {
+      out.failed++;
+      out.error = r?.error;
+    }
   }
   return out;
 }

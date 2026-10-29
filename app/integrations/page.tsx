@@ -308,6 +308,9 @@ interface SchedulerInfo {
   lastRunAt?: string;
   lastSource?: 'cron' | 'visita' | 'panel';
   lastCronAt?: string;
+  lastDeniedAt?: string;
+  lastWa?: { at: string; sent: number; failed: number; error?: string };
+  lastError?: { at: string; error: string };
   cronSecret: boolean;
   baseUrl: string;
   sql: string | null;
@@ -355,6 +358,21 @@ function SchedulerSetup() {
           {info.lastRunAt ? ` Mientras tanto se revisa con las visitas y el panel (última vez ${ago(info.lastRunAt)}, por ${SOURCE[info.lastSource || ''] || 'el sistema'}).` : ' Mientras tanto se revisa con las visitas y el panel.'}
           {' '}Actívala para que funcione también cuando no hay movimiento:
         </p>
+      )}
+      {!cronWorks && info.cronSecret && info.lastDeniedAt && (!info.lastCronAt || info.lastDeniedAt > info.lastCronAt) && (
+        <p className="text-[11px] text-red-600">
+          Supabase sí está llamando ({ago(info.lastDeniedAt)}), pero con una clave que no coincide con CRON_SECRET (¿la cambiaste después de copiar el código?). Copia el código otra
+          vez y ejecútalo en Supabase: reemplaza la tarea anterior.
+        </p>
+      )}
+      {info.lastWa && (
+        <p className={`text-[11px] ${info.lastWa.failed ? 'text-red-600' : 'text-slate-600'}`}>
+          Últimas plantillas de respaldo ({ago(info.lastWa.at)}): {info.lastWa.sent} enviada(s)
+          {info.lastWa.failed ? `, ${info.lastWa.failed} con error${info.lastWa.error ? `: ${info.lastWa.error}` : ''}` : ''}.
+        </p>
+      )}
+      {info.lastError && (!info.lastRunAt || info.lastError.at >= info.lastRunAt) && (
+        <p className="text-[11px] text-red-600">Error en la última revisión: {info.lastError.error}</p>
       )}
       {!cronWorks && !info.cronSecret && (
         <p className="text-[11px] text-slate-700">
