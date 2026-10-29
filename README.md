@@ -237,10 +237,13 @@ GET https://<tu-dominio>/api/cron/run
 Authorization: Bearer <CRON_SECRET>
 ```
 
-- **Gratis:** en [cron-job.org](https://cron-job.org) crea un trabajo cada 5 minutos con esa URL y, en *Advanced → Headers*, la cabecera `Authorization: Bearer <CRON_SECRET>`. Si la herramienta no permite cabeceras, usa `https://<tu-dominio>/api/cron/run?secret=<CRON_SECRET>`.
+- **Gratis, dentro de Supabase (recomendado):** pon `CRON_SECRET` en Vercel y haz Redeploy. En el panel → **Integraciones → WhatsApp** (opción "si el cliente no escribe…") aparece **Revisión automática** con el botón **Copiar código SQL**, que ya trae tu dominio y tu clave. Pégalo en Supabase → SQL Editor → Run. Supabase (pg_cron + pg_net) llamará a la tarea cada 5 minutos; el panel muestra cuándo fue la última revisión.
+- **Gratis, con un servicio externo:** en [cron-job.org](https://cron-job.org) crea un trabajo cada 5 minutos con esa URL y, en *Advanced → Headers*, la cabecera `Authorization: Bearer <CRON_SECRET>`. Si la herramienta no permite cabeceras, usa `https://<tu-dominio>/api/cron/run?secret=<CRON_SECRET>`.
 - **Vercel Pro:** crea `vercel.json` con `{"crons":[{"path":"/api/cron/run","schedule":"*/5 * * * *"}]}`. Vercel envía la cabecera con `CRON_SECRET` solo. (El plan Hobby solo permite tareas diarias y el despliegue falla con esa frecuencia.)
 
-La misma tarea cierra las llamadas cuyo aviso de Vapi no llegó.
+La misma tarea cierra las llamadas cuyo aviso de Vapi no llegó y envía las plantillas de WhatsApp de respaldo.
+
+Como respaldo, las visitas a las landings y el panel también ejecutan estas tareas (como máximo una vez cada 3 minutos), así que siguen funcionando aunque la tarea programada falle; pero si no hay movimiento (por ejemplo de noche) solo la tarea programada las ejecuta.
 
 ### 5. Configurar y probar
 En el panel, **Llamadas IA**:

@@ -304,6 +304,87 @@ function WhatsAppTester() {
 
 type WaMode = 'customer_first' | 'template';
 
+interface SchedulerInfo {
+  lastRunAt?: string;
+  lastSource?: 'cron' | 'visita' | 'panel';
+  lastCronAt?: string;
+  cronSecret: boolean;
+  baseUrl: string;
+  sql: string | null;
+}
+
+const SOURCE: Record<string, string> = { cron: 'la tarea programada', visita: 'una visita a una landing', panel: 'el panel' };
+
+// Status of the automatic check (every 5 min) and the SQL to schedule it in Supabase.
+function SchedulerSetup() {
+  const [info, setInfo] = useState<SchedulerInfo | null>(null);
+  const [showSql, setShowSql] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const load = () =>
+    fetch('/api/scheduler', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(setInfo)
+      .catch(() => setInfo(null));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!info) return null;
+  const cronWorks = Boolean(info.lastCronAt && Date.now() - new Date(info.lastCronAt).getTime() < 15 * 60 * 1000);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(info.sql || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShowSql(true);
+    }
+  };
+  return (
+    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700">Revisión automática (cada 5 min)</p>
+        <button onClick={load} className="text-[11px] font-semibold text-slate-600 underline underline-offset-2">
+          Actualizar
+        </button>
+      </div>
+      {cronWorks ? (
+        <p className="text-[11px] text-emerald-700">✓ La tarea programada funciona. Última revisión {ago(info.lastCronAt!)}.</p>
+      ) : (
+        <p className="text-[11px] text-amber-800">
+          La tarea programada aún no está activa.
+          {info.lastRunAt ? ` Mientras tanto se revisa con las visitas y el panel (última vez ${ago(info.lastRunAt)}, por ${SOURCE[info.lastSource || ''] || 'el sistema'}).` : ' Mientras tanto se revisa con las visitas y el panel.'}
+          {' '}Actívala para que funcione también cuando no hay movimiento:
+        </p>
+      )}
+      {!cronWorks && !info.cronSecret && (
+        <p className="text-[11px] text-slate-700">
+          1. En Vercel agrega la variable <strong>CRON_SECRET</strong> con un texto que inventes (sin espacios) y haz <strong>Redeploy</strong>. Luego vuelve aquí: aparecerá el
+          código para Supabase.
+        </p>
+      )}
+      {!cronWorks && info.cronSecret && info.sql && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-700">
+            Copia este código y pégalo en <strong>Supabase → SQL Editor → New query → Run</strong>. Solo se hace una vez. Contiene tu CRON_SECRET: no lo compartas.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={copy} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold">
+              {copied ? '¡Copiado!' : 'Copiar código SQL'}
+            </button>
+            <button onClick={() => setShowSql((v) => !v)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-700">
+              {showSql ? 'Ocultar' : 'Ver código'}
+            </button>
+          </div>
+          {showSql && (
+            <textarea readOnly value={info.sql} className="w-full h-48 text-[11px] font-mono bg-white border border-slate-200 rounded-lg p-2 text-slate-700" />
+          )}
+          <p className="text-[11px] text-slate-500">Después de 5–10 minutos pulsa Actualizar: debe decir que la tarea programada funciona.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // How orders get confirmed: the customer writes first from the landing, or an automatic template.
 function WhatsAppModePicker({
   mode,
@@ -378,12 +459,7 @@ function WhatsAppModePicker({
           {fallback > 0 && !templateReady && (
             <p className="text-[11px] text-amber-700">Falta la plantilla aprobada (WHATSAPP_CONFIRM_TEMPLATE) para poder enviarla.</p>
           )}
-          {fallback > 0 && !cron && (
-            <p className="text-[11px] text-amber-700">
-              Para enviarla sola hace falta la tarea programada: pon <strong>CRON_SECRET</strong> en Vercel y crea en cron-job.org un trabajo cada 5 min a{' '}
-              <code>/api/cron/run</code> (pasos en el README). Mientras tanto, puedes enviarla a mano desde el detalle del pedido.
-            </p>
-          )}
+          {fallback > 0 && <SchedulerSetup />}
         </div>
       )}
       {option(

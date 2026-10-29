@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (auth === 'missing') return NextResponse.json({ ok: false, error: 'Falta la variable CRON_SECRET.' }, { status: 503 });
   if (auth === 'denied') return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   try {
-    return NextResponse.json({ ok: true, ...(await runScheduled(req.nextUrl.origin)) });
+    return NextResponse.json({ ok: true, ...(await runScheduled(req.nextUrl.origin, 'cron')) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
   }
