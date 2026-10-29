@@ -1,11 +1,14 @@
 // WhatsApp business flows: order confirmation and customer replies.
-import { updateOrderStatus } from '@/lib/server/db';
+import { patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendText, type InboundMessage } from '@/lib/server/whatsapp';
-import { findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
+import { findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
 import type { OrderItem } from '@/lib/types';
 
 const firstName = (name: string) => (name || '').trim().split(/\s+/)[0] || 'cliente';
+
+// Order id used in the buttons of the test message (Integrations → "Enviar mensaje de prueba").
+export const TEST_ORDER_ID = 'prueba';
 
 // Sends the confirmation template for a new order. Never throws.
 export async function sendOrderConfirmation(order: OrderItem, opts: { currency?: string; country?: string }) {
@@ -33,17 +36,36 @@ async function reply(phone: string, text: string, orderId?: string) {
 // Stores an incoming message and acts on "Confirmar pedido" / "Cancelar".
 export async function handleInbound(m: InboundMessage) {
   const { isNew } = await recordInbound(m);
-  if (!isNew || !m.intent) return; // duplicate delivery or a normal chat message
+  if (!isNew) return; // duplicate delivery
 
-  const order = await findPendingOrder(m.from, m.orderId);
+  // Buttons on the test message sent from Integrations.
+  if (m.orderId === TEST_ORDER_ID) {
+    await reply(m.from, 'Mensaje de prueba recibido ✅ La confirmación de pedidos por WhatsApp funciona.');
+    return;
+  }
+
+  // The message names an order (e.g. the landing's pre-filled "Quiero confirmar mi pedido LP-12345"):
+  // show that order next to the chat even if no action follows.
+  if (m.orderNumber) {
+    const named = await findOrderByNumber(m.orderNumber);
+    if (named) await linkConversationOrder(m.from, named.id);
+  }
+  if (!m.intent) return; // a normal chat message
+
+  const order = m.orderNumber ? await findOrderByNumber(m.orderNumber, true) : await findPendingOrder(m.from, m.orderId);
   if (!order) {
     await reply(
       m.from,
-      m.orderId
+      m.orderId || m.orderNumber
         ? 'Este pedido ya no está pendiente de confirmación. Si necesitas cambiar algo, escríbenos por aquí.'
         : 'No encontramos un pedido pendiente con este número. Si necesitas ayuda, escríbenos por aquí.',
     );
     return;
+  }
+  if (m.orderNumber) {
+    await linkConversationOrder(m.from, order.id);
+    // Note where the confirmation came from (the WhatsApp number may differ from the one in the form).
+    await patchOrderData(order.id, { confirmedVia: 'whatsapp', whatsappFrom: m.from }).catch(() => {});
   }
   await linkConversationOrder(m.from, order.id);
   const name = firstName(order.customerName);

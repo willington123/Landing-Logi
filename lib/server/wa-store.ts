@@ -147,6 +147,16 @@ export async function findPendingOrder(phone: string, orderId?: string): Promise
   return mine[0] || null;
 }
 
+// Order by its public number ("LP-12345"); with pendingOnly, only if it still waits for confirmation.
+export async function findOrderByNumber(orderNumber: string, pendingOnly = false): Promise<OrderItem | null> {
+  let q = db().from('orders').select('data, status').eq('order_number', orderNumber);
+  if (pendingOnly) q = q.in('status', PENDING_STATUSES);
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(1);
+  if (error) throw new Error(error.message);
+  const r = data?.[0];
+  return r ? { ...(r.data as OrderItem), status: r.status as OrderStatus } : null;
+}
+
 // ---------- inbox (admin) ----------
 
 export type OrderSummary = Pick<OrderItem, 'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'createdAt'>;
