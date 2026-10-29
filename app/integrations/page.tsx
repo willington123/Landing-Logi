@@ -152,6 +152,7 @@ const NAME_STATUS: Record<string, string> = {
   DECLINED: 'Rechazado',
   EXPIRED: 'Vencido',
   NONE: 'Sin nombre',
+  NON_EXISTS: 'Sin enviar a revisión',
 };
 const QUALITY: Record<string, string> = { GREEN: 'Alta', YELLOW: 'Media', RED: 'Baja', UNKNOWN: 'Sin datos' };
 
@@ -193,7 +194,7 @@ function WebhookStatus({ h }: { h: WebhookHealth | null }) {
     );
   }
   if (h.lastError && h.lastErrorAt && !newer(h.lastOkAt, h.lastErrorAt)) {
-    const missingTables = /wa_conversations|wa_messages|relation|does not exist|schema cache/i.test(h.lastError);
+    const missingTables = !/foreign key/i.test(h.lastError) && /does not exist|schema cache|could not find the table|no table/i.test(h.lastError);
     return (
       <p className={`${box} text-red-700 bg-red-50`}>
         El aviso llegó {ago(h.lastErrorAt)} pero falló al procesarse: {h.lastError}
