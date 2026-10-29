@@ -169,6 +169,20 @@ export async function updateOrderStatus(id: string, status: OrderItem['status'])
   if (error) throw new Error(error.message);
 }
 
+// Corrects the delivery address. The first address is kept as previousAddress.
+export async function updateOrderAddress(id: string, fields: { address: string; city: string; department: string }) {
+  const { data: row, error: readErr } = await db().from('orders').select('data').eq('id', id).maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  if (!row) return null;
+  const cur = row.data as OrderItem;
+  const changed = cur.address !== fields.address || cur.city !== fields.city || cur.department !== fields.department;
+  const prev = [cur.address, cur.city, cur.department].filter(Boolean).join(', ');
+  const data = { ...cur, ...fields, ...(changed && !cur.previousAddress ? { previousAddress: prev } : {}) };
+  const { error } = await db().from('orders').update({ data }).eq('id', id);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 // Deletes orders for good. WhatsApp conversations keep their messages; their order link is cleared.
 export async function deleteOrders(ids: string[]): Promise<number> {
   const { data, error } = await db().from('orders').delete().in('id', ids).select('id');

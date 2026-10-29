@@ -168,7 +168,10 @@ export async function findOrderByNumber(orderNumber: string, pendingOnly = false
 
 // ---------- inbox (admin) ----------
 
-export type OrderSummary = Pick<OrderItem, 'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'createdAt'>;
+export type OrderSummary = Pick<
+  OrderItem,
+  'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'department' | 'address' | 'customerName' | 'phone' | 'createdAt'
+>;
 
 async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummary>> {
   if (!ids.length) return {};
@@ -177,7 +180,20 @@ async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummar
   const out: Record<string, OrderSummary> = {};
   for (const r of data || []) {
     const o = r.data as OrderItem;
-    out[r.id] = { id: o.id, orderNumber: o.orderNumber, productName: o.productName, comboName: o.comboName, totalAmount: o.totalAmount, status: r.status as OrderStatus, city: o.city, createdAt: o.createdAt };
+    out[r.id] = {
+      id: o.id,
+      orderNumber: o.orderNumber,
+      productName: o.productName,
+      comboName: o.comboName,
+      totalAmount: o.totalAmount,
+      status: r.status as OrderStatus,
+      city: o.city,
+      department: o.department,
+      address: o.address,
+      customerName: o.customerName,
+      phone: o.phone,
+      createdAt: o.createdAt,
+    };
   }
   return out;
 }
