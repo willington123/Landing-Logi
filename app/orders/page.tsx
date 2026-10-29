@@ -5,7 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
-import { WhatsAppOrderStatus } from '@/components/orders/WhatsAppOrderStatus';
+import { WaFallbackBadge, WhatsAppOrderStatus, useNow, waFallbackPending } from '@/components/orders/WhatsAppOrderStatus';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT, deleteOrders, pullFromCloud } from '@/lib/cloud';
 import { OrderItem, OrderStatus } from '@/lib/types';
@@ -67,6 +67,18 @@ export default function OrdersPage() {
     }, 10000);
     return () => clearInterval(t);
   }, [anyCalling]);
+
+  // While a WhatsApp fallback template is waiting: tick the countdowns and refresh every 30 s
+  // (the refresh also sends overdue templates if the scheduled task hasn't).
+  const anyWaPending = orders.some(waFallbackPending);
+  const now = useNow(anyWaPending);
+  useEffect(() => {
+    if (!anyWaPending) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') pullFromCloud();
+    }, 30000);
+    return () => clearInterval(t);
+  }, [anyWaPending]);
 
   const toggleChecked = (id: string) =>
     setChecked((prev) => {
@@ -317,7 +329,12 @@ export default function OrdersPage() {
                       <td className="py-3.5 px-3 text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
                         ${order.totalAmount.toLocaleString('es-CO')}
                       </td>
-                      <td className="py-3.5 px-3">{getStatusBadge(order.status)}</td>
+                      <td className="py-3.5 px-3">
+                        <div className="flex flex-col items-start">
+                          {getStatusBadge(order.status)}
+                          <WaFallbackBadge order={order} now={now} />
+                        </div>
+                      </td>
                       <td className="py-3.5 px-5 text-right">
                         <CallButton order={order} onCalled={() => pullFromCloud()} />
                       </td>

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, deleteOrders, listOrders } from '@/lib/server/db';
+import { maybeRunScheduled } from '@/lib/server/scheduled';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   try {
+    // With Pedidos open, overdue WhatsApp templates and calls go out even if the scheduled task isn't running.
+    await maybeRunScheduled(req.nextUrl.origin, 'panel');
     return NextResponse.json({ success: true, orders: await listOrders() });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
