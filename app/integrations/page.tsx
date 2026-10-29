@@ -138,6 +138,94 @@ const WA_VARS: { name: string; hint: string }[] = [
   { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido' },
 ];
 
+interface WaNumber {
+  display_phone_number?: string;
+  verified_name?: string;
+  name_status?: string;
+  quality_rating?: string;
+}
+
+const NAME_STATUS: Record<string, string> = {
+  APPROVED: 'Aprobado',
+  AVAILABLE_WITHOUT_REVIEW: 'Disponible',
+  PENDING_REVIEW: 'En revisión',
+  DECLINED: 'Rechazado',
+  EXPIRED: 'Vencido',
+  NONE: 'Sin nombre',
+};
+const QUALITY: Record<string, string> = { GREEN: 'Alta', YELLOW: 'Media', RED: 'Baja', UNKNOWN: 'Sin datos' };
+
+// Number details from Meta and test messages (only once the token and number ID are set).
+function WhatsAppTester() {
+  const [num, setNum] = useState<WaNumber | null | undefined>(undefined);
+  const [numError, setNumError] = useState<string | null>(null);
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/whatsapp/test', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        setNum(d.number || null);
+        setNumError(d.error || null);
+      })
+      .catch(() => setNumError('No se pudo consultar a Meta.'));
+  }, []);
+
+  const send = async (kind: 'hello' | 'confirm') => {
+    setBusy(kind);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/whatsapp/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, kind }) });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
+      setMsg({ ok: true, text: kind === 'hello' ? 'Enviado. Debe llegarte "Hello World" en unos segundos.' : 'Enviado. Toca un botón del mensaje: si el webhook funciona, recibirás una respuesta automática.' });
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+      <p className="text-xs font-semibold text-slate-700">Número conectado</p>
+      {num === undefined && !numError ? (
+        <p className="text-xs text-slate-400">Consultando a Meta…</p>
+      ) : numError ? (
+        <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2.5">Meta respondió: {numError}. Revisa WHATSAPP_TOKEN y WHATSAPP_PHONE_NUMBER_ID.</p>
+      ) : num ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div><span className="block text-slate-400">Número</span><span className="font-semibold text-slate-800">{num.display_phone_number || '—'}</span></div>
+          <div><span className="block text-slate-400">Nombre visible</span><span className="font-semibold text-slate-800">{num.verified_name || '—'}</span></div>
+          <div><span className="block text-slate-400">Estado del nombre</span><span className="font-semibold text-slate-800">{NAME_STATUS[num.name_status || ''] || num.name_status || '—'}</span></div>
+          <div><span className="block text-slate-400">Calidad</span><span className="font-semibold text-slate-800">{QUALITY[num.quality_rating || ''] || num.quality_rating || '—'}</span></div>
+        </div>
+      ) : null}
+      <p className="text-xs font-semibold text-slate-700 pt-1">Enviar mensaje de prueba a tu celular</p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+57 300 123 4567"
+          className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+        />
+        <button onClick={() => send('hello')} disabled={!!busy || phone.replace(/\D/g, '').length < 10} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40">
+          {busy === 'hello' ? 'Enviando…' : '1. Probar conexión'}
+        </button>
+        <button onClick={() => send('confirm')} disabled={!!busy || phone.replace(/\D/g, '').length < 10} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-40">
+          {busy === 'confirm' ? 'Enviando…' : '2. Probar mi plantilla'}
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-500">
+        &quot;Probar conexión&quot; envía la plantilla hello_world de Meta. &quot;Probar mi plantilla&quot; envía tu plantilla de confirmación con datos de ejemplo; no cambia ningún pedido.
+      </p>
+      {msg && <p className={`text-xs rounded-lg p-2.5 ${msg.ok ? 'text-emerald-700 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
 // WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
 function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
   const ready = status && status.sending && status.confirmTemplate && status.webhook;
@@ -206,6 +294,8 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
         </p>
         <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
       </div>
+
+      {status?.sending && <WhatsAppTester />}
 
       <div className="pt-3 border-t border-slate-100">
         <a

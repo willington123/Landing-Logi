@@ -93,6 +93,37 @@ export function sendConfirmTemplate(to: string, vars: { name: string; product: s
 
 export { formatMoney } from '@/lib/whatsapp-link';
 
+// Meta's default "hello_world" template: works on any number, good for testing the connection.
+export function sendHelloWorld(to: string): Promise<SendResult> {
+  return send({ to, type: 'template', template: { name: 'hello_world', language: { code: 'en_US' } } });
+}
+
+export interface PhoneNumberInfo {
+  display_phone_number?: string;
+  verified_name?: string;
+  name_status?: string;
+  quality_rating?: string;
+  code_verification_status?: string;
+}
+
+// Details of the connected number (also proves the token and the phone number ID work).
+export async function phoneNumberInfo(): Promise<{ ok: true; info: PhoneNumberInfo } | { ok: false; error: string }> {
+  if (!whatsappEnabled()) return { ok: false, error: 'WhatsApp no está configurado' };
+  try {
+    const fields = 'display_phone_number,verified_name,name_status,quality_rating,code_verification_status';
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${env('WHATSAPP_PHONE_NUMBER_ID')}?fields=${fields}`, {
+      headers: { Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` },
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data?.error?.message || `HTTP ${res.status}` };
+    return { ok: true, info: data };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 // ---------- webhook parsing ----------
 
 export type Intent = 'confirm' | 'cancel' | null;
@@ -106,6 +137,7 @@ export interface InboundMessage {
   text: string; // what the customer wrote or tapped
   intent: Intent;
   orderId?: string; // from a button payload like "confirm:<orderId>"
+  orderNumber?: string; // "LP-12345" written in the message (e.g. the landing's pre-filled text)
   raw: unknown;
 }
 
@@ -126,9 +158,15 @@ const norm = (v: string) =>
     .trim();
 
 // Reads a button payload ("confirm:<id>") or a reply text ("Confirmar pedido" / "Cancelar").
-export function detectIntent(payload: string, text: string, isButton: boolean): { intent: Intent; orderId?: string } {
+export function detectIntent(payload: string, text: string, isButton: boolean): { intent: Intent; orderId?: string; orderNumber?: string } {
   const p = /^(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
   if (p) return { intent: p[1] as Intent, orderId: p[2] };
+  // The landing's pre-filled message: "Quiero confirmar mi pedido ... *Pedido:* LP-12345 ...".
+  const code = /\b(LP-\d{3,8})\b/i.exec(text || '');
+  if (!isButton && code) {
+    const orderNumber = code[1].toUpperCase();
+    return /confirm/.test(norm(text)) ? { intent: 'confirm', orderNumber } : { intent: null, orderNumber };
+  }
   const t = norm(text || payload || '');
   const confirm = ['confirmar pedido', 'confirmar', 'confirmo', 'confirm'];
   const cancel = ['cancelar', 'cancelar pedido', 'cancel'];
@@ -184,7 +222,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           default:
             text = m[m.type]?.caption ? `[${m.type}] ${m[m.type].caption}` : `[${m.type}]`;
         }
-        const { intent, orderId } = detectIntent(payload, text, isButton);
+        const { intent, orderId, orderNumber } = detectIntent(payload, text, isButton);
         messages.push({
           waMessageId: m.id,
           from: String(m.from).replace(/\D/g, ''),
@@ -194,6 +232,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           text,
           intent,
           orderId,
+          orderNumber,
           raw: m,
         });
       }

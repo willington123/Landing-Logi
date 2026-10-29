@@ -176,7 +176,17 @@ En **Settings → Environment Variables** añade y vuelve a desplegar (**Deploym
 3. **Token de verificación:** el mismo valor de `WHATSAPP_VERIFY_TOKEN`. Pulsa **Verificar y guardar**.
 4. En **Campos del webhook**, suscríbete a `messages`.
 
-Comprueba el estado en **Integraciones** del panel: la tarjeta de WhatsApp debe decir *Configurado*. Haz un pedido de prueba con tu propio número.
+Comprueba el estado en **Integraciones** del panel: la tarjeta de WhatsApp debe decir *Configurado* y mostrar el número conectado, su nombre visible y su calidad (datos leídos de Meta).
+
+### 7. Probar
+En **Integraciones → WhatsApp**, escribe tu celular y:
+1. **Probar conexión:** envía la plantilla `hello_world` de Meta. Si llega, el token y el número funcionan. Si falla, verás el error exacto de Meta.
+2. **Probar mi plantilla:** envía tu plantilla de confirmación con datos de ejemplo. Toca un botón: si recibes "Mensaje de prueba recibido ✅", el webhook también funciona. No cambia ningún pedido.
+
+Después haz un pedido de prueba real en una landing.
+
+### Confirmación con el mensaje de la landing
+Si el número de WhatsApp de la landing (editor → campo WhatsApp) es **el mismo número conectado a la API**, el mensaje que el cliente envía al terminar el pedido ("Quiero confirmar mi pedido… *Pedido:* LP-12345…") llega a **Mensajes**, el pedido pasa solo a *Confirmado* y el cliente recibe una respuesta automática. Si el cliente solo pregunta por su pedido (por ejemplo "¿cuándo llega el LP-12345?"), la conversación se vincula al pedido sin cambiar su estado.
 
 > WhatsApp solo permite texto libre dentro de las 24 h siguientes al último mensaje del cliente. Fuera de esa ventana la bandeja lo indica y no envía nada.
 
