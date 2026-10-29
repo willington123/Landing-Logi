@@ -30,10 +30,15 @@ import {
   Loader2,
 } from 'lucide-react';
 import { downloadOrdersExcel } from '@/lib/orders-export';
+import { OrderFilterBar } from '@/components/orders/OrderFilterBar';
+import { EMPTY_FILTERS, cleanSavedFilters, dateBounds, inTab, matchesBase, type OrderFilters } from '@/lib/order-filters';
+
+const FILTERS_KEY = 'lp_order_filters';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filters, setFilters] = useState<OrderFilters>(EMPTY_FILTERS);
+  const [landingNames, setLandingNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -49,6 +54,27 @@ export default function OrdersPage() {
     // Keep the open detail in step with the latest data.
     setSelectedOrder((cur) => (cur ? fresh.find((o) => o.id === cur.id) || null : cur));
   };
+
+  // Remember the last filters used in this browser.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(FILTERS_KEY);
+      if (saved) setFilters(cleanSavedFilters(JSON.parse(saved)));
+    } catch {}
+  }, []);
+  const changeFilters = (f: OrderFilters) => {
+    setFilters(f);
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+    } catch {}
+  };
+
+  useEffect(() => {
+    const readLandings = () => setLandingNames(Object.fromEntries(logiStore.getLandings().map((l) => [l.id, l.productName || l.title || l.slug])));
+    readLandings();
+    window.addEventListener(CLOUD_SYNC_EVENT, readLandings);
+    return () => window.removeEventListener(CLOUD_SYNC_EVENT, readLandings);
+  }, []);
 
   useEffect(() => {
     refreshData();
@@ -111,16 +137,9 @@ export default function OrdersPage() {
     }
   };
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
-    const matchesSearch =
-      searchQuery === '' ||
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.phone.includes(searchQuery);
-    return matchesStatus && matchesSearch;
-  });
+  const bounds = dateBounds(filters);
+  const baseOrders = orders.filter((o) => matchesBase(o, filters, searchQuery, bounds));
+  const filteredOrders = baseOrders.filter((o) => inTab(o, filters.status));
   const visibleChecked = filteredOrders.filter((o) => checked.has(o.id));
   const allVisibleChecked = filteredOrders.length > 0 && visibleChecked.length === filteredOrders.length;
   const toggleAllVisible = () =>
@@ -175,6 +194,20 @@ export default function OrdersPage() {
             <span>No contesta</span>
           </span>
         );
+      case 'shipped':
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/15">
+            <Truck className="w-3.5 h-3.5 text-sky-600" />
+            <span>Enviado</span>
+          </span>
+        );
+      case 'delivered':
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/15">
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+            <span>Entregado</span>
+          </span>
+        );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/15">
@@ -211,26 +244,12 @@ export default function OrdersPage() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="search"
-                  placeholder="Buscar por pedido, cliente o ciudad"
+                  placeholder="Buscar pedido, cliente, teléfono o guía"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full sm:w-72 h-9 text-sm bg-white border border-slate-200 rounded-lg pl-9 pr-3 text-slate-700 outline-none focus:border-brand-navy/40 focus:ring-4 focus:ring-brand-navy/10 transition"
                 />
               </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="h-9 text-sm bg-white border border-slate-200 rounded-lg px-3 text-slate-700 outline-none focus:border-brand-navy/40 focus:ring-4 focus:ring-brand-navy/10"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="pending_call">Por llamar</option>
-                <option value="confirmed_by_voice">Confirmados</option>
-                <option value="needs_review">Por revisar</option>
-                <option value="retry_scheduled">Reintento</option>
-                <option value="calling">Llamando</option>
-                <option value="unanswered">No contesta</option>
-                <option value="cancelled">Cancelados</option>
-              </select>
               <button
                 type="button"
                 onClick={() => downloadOrdersExcel(filteredOrders)}
@@ -243,6 +262,8 @@ export default function OrdersPage() {
               </button>
             </div>
           </div>
+
+          <OrderFilterBar all={orders} base={baseOrders} filters={filters} onChange={changeFilters} landingNames={landingNames} />
 
           {visibleChecked.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">

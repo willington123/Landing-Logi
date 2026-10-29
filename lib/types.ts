@@ -223,6 +223,8 @@ export interface OrderItem {
   confirmedAt?: string;
   callNotes?: string; // what the AI call or a call error reported
   previousAddress?: string;
+  confirmedVia?: string; // 'whatsapp' when the customer confirmed by WhatsApp
+  whatsappFrom?: string;
   carrier?: string | null; // transportadora, set when marked as shipped
   trackingNumber?: string | null; // número de guía
   shippedAt?: string; // address before the customer corrected it on the call
