@@ -184,6 +184,12 @@ export function wompiConfigured() {
 }
 const wompiApi = () => env('WOMPI_API_URL') || (env('WOMPI_PUBLIC_KEY').startsWith('pub_prod_') ? 'https://production.wompi.co/v1' : 'https://sandbox.wompi.co/v1');
 
+export class WompiError extends Error {
+  constructor(message: string, public httpStatus: number) {
+    super(message);
+  }
+}
+
 async function wompi(path: string, init: RequestInit & { auth?: 'public' | 'private' } = {}) {
   const key = init.auth === 'public' ? env('WOMPI_PUBLIC_KEY') : env('WOMPI_PRIVATE_KEY');
   const res = await fetch(`${wompiApi()}${path}`, {
@@ -194,8 +200,11 @@ async function wompi(path: string, init: RequestInit & { auth?: 'public' | 'priv
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msgs = data?.error?.messages ? Object.values(data.error.messages).flat().join('; ') : '';
-    throw new Error(`Wompi: ${msgs || data?.error?.reason || data?.error?.type || `HTTP ${res.status}`}`);
+    // Logged in full (Vercel → Logs) so a failed payment can be diagnosed; no card data is ever sent here.
+    console.error('Wompi error', res.status, path.replace(/\/merchants\/.*/, '/merchants/…'), JSON.stringify(data));
+    const flat = (v: unknown): string[] => (v && typeof v === 'object' ? Object.entries(v as object).flatMap(([k, x]) => (typeof x === 'object' ? flat(x).map((m) => (/^\d+$/.test(k) ? m : `${k}: ${m}`)) : [/^\d+$/.test(k) ? String(x) : `${k}: ${x}`])) : v ? [String(v)] : []);
+    const detail = [data?.error?.type, ...flat(data?.error?.messages), data?.error?.reason].filter(Boolean).join(' · ');
+    throw new WompiError(`Wompi: ${detail || 'sin detalle'} (HTTP ${res.status})`, res.status);
   }
   return data;
 }

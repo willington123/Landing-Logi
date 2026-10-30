@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { rawDb } from '@/lib/server/supabase';
 import { acceptanceTokens, applyTransaction, chargeCard, createPayment, getPlans, getSubscription, savePaymentSource, updateSubscription, wompiConfigured } from '@/lib/server/billing';
 import { requireBillingManager } from '@/lib/server/billing-api';
 import { normalizeEmail, validEmail } from '@/lib/server/accounts';
@@ -34,7 +35,16 @@ export async function POST(req: NextRequest) {
     if (!/^tok_[\w-]+$/.test(String(b.token || ''))) return fail('No se pudo leer la tarjeta. Vuelve a escribirla.');
     if (!b.acceptanceToken) return fail('Acepta los términos de Wompi para guardar la tarjeta.');
 
-    const source = await savePaymentSource({ token: b.token, email, acceptanceToken: String(b.acceptanceToken), personalToken: b.personalToken ? String(b.personalToken) : undefined });
+    let source: Awaited<ReturnType<typeof savePaymentSource>>;
+    try {
+      source = await savePaymentSource({ token: b.token, email, acceptanceToken: String(b.acceptanceToken), personalToken: b.personalToken ? String(b.personalToken) : undefined });
+    } catch (e: any) {
+      // Nothing was charged. Usually the merchant doesn't have card saving (payment sources) enabled by Wompi yet.
+      return fail(
+        `Wompi no permitió guardar la tarjeta para el cobro automático, así que no se cobró nada. Paga el mes con "Pagar un mes con PSE, Nequi o tarjeta". Detalle: ${e?.message || e}`,
+        502,
+      );
+    }
     const sub = await getSubscription(orgId);
     const paidTimeLeft = sub.effective === 'active' && sub.daysLeft !== null && sub.daysLeft > 1;
     await updateSubscription(orgId, {
@@ -52,7 +62,15 @@ export async function POST(req: NextRequest) {
     if (paidTimeLeft) return ok({ charged: false, message: `Listo. El próximo cobro será al terminar tu periodo actual.` });
 
     const pay = await createPayment(orgId, b.plan, 'auto');
-    const tx = await chargeCard({ sourceId: source.id, amountCents: pay.amount_cents, reference: pay.reference, email });
+    let tx;
+    try {
+      tx = await chargeCard({ sourceId: source.id, amountCents: pay.amount_cents, reference: pay.reference, email });
+    } catch (e: any) {
+      const msg = String(e?.message || e).slice(0, 300);
+      await rawDb().from('payments').update({ status: 'ERROR', error: msg, updated_at: new Date().toISOString() }).eq('id', pay.id);
+      await updateSubscription(orgId, { auto_renew: false });
+      return fail(`La tarjeta quedó guardada pero Wompi no aceptó el cobro, así que no se cobró nada. ${msg}`, 502);
+    }
     const r = await applyTransaction(tx);
     return ok({ charged: true, status: tx.status, applied: r.applied, message: tx.status_message || null });
   } catch (e: any) {
