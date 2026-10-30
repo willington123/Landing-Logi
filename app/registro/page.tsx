@@ -55,6 +55,13 @@ export default function SignupPage() {
               <PasswordField id="password" label="Contraseña" value={password} onChange={setPassword} autoComplete="new-password" hint="Mínimo 8 caracteres." />
               <FormError error={error} />
               <SubmitButton busy={busy} disabled={!name || !storeName || !email || password.length < 8} label="Crear mi tienda" busyLabel="Creando…" />
+              <p className="text-xs text-slate-500 text-center">
+                7 días gratis, sin tarjeta. Al crear tu tienda aceptas los{' '}
+                <Link href="/terminos" target="_blank" className="underline underline-offset-2 hover:text-slate-700">
+                  Términos del servicio
+                </Link>
+                .
+              </p>
             </form>
           )}
           <p className="mt-6 text-sm text-slate-600 text-center lg:text-left">
