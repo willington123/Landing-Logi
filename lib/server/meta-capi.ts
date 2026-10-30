@@ -2,14 +2,14 @@
 // Sends the same event_id as the browser pixel so Meta deduplicates them.
 import { createHash } from 'crypto';
 import { CALLING_CODES, normalizePhone } from '@/lib/phone';
-import { envIntegrationsAllowed } from '@/lib/server/tenant';
+import { capiConfig } from '@/lib/server/integrations';
 
 export { normalizePhone };
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
 
-export function capiEnabled(): boolean {
-  return envIntegrationsAllowed() && Boolean(process.env.META_CAPI_ACCESS_TOKEN?.trim());
+export async function capiEnabled(): Promise<boolean> {
+  return Boolean(await capiConfig());
 }
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
@@ -35,7 +35,8 @@ export interface CapiPurchase {
 }
 
 export async function sendCapiPurchase(p: CapiPurchase): Promise<{ ok: boolean; error?: string; eventsReceived?: number }> {
-  if (!capiEnabled() || !/^\d{10,20}$/.test(p.pixelId || '')) return { ok: false, error: 'CAPI no configurado' };
+  const cfg = await capiConfig();
+  if (!cfg || !/^\d{10,20}$/.test(p.pixelId || '')) return { ok: false, error: 'CAPI no configurado' };
 
   const [first, ...rest] = norm(p.customer.name).split(/\s+/);
   const cc = CALLING_CODES[p.customer.country || 'Colombia'] || CALLING_CODES.Colombia;
@@ -76,10 +77,10 @@ export async function sendCapiPurchase(p: CapiPurchase): Promise<{ ok: boolean; 
       },
     ],
   };
-  if (process.env.META_CAPI_TEST_CODE?.trim()) body.test_event_code = process.env.META_CAPI_TEST_CODE.trim();
+  if (cfg.testCode) body.test_event_code = cfg.testCode;
 
   try {
-    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${p.pixelId}/events?access_token=${encodeURIComponent(process.env.META_CAPI_ACCESS_TOKEN!.trim())}`, {
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${p.pixelId}/events?access_token=${encodeURIComponent(cfg.token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

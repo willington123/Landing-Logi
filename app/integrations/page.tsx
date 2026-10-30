@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { KeyConnection, VapiConnection, WhatsAppConnection, WhatsAppTemplates, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import {
   Plug,
+  Loader2,
   CheckCircle2,
   AlertCircle,
   Key,
@@ -94,21 +96,6 @@ const INTEGRATIONS: IntegrationItem[] = [
     docUrl: 'https://twilio.com',
   },
   {
-    id: 'meta_capi',
-    name: 'Meta Conversions API (CAPI) & Pixel',
-    category: 'tracking',
-    description: 'Envía eventos del lado del servidor (Purchase, Lead, InitiateCheckout) para eludir bloqueadores y maximizar ROAS en Facebook Ads.',
-    iconBg: 'bg-blue-600',
-    status: 'coming_soon',
-    requiresKeysText: 'Conexión activa con deduplicación de eventos browser + servidor.',
-    keyFields: [
-      { name: 'pixel_id', label: 'Dataset / Pixel ID', placeholder: '8942109823192' },
-      { name: 'capi_token', label: 'Conversions API Access Token', placeholder: 'EAAG...', isSecret: true },
-      { name: 'test_code', label: 'Test Event Code (Opcional)', placeholder: 'TEST48291' },
-    ],
-    docUrl: 'https://developers.facebook.com/docs/marketing-api/conversions-api',
-  },
-  {
     id: 'dropi_logistics',
     name: 'Dropi / Servientrega / Interrapidísimo',
     category: 'logistics',
@@ -130,14 +117,6 @@ interface WaStatus {
   cron?: boolean;
   missing: string[];
 }
-
-const WA_VARS: { name: string; hint: string }[] = [
-  { name: 'WHATSAPP_TOKEN', hint: 'Token permanente de un usuario del sistema' },
-  { name: 'WHATSAPP_PHONE_NUMBER_ID', hint: 'Identificador del número (WhatsApp Manager)' },
-  { name: 'WHATSAPP_VERIFY_TOKEN', hint: 'Texto que inventas y pegas también en Meta' },
-  { name: 'WHATSAPP_APP_SECRET', hint: 'Clave secreta de tu app de Meta' },
-  { name: 'WHATSAPP_CONFIRM_TEMPLATE', hint: 'Nombre de la plantilla, p. ej. confirmacion_pedido (solo para la plantilla automática)' },
-];
 
 interface WaNumber {
   display_phone_number?: string;
@@ -491,7 +470,7 @@ function WhatsAppModePicker({
 }
 
 // WhatsApp card: real status from the server; credentials live in env vars, never in the browser.
-function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
+function WhatsAppCard({ status, integ, onChanged }: { status: WaStatus | null | undefined; integ: IntegrationsInfo | null; onChanged: () => void }) {
   const [mode, setMode] = useState<WaMode | null>(null);
   const [fallback, setFallback] = useState(0);
   useEffect(() => {
@@ -505,9 +484,7 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
   }, []);
   // The template is only required when it is sent automatically.
   const ready = status && status.sending && status.webhook && (mode === 'customer_first' || status.confirmTemplate);
-  const partial = status && !ready && status.missing.length < WA_VARS.length;
-  const [webhookUrl, setWebhookUrl] = useState('https://<tu-dominio>/api/whatsapp/webhook');
-  useEffect(() => setWebhookUrl(`${window.location.origin}/api/whatsapp/webhook`), []);
+  const partial = status && !ready && status.sending;
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col space-y-4 md:col-span-2">
       <div className="flex items-start justify-between gap-3">
@@ -537,39 +514,11 @@ function WhatsAppCard({ status }: { status: WaStatus | null | undefined }) {
 
       <p className="text-xs text-slate-600 leading-relaxed">
         Envía una plantilla de confirmación a cada pedido nuevo, recibe las respuestas en Mensajes y actualiza el pedido a
-        &quot;Confirmado&quot; o &quot;Cancelado&quot; cuando el cliente toca un botón. Las credenciales se guardan como variables de entorno en Vercel
-        (nunca en el navegador) y después hay que volver a desplegar.
+        &quot;Confirmado&quot; o &quot;Cancelado&quot; cuando el cliente toca un botón. Cada tienda conecta su propio número.
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-        {WA_VARS.map((v) => {
-          const missing = !status || status.missing.includes(v.name);
-          return (
-            <div key={v.name} className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2">
-              {missing ? <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />}
-              <div className="min-w-0">
-                <code className="text-[11px] font-mono font-semibold text-slate-800 break-all">{v.name}</code>
-                <p className="text-[11px] text-slate-500">{v.hint}</p>
-              </div>
-            </div>
-          );
-        })}
-        <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2">
-          <Globe className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <code className="text-[11px] font-mono font-semibold text-slate-800">WHATSAPP_TEMPLATE_LANG</code>
-            <p className="text-[11px] text-slate-500">Opcional. Idioma de la plantilla (por defecto es)</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="text-xs text-slate-600 space-y-1">
-        <p>
-          URL del webhook en Meta (campo <code className="font-mono">messages</code>):{' '}
-          <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded break-all">{webhookUrl}</code>
-        </p>
-        <p>Los pasos completos y el texto exacto de la plantilla están en el README, sección &quot;WhatsApp&quot;.</p>
-      </div>
+      {integ ? <WhatsAppConnection info={integ} onChanged={onChanged} /> : <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}
+      {integ?.whatsapp.connected && integ.whatsapp.wabaId && <WhatsAppTemplates info={integ} onChanged={onChanged} />}
 
       {status?.sending && (
         <WhatsAppModePicker
@@ -608,7 +557,7 @@ interface VapiStatus {
 }
 
 // Vapi card: real status; settings and history live in Llamadas IA.
-function VapiCard({ status }: { status: VapiStatus | null | undefined }) {
+function VapiCard({ status, integ, onChanged }: { status: VapiStatus | null | undefined; integ: IntegrationsInfo | null; onChanged: () => void }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -637,19 +586,10 @@ function VapiCard({ status }: { status: VapiStatus | null | undefined }) {
         Llama a cada cliente, confirma producto, total y dirección, y actualiza el pedido a Confirmado, Cancelado o Revisar. Reintenta si no contesta, dentro
         de tu horario.
       </p>
-      <div className="space-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
-        {[
-          ['VAPI_API_KEY', !status?.missing.includes('VAPI_API_KEY')],
-          ['VAPI_PHONE_NUMBER_ID', !status?.missing.includes('VAPI_PHONE_NUMBER_ID')],
-          ['VAPI_WEBHOOK_SECRET', Boolean(status?.webhookSecret)],
-          ['CRON_SECRET', Boolean(status?.cron)],
-        ].map(([name, ok]) => (
-          <div key={name as string} className="flex items-center gap-2">
-            {ok ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
-            <code className="font-mono font-semibold text-slate-700">{name}</code>
-          </div>
-        ))}
-      </div>
+      <div className="pt-2 border-t border-slate-100">{integ ? <VapiConnection info={integ} onChanged={onChanged} /> : <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}</div>
+      {status?.ready && !status.cron && (
+        <p className="text-[11px] text-amber-700">Para reintentos y llamadas fuera de horario activa la revisión automática (CRON_SECRET), como en la tarjeta de WhatsApp.</p>
+      )}
       <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
         <a href="https://docs.vapi.ai" target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1">
           <span>Documentación de Vapi</span>
@@ -666,7 +606,8 @@ function VapiCard({ status }: { status: VapiStatus | null | undefined }) {
 export default function IntegrationsPage() {
   const [vapiStatus, setVapiStatus] = useState<VapiStatus | null | undefined>(undefined);
   const [waStatus, setWaStatus] = useState<WaStatus | null | undefined>(undefined);
-  useEffect(() => {
+  const [integ, setInteg] = useState<IntegrationsInfo | null>(null);
+  const reload = useCallback(() => {
     fetch('/api/status', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
@@ -677,18 +618,16 @@ export default function IntegrationsPage() {
         setWaStatus(null);
         setVapiStatus(null);
       });
+    loadIntegrations().then(setInteg);
   }, []);
+  useEffect(() => reload(), [reload]);
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
 
-  // Stores other than the one that owns the keys in Vercel can't set up WhatsApp/Vapi here yet (next phase).
-  const managed = !waStatus || (waStatus as any).managed !== false;
-  const filtered = INTEGRATIONS.filter(
-    (item) => (selectedCategory === 'all' || item.category === selectedCategory) && (managed || (item.id !== 'whatsapp_cloud' && item.id !== 'vapi_ai'))
-  );
+  const filtered = INTEGRATIONS.filter((item) => selectedCategory === 'all' || item.category === selectedCategory);
 
   const toggleShowSecret = (fieldKey: string) => {
     setShowSecrets((prev) => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
@@ -707,15 +646,6 @@ export default function IntegrationsPage() {
         <Header onOpenWizard={() => setIsWizardOpen(true)} title="Integraciones" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
-          {waStatus && (waStatus as any).managed === false && (
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
-              <p className="text-[15px] font-semibold text-indigo-950">Conecta tu WhatsApp, llamadas y píxel muy pronto</p>
-              <p className="text-sm text-indigo-900/80 mt-1">
-                Tu tienda ya puede crear landings y recibir pedidos. La conexión de tus propias cuentas de WhatsApp Business, llamadas con IA y Meta llega en la próxima
-                actualización: aquí verás un botón para conectarlas en pocos clics.
-              </p>
-            </div>
-          )}
           {/* Header Description */}
           <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
@@ -723,7 +653,7 @@ export default function IntegrationsPage() {
                 Integraciones
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">
-                WhatsApp y Vapi ya funcionan cuando configuras sus variables de entorno. El resto de conexiones están en desarrollo. El píxel de Meta se configura en Configuración.
+                Conecta las cuentas de tu tienda: WhatsApp, llamadas con IA, Claude y la API de conversiones de Meta. Las claves se guardan cifradas. El píxel de Meta se configura en cada landing o en Configuración.
               </p>
             </div>
 
@@ -772,12 +702,38 @@ export default function IntegrationsPage() {
             </div>
           </div>
 
+          {integ && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <KeyConnection
+                kind="anthropic"
+                title="Claude (Anthropic)"
+                description="La IA del asistente de WhatsApp que responde y vende por ti. Se cobra por uso en tu cuenta de Anthropic."
+                placeholder="sk-ant-…"
+                docs={{ label: 'Crear clave en console.anthropic.com', href: 'https://console.anthropic.com/settings/keys' }}
+                state={integ.anthropic}
+                canManage={integ.canManage}
+                onChanged={reload}
+              />
+              <KeyConnection
+                kind="capi"
+                title="Meta: API de conversiones"
+                description="Envía cada compra a Meta desde el servidor para que tus anuncios optimicen mejor (el píxel va en cada landing o en Configuración)."
+                placeholder="Token de acceso de la API de conversiones"
+                docs={{ label: 'Events Manager → tu píxel → Configuración', href: 'https://business.facebook.com/events_manager2' }}
+                state={integ.capi}
+                canManage={integ.canManage}
+                onChanged={reload}
+                extra={{ placeholder: 'Código de prueba (opcional)', field: 'testCode' }}
+              />
+            </div>
+          )}
+
           {/* Integrations Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {filtered.map((item) => item.id === 'whatsapp_cloud' ? (
-              <WhatsAppCard key={item.id} status={waStatus} />
+              <WhatsAppCard key={item.id} status={waStatus} integ={integ} onChanged={reload} />
             ) : item.id === 'vapi_ai' ? (
-              <VapiCard key={item.id} status={vapiStatus} />
+              <VapiCard key={item.id} status={vapiStatus} integ={integ} onChanged={reload} />
             ) : (
               <div
                 key={item.id}

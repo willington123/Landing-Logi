@@ -6,6 +6,7 @@ import { cloudEnabled, db } from '@/lib/server/db';
 import { processCallQueue } from '@/lib/server/voice-actions';
 import { processWaFallback } from '@/lib/server/wa-actions';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
+import { orgsWithConnections } from '@/lib/server/integrations';
 
 export type RunSource = 'cron' | 'visita' | 'panel';
 
@@ -63,9 +64,19 @@ async function noteDeniedForOrg() {
   }
 }
 
+// Runs the pending work of every store with WhatsApp or Vapi connected (each inside its own store).
+// Returns the main store's result plus how many stores ran.
 export async function runScheduled(origin?: string, source: RunSource = 'cron') {
-  // Calls and WhatsApp templates use the keys in Vercel, which belong to one account.
-  return runWithOrg(integrationsOrg(), () => runScheduledForOrg(origin, source));
+  const orgs = cloudEnabled() ? await orgsWithConnections().catch(() => [integrationsOrg()]) : [integrationsOrg()];
+  let main: Awaited<ReturnType<typeof runScheduledForOrg>> = { calls: null, whatsapp: null };
+  for (const org of orgs) {
+    const r = await runWithOrg(org, () => runScheduledForOrg(origin, source)).catch((e) => {
+      console.error('Tareas programadas:', org, e);
+      return { calls: null, whatsapp: null };
+    });
+    if (org === integrationsOrg()) main = r;
+  }
+  return { ...main, stores: orgs.length };
 }
 
 async function runScheduledForOrg(origin: string | undefined, source: RunSource) {

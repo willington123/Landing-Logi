@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // Admin: free-text reply. Only allowed within 24 h of the customer's last message.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
-  if (!whatsappEnabled()) return NextResponse.json({ success: false, error: 'WhatsApp no está configurado.' }, { status: 503 });
+  if (!(await whatsappEnabled())) return NextResponse.json({ success: false, error: 'WhatsApp no está configurado.' }, { status: 503 });
   if (!validId(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
   try {
     const { text } = await req.json().catch(() => ({}));

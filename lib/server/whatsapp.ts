@@ -1,43 +1,44 @@
 // WhatsApp Business Cloud API: sending, webhook signature check and payload parsing.
-// Server-only: uses the WhatsApp access token and app secret.
+// Server-only. Each store uses its own connection (lib/server/integrations); the store that owns the
+// keys in Vercel uses those.
 import { createHmac, timingSafeEqual } from 'crypto';
-import { envIntegrationsAllowed } from '@/lib/server/tenant';
+import { waConfig, type WaConfig } from '@/lib/server/integrations';
 
-const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
-
-const env = (k: string) => (process.env[k] || '').trim();
+export const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
+const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 export const WHATSAPP_ENV = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET', 'WHATSAPP_CONFIRM_TEMPLATE'] as const;
 
 // Can send messages (free text and templates).
-export function whatsappEnabled(): boolean {
-  // The number in Vercel belongs to one account (other accounts connect theirs in a later phase).
-  return envIntegrationsAllowed() && Boolean(env('WHATSAPP_TOKEN') && env('WHATSAPP_PHONE_NUMBER_ID'));
+export async function whatsappEnabled(): Promise<boolean> {
+  return Boolean(await waConfig());
 }
 
 // Can send the automatic order confirmation template.
-export function confirmTemplateEnabled(): boolean {
-  return whatsappEnabled() && Boolean(env('WHATSAPP_CONFIRM_TEMPLATE'));
+export async function confirmTemplateEnabled(): Promise<boolean> {
+  return Boolean((await waConfig())?.confirmTemplate);
 }
 
-export function whatsappStatus() {
-  if (!envIntegrationsAllowed()) return { sending: false, confirmTemplate: false, webhook: false, cron: false, missing: [...WHATSAPP_ENV], managed: false };
+export async function whatsappStatus() {
+  const c = await waConfig();
   return {
-    managed: true,
-    sending: whatsappEnabled(),
-    confirmTemplate: confirmTemplateEnabled(),
-    webhook: Boolean(env('WHATSAPP_VERIFY_TOKEN') && env('WHATSAPP_APP_SECRET')),
-    cron: Boolean(env('CRON_SECRET')), // scheduled task, needed for the fallback template
-    missing: WHATSAPP_ENV.filter((k) => !env(k)),
+    managed: true, // every store can connect its own WhatsApp
+    connected: Boolean(c),
+    source: c?.source || null, // 'env' (Vercel) or 'store' (connected in the panel)
+    mode: c?.mode || null,
+    sending: Boolean(c),
+    confirmTemplate: Boolean(c?.confirmTemplate),
+    templateName: c?.confirmTemplate || null,
+    webhook: Boolean(c && c.verifyToken && c.appSecret),
+    cron: Boolean((process.env.CRON_SECRET || '').trim()), // scheduled task, needed for the fallback template
+    missing: c?.source === 'env' ? WHATSAPP_ENV.filter((k) => !(process.env[k] || '').trim()) : [],
+    phoneNumberId: c?.phoneNumberId || null,
+    wabaId: c?.wabaId || null,
   };
 }
 
-export function verifyToken(): string {
-  return env('WHATSAPP_VERIFY_TOKEN');
-}
-
 // Checks X-Hub-Signature-256 ("sha256=<hex>") against HMAC-SHA256(rawBody, app secret).
-export function verifySignature(rawBody: string, header: string | null, secret = env('WHATSAPP_APP_SECRET')): boolean {
+export function verifySignature(rawBody: string, header: string | null, secret: string | null | undefined): boolean {
   if (!secret || !header?.startsWith('sha256=')) return false;
   const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest();
   const given = Buffer.from(header.slice(7), 'hex');
@@ -52,18 +53,21 @@ export interface SendResult {
   error?: string;
 }
 
-async function send(body: Record<string, unknown>): Promise<SendResult> {
-  if (!whatsappEnabled()) return { ok: false, error: 'WhatsApp no está configurado' };
+const graphError = (data: any, status: number) => data?.error?.error_data?.details || data?.error?.message || `HTTP ${status}`;
+
+async function send(body: Record<string, unknown>, cfg?: WaConfig | null): Promise<SendResult> {
+  const c = cfg ?? (await waConfig());
+  if (!c) return { ok: false, error: 'WhatsApp no está configurado' };
   try {
-    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${env('WHATSAPP_PHONE_NUMBER_ID')}/messages`, {
+    const res = await fetch(`${GRAPH}/${c.phoneNumberId}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}` },
       body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...body }),
       signal: AbortSignal.timeout(8000),
       cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data?.error?.error_data?.details || data?.error?.message || `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: graphError(data, res.status) };
     return { ok: true, messageId: data?.messages?.[0]?.id };
   } catch (e: any) {
     return { ok: false, error: e?.name === 'TimeoutError' ? 'WhatsApp no respondió a tiempo' : e?.message || String(e) };
@@ -79,21 +83,22 @@ const param = (v: string) => ({ type: 'text', text: (v || '-').replace(/[\n\t\r]
 
 // Order confirmation template: {{1}} name, {{2}} product, {{3}} total, {{4}} city.
 // The two quick-reply buttons carry the order id so the reply maps to the exact order.
-export function sendConfirmTemplate(to: string, vars: { name: string; product: string; total: string; city: string }, orderId: string): Promise<SendResult> {
-  if (!confirmTemplateEnabled()) return Promise.resolve({ ok: false, error: 'Plantilla de confirmación no configurada' });
+export async function sendConfirmTemplate(to: string, vars: { name: string; product: string; total: string; city: string }, orderId: string): Promise<SendResult> {
+  const c = await waConfig();
+  if (!c?.confirmTemplate) return { ok: false, error: 'Plantilla de confirmación no configurada' };
   return send({
     to,
     type: 'template',
     template: {
-      name: env('WHATSAPP_CONFIRM_TEMPLATE'),
-      language: { code: env('WHATSAPP_TEMPLATE_LANG') || 'es' },
+      name: c.confirmTemplate,
+      language: { code: c.templateLang || 'es' },
       components: [
         { type: 'body', parameters: [param(vars.name), param(vars.product), param(vars.total), param(vars.city)] },
         { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: `confirm:${orderId}` }] },
         { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: `cancel:${orderId}` }] },
       ],
     },
-  });
+  }, c);
 }
 
 export { formatMoney } from '@/lib/whatsapp-link';
@@ -112,12 +117,13 @@ export interface PhoneNumberInfo {
 }
 
 // Details of the connected number (also proves the token and the phone number ID work).
-export async function phoneNumberInfo(): Promise<{ ok: true; info: PhoneNumberInfo } | { ok: false; error: string }> {
-  if (!whatsappEnabled()) return { ok: false, error: 'WhatsApp no está configurado' };
+export async function phoneNumberInfo(cfg?: { token: string; phoneNumberId: string }): Promise<{ ok: true; info: PhoneNumberInfo } | { ok: false; error: string }> {
+  const c = cfg ?? (await waConfig());
+  if (!c) return { ok: false, error: 'WhatsApp no está configurado' };
   try {
     const fields = 'display_phone_number,verified_name,name_status,quality_rating,code_verification_status';
-    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${env('WHATSAPP_PHONE_NUMBER_ID')}?fields=${fields}`, {
-      headers: { Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` },
+    const res = await fetch(`${GRAPH}/${c.phoneNumberId}?fields=${fields}`, {
+      headers: { Authorization: `Bearer ${c.token}` },
       signal: AbortSignal.timeout(8000),
       cache: 'no-store',
     });
@@ -132,10 +138,11 @@ export async function phoneNumberInfo(): Promise<{ ok: true; info: PhoneNumberIn
 // Downloads a file the customer sent (photo, voice note…). Meta's file URL needs the token and expires in minutes,
 // so the panel always goes through this with the media id.
 export async function fetchMedia(mediaId: string): Promise<{ ok: true; res: Response; mime: string } | { ok: false; status: number; error: string }> {
-  if (!whatsappEnabled()) return { ok: false, status: 503, error: 'WhatsApp no está configurado' };
+  const c = await waConfig();
+  if (!c) return { ok: false, status: 503, error: 'WhatsApp no está configurado' };
   try {
-    const auth = { Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` };
-    const meta = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, { headers: auth, signal: AbortSignal.timeout(8000), cache: 'no-store' });
+    const auth = { Authorization: `Bearer ${c.token}` };
+    const meta = await fetch(`${GRAPH}/${mediaId}`, { headers: auth, signal: AbortSignal.timeout(8000), cache: 'no-store' });
     const info = await meta.json().catch(() => ({}));
     if (!meta.ok || !info?.url) return { ok: false, status: meta.status === 404 ? 404 : 502, error: info?.error?.message || 'El archivo ya no está disponible en WhatsApp.' };
     const res = await fetch(info.url, { headers: auth, signal: AbortSignal.timeout(20000), cache: 'no-store' });
@@ -160,6 +167,7 @@ export interface InboundMessage {
   intent: Intent;
   orderId?: string; // from a button payload like "confirm:<orderId>"
   orderNumber?: string; // "LP-12345" written in the message (e.g. the landing's pre-filled text)
+  phoneNumberId?: string; // the store's number that received it (routes the notice to its store)
   raw: unknown;
 }
 
@@ -169,6 +177,7 @@ export interface StatusUpdate {
   status: 'sent' | 'delivered' | 'read' | 'failed' | string;
   timestamp: string;
   error?: string;
+  phoneNumberId?: string;
 }
 
 const norm = (v: string) =>
@@ -214,6 +223,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
     for (const change of entry.changes || []) {
       if (change.field !== 'messages') continue;
       const v = change.value || {};
+      const phoneNumberId = v.metadata?.phone_number_id ? String(v.metadata.phone_number_id) : undefined;
       const names: Record<string, string> = {};
       for (const c of v.contacts || []) if (c?.wa_id) names[c.wa_id] = c.profile?.name;
 
@@ -255,6 +265,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           intent,
           orderId,
           orderNumber,
+          phoneNumberId,
           raw: m,
         });
       }
@@ -267,6 +278,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           status: s.status,
           timestamp: iso(s.timestamp),
           error: s.errors?.[0] ? [s.errors[0].title || s.errors[0].message, s.errors[0].error_data?.details].filter(Boolean).join(': ') : undefined,
+          phoneNumberId,
         });
       }
     }
@@ -278,4 +290,61 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
 export const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 export function insideServiceWindow(lastInboundAt?: string | null): boolean {
   return Boolean(lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < SERVICE_WINDOW_MS);
+}
+
+// ---------- message templates (needs the WhatsApp Business Account id) ----------
+
+export interface WaTemplate {
+  id: string;
+  name: string;
+  language: string;
+  status: string; // APPROVED, PENDING, REJECTED, PAUSED, DISABLED
+  category: string;
+  rejected_reason?: string;
+  components?: any[];
+}
+
+export async function listTemplates(): Promise<WaTemplate[]> {
+  const c = await waConfig();
+  if (!c) throw new Error('Conecta WhatsApp primero.');
+  if (!c.wabaId) throw new Error('Falta el identificador de la cuenta de WhatsApp Business (WABA ID) en la conexión.');
+  const res = await fetch(`${GRAPH}/${c.wabaId}/message_templates?fields=id,name,language,status,category,rejected_reason,components&limit=100`, {
+    headers: { Authorization: `Bearer ${c.token}` },
+    signal: AbortSignal.timeout(10000),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(graphError(data, res.status));
+  return (data.data || []) as WaTemplate[];
+}
+
+export async function createTemplate(t: { name: string; language: string; category: 'UTILITY' | 'MARKETING'; body: string; examples: string[]; buttons: string[] }) {
+  const c = await waConfig();
+  if (!c) throw new Error('Conecta WhatsApp primero.');
+  if (!c.wabaId) throw new Error('Falta el identificador de la cuenta de WhatsApp Business (WABA ID) en la conexión.');
+  const components: any[] = [{ type: 'BODY', text: t.body, ...(t.examples.length ? { example: { body_text: [t.examples] } } : {}) }];
+  if (t.buttons.length) components.push({ type: 'BUTTONS', buttons: t.buttons.map((text) => ({ type: 'QUICK_REPLY', text })) });
+  const res = await fetch(`${GRAPH}/${c.wabaId}/message_templates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}` },
+    body: JSON.stringify({ name: t.name, language: t.language, category: t.category, components }),
+    signal: AbortSignal.timeout(10000),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error?.error_user_msg || graphError(data, res.status));
+  return data as { id: string; status: string; category: string };
+}
+
+export async function deleteTemplate(name: string) {
+  const c = await waConfig();
+  if (!c?.wabaId) throw new Error('Conecta WhatsApp primero.');
+  const res = await fetch(`${GRAPH}/${c.wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${c.token}` },
+    signal: AbortSignal.timeout(10000),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(graphError(data, res.status));
 }

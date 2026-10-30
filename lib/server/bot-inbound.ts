@@ -16,7 +16,7 @@ const HANDOFF_TAG: Record<string, string> = { reclamo: 'reclamo', cambio_pedido:
 
 // true = the assistant takes this message (the keyword/out-of-hours replies are skipped).
 export async function botTakesMessage(m: InboundMessage, fallback: () => Promise<unknown>): Promise<boolean> {
-  if (!botConfigured() || !whatsappEnabled()) return false;
+  if (!(await botConfigured()) || !(await whatsappEnabled())) return false;
   const settings = await getBotSettings();
   if (!settings.enabled) return false;
   if (settings.mode === 'away') {

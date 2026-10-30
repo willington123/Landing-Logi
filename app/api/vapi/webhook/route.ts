@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { timingSafeEqual } from 'crypto';
 import { cloudEnabled } from '@/lib/server/db';
+import { rawDb } from '@/lib/server/supabase';
 import { getVapiCall, parseToolCalls, webhookSecret } from '@/lib/server/vapi';
 import { applyToolResult, finalizeCall } from '@/lib/server/voice-actions';
 import { getCallByVapiId, updateCall } from '@/lib/server/voice-store';
@@ -16,22 +17,24 @@ const sameSecret = (a: string, b: string) => {
 
 // Server messages from Vapi: status updates, tool calls ("registrar_resultado") and end-of-call reports.
 // Only calls created by this app (known vapi_call_id) are processed.
-// WhatsApp/Vapi keys in Vercel belong to one account: everything this webhook stores goes there.
+// Each call belongs to the store that placed it: the notice is handled inside that store,
+// and checked with that store's Vapi secret.
 export async function POST(req: NextRequest) {
-  return runWithOrg(integrationsOrg(), () => handle(req));
-}
-
-async function handle(req: NextRequest) {
-  const secret = webhookSecret();
-  if (secret && !sameSecret(req.headers.get('x-logipages-secret') || '', secret)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
   if (!cloudEnabled()) return NextResponse.json({ ok: true, stored: false });
-
   const body = await req.json().catch(() => null);
   const m = body?.message;
   const vapiCallId = typeof m?.call?.id === 'string' ? m.call.id : '';
   if (!m?.type || !vapiCallId) return NextResponse.json({ ok: true });
+  const { data } = await rawDb().from('calls').select('org_id').eq('vapi_call_id', vapiCallId).maybeSingle();
+  const org = (data?.org_id as string) || integrationsOrg();
+  return runWithOrg(org, () => handle(req, m, vapiCallId));
+}
+
+async function handle(req: NextRequest, m: any, vapiCallId: string) {
+  const secret = await webhookSecret();
+  if (secret && !sameSecret(req.headers.get('x-logipages-secret') || '', secret)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 
   try {
     if (m.type === 'tool-calls') {

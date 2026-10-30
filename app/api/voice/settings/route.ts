@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 // Admin: AI call settings and connection status.
 export async function GET(req: NextRequest) {
-  const status = { ...vapiStatus(), cloud: cloudEnabled(), baseUrl: publicBaseUrl(req.nextUrl.origin) };
+  const status = { ...(await vapiStatus()), cloud: cloudEnabled(), baseUrl: publicBaseUrl(req.nextUrl.origin) };
   if (!cloudEnabled()) return NextResponse.json({ success: true, config: DEFAULT_VOICE_CONFIG, status });
   try {
     return NextResponse.json({ success: true, config: await getVoiceConfig(), status });

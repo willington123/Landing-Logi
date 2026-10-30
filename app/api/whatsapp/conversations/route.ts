@@ -30,10 +30,10 @@ export async function GET() {
         assignee: assign[c.id] && people.has(assign[c.id]) ? assign[c.id] : null,
         bot: botStates[c.id]?.paused ? { paused: true, reason: botStates[c.id].reason || null, note: botStates[c.id].note || null } : null,
       })),
-      bot: { enabled: bot.enabled && botConfigured(), mode: bot.mode, name: bot.name },
+      bot: { enabled: bot.enabled && (await botConfigured()), mode: bot.mode, name: bot.name },
       tags,
       agents,
-      whatsapp: whatsappStatus(),
+      whatsapp: await whatsappStatus(),
     });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });

@@ -1,7 +1,7 @@
 // Vapi (AI phone calls). Server-only: uses the private API key.
 import { fillTemplate, type VoiceConfig } from '@/lib/voice-config';
 import { formatMoney } from '@/lib/whatsapp-link';
-import { envIntegrationsAllowed } from '@/lib/server/tenant';
+import { vapiConfig } from '@/lib/server/integrations';
 
 // Overridable for tests or a proxy; defaults to Vapi's API.
 const API = (process.env.VAPI_API_BASE_URL || 'https://api.vapi.ai').replace(/\/+$/, '');
@@ -9,22 +9,25 @@ const env = (k: string) => (process.env[k] || '').trim();
 
 export const VAPI_ENV = ['VAPI_API_KEY', 'VAPI_PHONE_NUMBER_ID', 'VAPI_WEBHOOK_SECRET'] as const;
 
-export function vapiEnabled(): boolean {
-  return envIntegrationsAllowed() && Boolean(env('VAPI_API_KEY') && env('VAPI_PHONE_NUMBER_ID'));
+export async function vapiEnabled(): Promise<boolean> {
+  return Boolean(await vapiConfig());
 }
 
-export function vapiStatus() {
+export async function vapiStatus() {
+  const c = await vapiConfig();
   return {
-    managed: envIntegrationsAllowed(),
-    ready: vapiEnabled(),
-    webhookSecret: Boolean(env('VAPI_WEBHOOK_SECRET')),
+    managed: true, // every store can connect its own Vapi
+    source: c?.source || null,
+    ready: Boolean(c),
+    webhookSecret: Boolean(c?.webhookSecret),
     cron: Boolean(env('CRON_SECRET')),
-    missing: VAPI_ENV.filter((k) => !env(k)),
+    missing: c?.source === 'store' ? [] : VAPI_ENV.filter((k) => !env(k)),
   };
 }
 
-export function webhookSecret(): string {
-  return env('VAPI_WEBHOOK_SECRET');
+// The secret Vapi sends back on every notice for this store's calls.
+export async function webhookSecret(): Promise<string> {
+  return (await vapiConfig())?.webhookSecret || '';
 }
 
 // Public base URL of this deployment (Vapi must reach the webhook).
@@ -38,9 +41,11 @@ export function publicBaseUrl(fallbackOrigin?: string): string {
 }
 
 async function vapiFetch(path: string, init?: RequestInit) {
+  const c = await vapiConfig();
+  if (!c) throw new Error('Vapi no está configurado.');
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env('VAPI_API_KEY')}`, ...(init?.headers || {}) },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.apiKey}`, ...(init?.headers || {}) },
     signal: AbortSignal.timeout(10000),
     cache: 'no-store',
   });
@@ -103,8 +108,8 @@ REGLAS:
 - Si te preguntan si eres un robot, di con naturalidad que eres una asistente virtual de ${store}.${cfg.extraInstructions.trim() ? `\n\nINSTRUCCIONES ADICIONALES DE LA TIENDA:\n${cfg.extraInstructions.trim()}` : ''}`;
 }
 
-function buildAssistant(o: CallOrderInfo, cfg: VoiceConfig, store: string, webhookUrl: string) {
-  const headers: Record<string, string> = webhookSecret() ? { 'x-logipages-secret': webhookSecret() } : {};
+function buildAssistant(o: CallOrderInfo, cfg: VoiceConfig, store: string, webhookUrl: string, secret: string) {
+  const headers: Record<string, string> = secret ? { 'x-logipages-secret': secret } : {};
   const server = { url: webhookUrl, headers, timeoutSeconds: 20 };
   const firstName = o.customerName.trim().split(/\s+/)[0] || o.customerName;
   return {
@@ -158,13 +163,15 @@ function buildAssistant(o: CallOrderInfo, cfg: VoiceConfig, store: string, webho
 
 // Places the outbound call. Returns Vapi's call id.
 export async function createVapiCall(p: { phoneE164: string; order: CallOrderInfo; cfg: VoiceConfig; store: string; webhookUrl: string }) {
+  const c = await vapiConfig();
+  if (!c) throw new Error('Vapi no está configurado.');
   const data = await vapiFetch('/call', {
     method: 'POST',
     body: JSON.stringify({
       name: `Pedido ${p.order.orderNumber}`.slice(0, 40),
-      phoneNumberId: env('VAPI_PHONE_NUMBER_ID'),
+      phoneNumberId: c.phoneNumberId,
       customer: { number: p.phoneE164, name: p.order.customerName.slice(0, 40) },
-      assistant: buildAssistant(p.order, p.cfg, p.store, p.webhookUrl),
+      assistant: buildAssistant(p.order, p.cfg, p.store, p.webhookUrl, c.webhookSecret || ''),
     }),
   });
   if (!data?.id) throw new Error('Vapi no devolvió el id de la llamada.');

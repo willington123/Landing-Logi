@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createOrder, db, getSettings } from '@/lib/server/db';
 import { linkConversationOrder, listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
 import { publicBaseUrl } from '@/lib/server/vapi';
-import { envIntegrationsAllowed } from '@/lib/server/tenant';
+import { anthropicKey } from '@/lib/server/integrations';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
 import { DEFAULT_BOT, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
@@ -14,11 +14,20 @@ const MODEL = (process.env.ANTHROPIC_MODEL || '').trim() || 'claude-opus-5-5';
 const HISTORY = 30; // messages of the chat sent to the model
 const MAX_STEPS = 4; // model calls per customer message (tool use included)
 
-export const botConfigured = () => envIntegrationsAllowed() && Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
+export const botConfigured = async () => Boolean(await anthropicKey());
 
-let client: Anthropic | null = null;
-// The key set in Vercel for this app (explicit, so no other credential on the machine is picked up).
-const anthropic = () => (client ||= new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').trim(), maxRetries: 2, timeout: 45_000 }));
+// One client per API key (each store can use its own key).
+const clients = new Map<string, Anthropic>();
+async function anthropic(): Promise<Anthropic> {
+  const k = await anthropicKey();
+  if (!k) throw new Error('Falta la clave de Claude (Anthropic) de esta tienda.');
+  let c = clients.get(k.key);
+  if (!c) {
+    c = new Anthropic({ apiKey: k.key, maxRetries: 2, timeout: 45_000 });
+    clients.set(k.key, c);
+  }
+  return c;
+}
 
 // ---------- settings and per-chat state (Supabase "settings" table) ----------
 
@@ -366,7 +375,7 @@ export async function runBot(opts: {
   ];
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const response = await anthropic().beta.messages.create({
+    const response = await (await anthropic()).beta.messages.create({
       model: MODEL,
       max_tokens: 8000,
       output_config: { effort: 'low' }, // short chat replies
