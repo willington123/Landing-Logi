@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOrg } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
 import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
+import { fetchAccount } from '@/lib/account-client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,6 +20,8 @@ import {
   Settings,
   X,
   LogOut,
+  CreditCard,
+  ShieldCheck,
   FileText,
   ChevronsUpDown,
   Check,
@@ -28,6 +31,7 @@ interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
   org: { id: string; name: string; role: string } | null;
   orgs: { id: string; name: string; role: string }[];
+  platformAdmin?: boolean;
 }
 
 // Header's menu button dispatches this event to open the sidebar on mobile.
@@ -61,6 +65,7 @@ const NAV_GROUPS = [
     label: 'Cuenta',
     items: [
       { href: '/integrations', label: 'Integraciones', icon: Plug },
+      { href: '/plan', label: 'Plan y pagos', icon: CreditCard },
       { href: '/settings', label: 'Configuración', icon: Settings },
     ],
   },
@@ -91,14 +96,14 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
       if (!cloud) return pullFromCloud();
       // Who is signed in, and in which store. The local cache is cleared if it belongs to another store.
       try {
-        const res = await fetch('/api/account', { cache: 'no-store' });
+        const res = await fetchAccount();
         if (res.status === 401) {
           clearLocalData();
           window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
           return;
         }
-        const d = await res.json();
-        if (d.success && d.org) {
+        const d: any = res.data;
+        if (d?.success && d.org) {
           setAccount(d);
           ensureLocalOrg(d.org.id);
         }
@@ -252,6 +257,16 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           ))}
         </nav>
 
+        {account?.platformAdmin && (
+          <div className="px-3 pb-2">
+            <Link
+              href="/admin"
+              className={`flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] transition ${pathname?.startsWith('/admin') ? 'bg-brand-navy/[0.07] text-brand-navy font-semibold' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <ShieldCheck className="w-[18px] h-[18px] text-slate-400" /> Admin plataforma
+            </Link>
+          </div>
+        )}
         {/* Account */}
         <div className="p-3 border-t border-slate-200/80">
           <div className="relative">

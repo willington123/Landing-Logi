@@ -5,6 +5,8 @@ import { createOrder, db, getSettings } from '@/lib/server/db';
 import { linkConversationOrder, listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
 import { publicBaseUrl } from '@/lib/server/vapi';
 import { anthropicKey } from '@/lib/server/integrations';
+import { addAiReply } from '@/lib/server/billing';
+import { requestOrgSync } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
 import { DEFAULT_BOT, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
@@ -18,15 +20,15 @@ export const botConfigured = async () => Boolean(await anthropicKey());
 
 // One client per API key (each store can use its own key).
 const clients = new Map<string, Anthropic>();
-async function anthropic(): Promise<Anthropic> {
+async function anthropic(): Promise<{ client: Anthropic; source: 'env' | 'store' | 'plan' }> {
   const k = await anthropicKey();
-  if (!k) throw new Error('Falta la clave de Claude (Anthropic) de esta tienda.');
+  if (!k) throw new Error('Falta la clave de Claude (Anthropic) de esta tienda, o se acabaron las respuestas incluidas en el plan este mes.');
   let c = clients.get(k.key);
   if (!c) {
     c = new Anthropic({ apiKey: k.key, maxRetries: 2, timeout: 45_000 });
     clients.set(k.key, c);
   }
-  return c;
+  return { client: c, source: k.source };
 }
 
 // ---------- settings and per-chat state (Supabase "settings" table) ----------
@@ -374,8 +376,14 @@ export async function runBot(opts: {
     { type: 'text', text: `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.` },
   ];
 
+  const ai = await anthropic();
+  // Replies paid by the platform count against the plan's monthly allowance.
+  const countReply = async () => {
+    const org = requestOrgSync();
+    if (ai.source === 'plan' && org) await addAiReply(org).catch(() => {});
+  };
   for (let step = 0; step < MAX_STEPS; step++) {
-    const response = await (await anthropic()).beta.messages.create({
+    const response = await ai.client.beta.messages.create({
       model: MODEL,
       max_tokens: 8000,
       output_config: { effort: 'low' }, // short chat replies
@@ -405,6 +413,7 @@ export async function runBot(opts: {
 
     if (response.stop_reason !== 'tool_use' || !toolUses.length) {
       run.reply = text || null;
+      if (run.reply) await countReply();
       return run;
     }
 

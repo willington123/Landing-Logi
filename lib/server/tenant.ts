@@ -4,8 +4,10 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { headers } from 'next/headers';
 import { rawDb } from '@/lib/server/supabase';
+import { access } from '@/lib/server/billing';
 
-export const MAIN_ORG = 'org_main'; // the account created from the original single-store data
+import { MAIN_ORG } from '@/lib/server/constants';
+export { MAIN_ORG };
 
 const als = new AsyncLocalStorage<{ orgId: string }>();
 
@@ -15,6 +17,19 @@ export function runWithOrg<T>(orgId: string, fn: () => T): T {
 
 export class AuthError extends Error {
   status = 401;
+}
+
+// The store's plan ended: only the Plan page (and account/team) keeps working.
+export class PaymentRequired extends Error {
+  status = 402;
+}
+const OPEN_WHEN_LOCKED = ['/api/account', '/api/billing', '/api/team', '/api/status', '/api/auth', '/api/admin'];
+function requestPath(): string {
+  try {
+    return headers().get('x-lp-path') || '';
+  } catch {
+    return '';
+  }
 }
 
 function sessionHeaders(): { org: string; uid: string; sv: number } | null {
@@ -70,6 +85,10 @@ export async function currentOrgId(): Promise<string> {
   if (!s) throw new AuthError('No autorizado. Inicia sesión en el panel.');
   const m = await membership(s.uid, s.org, s.sv);
   if (!m.ok) throw new AuthError('Tu sesión ya no es válida. Vuelve a iniciar sesión.');
+  const path = requestPath();
+  if (path.startsWith('/api/') && !OPEN_WHEN_LOCKED.some((p) => path.startsWith(p)) && (await access(s.org)).locked) {
+    throw new PaymentRequired('Tu plan venció. Elige un plan en Plan y pagos para seguir usando el panel.');
+  }
   return s.org;
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudConfigured } from '@/lib/auth';
 import { addMember, countUsers, createOrg, createUser, normalizeEmail, passwordProblem, signupOpen, validEmail, withSession } from '@/lib/server/accounts';
 import { fail, failFrom } from '@/lib/server/http';
+import { startTrial } from '@/lib/server/billing';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
     const user = await createUser({ email, name, password: String(body.password) });
     const orgId = await createOrg(storeName);
     await addMember(orgId, user.id, 'owner');
+    await startTrial(orgId).catch((e) => console.error('No se pudo iniciar la prueba gratis', e));
     return withSession(NextResponse.json({ success: true }), user, orgId);
   } catch (e) {
     return failFrom(e);

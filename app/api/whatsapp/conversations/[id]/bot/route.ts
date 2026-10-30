@@ -16,6 +16,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         : await setBotState(params.id, { paused: true, pausedAt: new Date().toISOString(), reason: 'human', note: undefined });
     return NextResponse.json({ success: true, paused: Boolean(state.paused) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

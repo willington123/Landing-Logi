@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getUser, renameOrg, userOrgs } from '@/lib/server/accounts';
+import { getSubscription, isPlatformAdmin } from '@/lib/server/billing';
 import { currentOrgId, currentRole, envIntegrationsAllowed, sessionUserId } from '@/lib/server/tenant';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
@@ -10,13 +11,17 @@ export async function GET() {
   try {
     const orgId = await currentOrgId();
     const uid = sessionUserId()!;
-    const [user, orgs, role] = await Promise.all([getUser(uid), userOrgs(uid), currentRole()]);
+    const [user, orgs, role, sub] = await Promise.all([getUser(uid), userOrgs(uid), currentRole(), getSubscription(orgId).catch(() => null)]);
     const org = orgs.find((o) => o.id === orgId);
     return ok({
       user: user ? { id: user.id, email: user.email, name: user.name } : null,
       org: org ? { id: org.id, name: org.name, role } : null,
       orgs: orgs.map((o) => ({ id: o.id, name: o.name, role: o.role })),
       integrationsManaged: envIntegrationsAllowed(),
+      platformAdmin: isPlatformAdmin(user?.email),
+      plan: sub
+        ? { id: sub.plan, name: sub.planInfo.name, status: sub.status, effective: sub.effective, daysLeft: sub.daysLeft, panelLocked: sub.panelLocked, landingsOff: sub.landingsOff, accessEndsAt: sub.accessEndsAt }
+        : null,
     });
   } catch (e) {
     return failFrom(e);

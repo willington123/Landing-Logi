@@ -23,7 +23,7 @@ export interface IntegrationsInfo {
   };
   vapi: { connected: boolean; source?: 'env' | 'store'; phoneNumberId?: string; apiKey?: string | null };
   capi: { connected: boolean; source?: 'env' | 'store'; token?: string | null; testCode?: string | null };
-  anthropic: { connected: boolean; source?: 'env' | 'store'; apiKey?: string | null };
+  anthropic: { connected: boolean; source?: 'env' | 'store' | 'plan'; apiKey?: string | null; left?: number | null };
 }
 
 export async function loadIntegrations(): Promise<IntegrationsInfo | null> {
@@ -71,8 +71,14 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SourceBadge({ source }: { source?: 'env' | 'store' }) {
+function SourceBadge({ source, left }: { source?: 'env' | 'store' | 'plan'; left?: number | null }) {
   if (!source) return null;
+  if (source === 'plan')
+    return (
+      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">
+        Incluida en tu plan{typeof left === 'number' ? ` · ${left.toLocaleString('es-CO')} respuestas este mes` : ''}
+      </span>
+    );
   return (
     <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${source === 'env' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700'}`}>
       {source === 'env' ? 'Claves de Vercel' : 'Conectado en el panel'}
@@ -386,7 +392,7 @@ export function KeyConnection({
   description: string;
   placeholder: string;
   docs: { label: string; href: string };
-  state: { connected: boolean; source?: 'env' | 'store'; token?: string | null; apiKey?: string | null };
+  state: { connected: boolean; source?: 'env' | 'store' | 'plan'; token?: string | null; apiKey?: string | null; left?: number | null };
   canManage: boolean;
   onChanged: () => void;
   extra?: { placeholder: string; field: string };
@@ -433,10 +439,10 @@ export function KeyConnection({
       </div>
       {state.connected && (
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          <SourceBadge source={state.source} />
+          <SourceBadge source={state.source} left={state.left} />
           {masked && <span className="font-mono text-slate-500">{masked}</span>}
           {canManage && state.source === 'store' && <Disconnect kind={kind} onDone={onChanged} />}
-          {canManage && state.source === 'env' && (
+          {canManage && (state.source === 'env' || state.source === 'plan') && (
             <button type="button" onClick={() => setOpen((x) => !x)} className="font-semibold text-brand-navy hover:underline">
               Usar otra clave
             </button>

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     return NextResponse.json({ success: true, config: await getVoiceConfig(), status });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message, status }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message, status }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
 
@@ -24,6 +24,6 @@ export async function POST(req: NextRequest) {
     await saveVoiceConfig(config);
     return NextResponse.json({ success: true, config });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

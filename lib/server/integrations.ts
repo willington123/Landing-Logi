@@ -5,6 +5,7 @@ import { db } from '@/lib/server/db';
 import { rawDb } from '@/lib/server/supabase';
 import { integrationsOrg, requestOrgSync } from '@/lib/server/tenant';
 import { decrypt, encrypt } from '@/lib/server/secrets';
+import { aiRepliesLeft } from '@/lib/server/billing';
 
 const env = (k: string) => (process.env[k] || '').trim();
 
@@ -137,7 +138,8 @@ export async function capiConfig(orgId?: string | null): Promise<{ token: string
   return null;
 }
 
-export async function anthropicKey(orgId?: string | null): Promise<{ key: string; source: 'env' | 'store' } | null> {
+// The store's own key; otherwise (other stores) the platform's key while the plan's included replies last.
+export async function anthropicKey(orgId?: string | null): Promise<{ key: string; source: 'env' | 'store' | 'plan'; left?: number } | null> {
   const org = orgOrNull(orgId);
   if (!org) return null;
   const s = (await stored(org)).anthropic;
@@ -146,6 +148,10 @@ export async function anthropicKey(orgId?: string | null): Promise<{ key: string
     return key ? { key, source: 'store' } : null;
   }
   if (usesEnv(org) && env('ANTHROPIC_API_KEY')) return { key: env('ANTHROPIC_API_KEY'), source: 'env' };
+  if (env('ANTHROPIC_API_KEY')) {
+    const left = await aiRepliesLeft(org).catch(() => 0);
+    if (left > 0) return { key: env('ANTHROPIC_API_KEY'), source: 'plan', left };
+  }
   return null;
 }
 

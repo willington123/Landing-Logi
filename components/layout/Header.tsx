@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import BillingBanner from '@/components/billing/BillingBanner';
 import { Menu, Globe } from 'lucide-react';
 import { SIDEBAR_TOGGLE_EVENT } from './Sidebar';
 import { logiStore } from '@/lib/store';
@@ -23,6 +24,7 @@ export default function Header({ title }: HeaderProps) {
   }, []);
 
   return (
+    <>
     <header className="h-16 sticky top-0 z-20 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/70 flex items-center gap-3 px-4 sm:px-6 lg:px-8">
       <button
         onClick={() => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT))}
@@ -48,5 +50,7 @@ export default function Header({ title }: HeaderProps) {
         )}
       </div>
     </header>
+    <BillingBanner />
+    </>
   );
 }

@@ -57,7 +57,9 @@ export async function GET(req: NextRequest) {
         ? { connected: true, source: vapi.source, phoneNumberId: vapi.phoneNumberId, apiKey: mask(vapi.apiKey), webhookSecretSet: Boolean(vapi.webhookSecret) }
         : { connected: false },
       capi: capi ? { connected: true, source: capi.source, token: mask(capi.token), testCode: capi.testCode } : { connected: false },
-      anthropic: claude ? { connected: true, source: claude.source, apiKey: mask(claude.key) } : { connected: false },
+      anthropic: claude
+        ? { connected: true, source: claude.source, apiKey: claude.source === 'plan' ? null : mask(claude.key), left: claude.left ?? null }
+        : { connected: false },
       saved: { whatsapp: Boolean(s.whatsapp), vapi: Boolean(s.vapi), capi: Boolean(s.capi), anthropic: Boolean(s.anthropic && decrypt(s.anthropic.apiKey)) },
     });
   } catch (e) {

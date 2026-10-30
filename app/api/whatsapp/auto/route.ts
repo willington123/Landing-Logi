@@ -14,7 +14,7 @@ export async function GET() {
     const settings = await getAutoSettings();
     return NextResponse.json({ success: true, settings, workingNow: isWorkingTime(settings.away, settings.timezone) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
 
@@ -28,6 +28,6 @@ export async function PUT(req: NextRequest) {
     await saveAutoSettings(clean);
     return NextResponse.json({ success: true, settings: clean, workingNow: isWorkingTime(clean.away, clean.timezone) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

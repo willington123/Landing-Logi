@@ -13,7 +13,7 @@ export async function GET() {
   try {
     return NextResponse.json({ success: true, settings: await getBotSettings(), configured: await botConfigured() });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
 
@@ -29,6 +29,6 @@ export async function PUT(req: NextRequest) {
     await saveBotSettings(clean);
     return NextResponse.json({ success: true, settings: clean, configured: await botConfigured() });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
