@@ -66,7 +66,7 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
     await createOrder(order);
 
     // Meta Conversions API: same event_id (order.id) as the browser pixel's Purchase.
-    if (capiEnabled() && landing.metaPixelId) {
+    if (landing.metaPixelId && (await capiEnabled())) {
       const fbclid = clean(b.fbclid, 500);
       const fbc = req.cookies.get('_fbc')?.value || (fbclid ? `fb.1.${Date.now()}.${fbclid}` : undefined);
       const capi = await sendCapiPurchase({
@@ -92,7 +92,7 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
 
     // WhatsApp order confirmation (template with "Confirmar pedido" / "Cancelar"). Never blocks the order.
     // Mode "customer writes first": no template now; optionally schedule one if they don't confirm in time.
-    const wa = confirmTemplateEnabled() ? await getWaSettings().catch(() => ({ mode: 'template' as const, fallbackMinutes: 0 })) : null;
+    const wa = (await confirmTemplateEnabled()) ? await getWaSettings().catch(() => ({ mode: 'template' as const, fallbackMinutes: 0 })) : null;
     if (wa?.mode === 'customer_first' && wa.fallbackMinutes > 0) {
       await patchOrderData(order.id, { waFallbackAt: new Date(Date.now() + wa.fallbackMinutes * 60000).toISOString() }).catch(() => {});
     }

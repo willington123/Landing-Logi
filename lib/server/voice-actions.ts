@@ -77,7 +77,7 @@ function orderInfo(o: OrderItem, currency: string): CallOrderInfo {
 
 // Calls the customer of an order now. `manual` = a person pressed "Llamar" (ignores hours and auto-call).
 export async function startOrderCall(orderId: string, opts: { manual: boolean; origin?: string }): Promise<StartResult> {
-  if (!vapiEnabled()) return { ok: false, error: 'Vapi no está configurado.' };
+  if (!(await vapiEnabled())) return { ok: false, error: 'Vapi no está configurado.' };
   const row = await getOrderCallRow(orderId);
   if (!row) return { ok: false, error: 'Pedido no encontrado.' };
   const cfg = await getVoiceConfig();
@@ -107,7 +107,7 @@ export async function startOrderCall(orderId: string, opts: { manual: boolean; o
 
 // Test call to the seller's own phone with a sample order. Nothing is changed.
 export async function startTestCall(phone: string, origin?: string): Promise<StartResult> {
-  if (!vapiEnabled()) return { ok: false, error: 'Vapi no está configurado.' };
+  if (!(await vapiEnabled())) return { ok: false, error: 'Vapi no está configurado.' };
   const digits = normalizePhone(phone);
   if (digits.length < 10) return { ok: false, error: 'Escribe un número con indicativo de país, por ejemplo +57 300 123 4567.' };
   const cfg = await getVoiceConfig();
@@ -129,7 +129,7 @@ export async function startTestCall(phone: string, origin?: string): Promise<Sta
 // New order from a landing: call now or schedule the first call. Never throws.
 export async function onNewOrder(order: OrderItem, origin?: string) {
   try {
-    if (!vapiEnabled() || !cloudEnabled()) return null;
+    if (!(await vapiEnabled()) || !cloudEnabled()) return null;
     const cfg = await getVoiceConfig();
     if (!cfg.autoCall) return null;
     const at = nextCallTime(new Date(Date.now() + cfg.delayMinutes * 60 * 1000), cfg);
@@ -222,7 +222,7 @@ export async function finalizeCall(vapiCallId: string) {
 // Cron: place due calls and close calls whose webhook never arrived.
 export async function processCallQueue(origin?: string) {
   const out = { started: 0, skipped: 0, closed: 0, errors: [] as string[] };
-  if (!vapiEnabled() || !cloudEnabled()) return out;
+  if (!(await vapiEnabled()) || !cloudEnabled()) return out;
 
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data: stale } = await (await db())

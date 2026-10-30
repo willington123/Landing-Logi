@@ -16,7 +16,7 @@ export const TEST_ORDER_ID = 'prueba';
 
 // Sends the confirmation template for a new order. Never throws.
 export async function sendOrderConfirmation(order: OrderItem, opts: { currency?: string; country?: string }) {
-  if (!confirmTemplateEnabled()) return null;
+  if (!(await confirmTemplateEnabled())) return null;
   const to = normalizePhone(order.phone, opts.country);
   const vars = {
     name: firstName(order.customerName),
@@ -43,7 +43,7 @@ export async function sendConfirmationForOrder(order: OrderItem) {
 // Cron: customers who didn't write after the landing's redirect get the template.
 export async function processWaFallback() {
   const out: { sent: number; failed: number; error?: string } = { sent: 0, failed: 0 };
-  if (!confirmTemplateEnabled()) return { ...out, error: 'La plantilla de confirmación no está configurada (WHATSAPP_CONFIRM_TEMPLATE).' };
+  if (!(await confirmTemplateEnabled())) return { ...out, error: 'La plantilla de confirmación no está configurada.' };
   for (const order of await dueWaFallbackOrders()) {
     // Clear first so an overlapping run can't send it twice.
     await patchOrderData(order.id, { waFallbackAt: null });

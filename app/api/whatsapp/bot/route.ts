@@ -11,7 +11,7 @@ const noDb = () => NextResponse.json({ success: false, error: 'La base de datos 
 export async function GET() {
   if (!cloudEnabled()) return noDb();
   try {
-    return NextResponse.json({ success: true, settings: await getBotSettings(), configured: botConfigured() });
+    return NextResponse.json({ success: true, settings: await getBotSettings(), configured: await botConfigured() });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
@@ -24,10 +24,10 @@ export async function PUT(req: NextRequest) {
     const { settings } = await req.json().catch(() => ({}));
     const clean = cleanBot(settings);
     if (typeof clean === 'string') return NextResponse.json({ success: false, error: clean }, { status: 400 });
-    if (clean.enabled && !botConfigured())
-      return NextResponse.json({ success: false, error: 'Falta la clave ANTHROPIC_API_KEY en Vercel. Agrégala y vuelve a desplegar para activar el asistente.' }, { status: 400 });
+    if (clean.enabled && !(await botConfigured()))
+      return NextResponse.json({ success: false, error: 'Falta la clave de Claude: conéctala en Integraciones → Claude (Anthropic) para activar el asistente.' }, { status: 400 });
     await saveBotSettings(clean);
-    return NextResponse.json({ success: true, settings: clean, configured: botConfigured() });
+    return NextResponse.json({ success: true, settings: clean, configured: await botConfigured() });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }

@@ -129,8 +129,17 @@ En **Configuración → Equipo** creas un enlace de invitación (Equipo, Adminis
 
 ### Nuevas tiendas
 - Con `SIGNUP_OPEN=true` cualquiera puede crear su tienda en `/registro` (por defecto está cerrado).
-- Las claves de WhatsApp, Vapi, Meta y Claude de Vercel solo las usa tu tienda (`INTEGRATIONS_ORG_ID`, por defecto `org_main`). Las demás tiendas tienen landings, pedidos y panel; la conexión de sus propias cuentas llega en la siguiente fase.
 - Una misma persona puede estar en varias tiendas y cambiar entre ellas desde el menú (abajo a la izquierda).
+
+### Conexiones de cada tienda (Integraciones)
+Cada tienda conecta sus propias cuentas en **Integraciones**; las claves se comprueban con el proveedor y se guardan **cifradas** (`INTEGRATIONS_SECRET`, o `AUTH_SECRET` si falta).
+- **WhatsApp:**
+  - **Con su propia app de Meta:** pega token permanente, identificador del número, WABA ID y clave secreta de la app. El panel le da **su URL de webhook** (`/api/whatsapp/webhook/<tienda>`) y su token de verificación.
+  - **"Conectar con Facebook"** (Embedded Signup): aparece cuando defines `META_APP_ID`, `META_APP_SECRET`, `META_ES_CONFIG_ID` y `META_VERIFY_TOKEN` (requiere que Meta te apruebe como Tech Provider). En Meta, la URL del webhook de la app de la plataforma es `/api/whatsapp/webhook`.
+- **Plantillas:** se crean, se revisan y se eligen desde el panel (la de confirmación de pedidos con un clic).
+- **Vapi**, **Claude (Anthropic)** y **Meta: API de conversiones**: cada tienda con su clave.
+- Tu tienda (`INTEGRATIONS_ORG_ID`, por defecto `org_main`) sigue usando las claves de Vercel mientras no conecte otras en el panel. Para administrar las plantillas de ese número agrega `WHATSAPP_BUSINESS_ACCOUNT_ID`.
+- La revisión automática (`/api/cron/run`) atiende a todas las tiendas con WhatsApp o Vapi conectados.
 
 ## WhatsApp
 

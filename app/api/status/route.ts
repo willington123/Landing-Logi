@@ -12,5 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   // Opening the panel also checks pending scheduled work (at most every few minutes).
   await maybeRunScheduled(req.nextUrl.origin, 'panel');
-  return NextResponse.json({ cloud: cloudEnabled(), auth: authEnabled(), capi: capiEnabled(), whatsapp: whatsappStatus(), vapi: vapiStatus() });
+    if (!cloudEnabled()) return NextResponse.json({ cloud: false, auth: authEnabled(), capi: false, whatsapp: null, vapi: null });
+  const [capi, whatsapp, vapi] = await Promise.all([capiEnabled(), whatsappStatus(), vapiStatus()]);
+  return NextResponse.json({ cloud: true, auth: authEnabled(), capi, whatsapp, vapi });
 }

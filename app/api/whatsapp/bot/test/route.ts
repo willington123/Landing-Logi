@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // Body: { settings, history: [{ direction: 'in' | 'out', text }], phone? } - phone lets it look up that customer's orders.
 export async function POST(req: NextRequest) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
-  if (!botConfigured()) return NextResponse.json({ success: false, error: 'Falta la clave ANTHROPIC_API_KEY en Vercel.' }, { status: 503 });
+  if (!(await botConfigured())) return NextResponse.json({ success: false, error: 'Falta la clave de Claude: conéctala en Integraciones.' }, { status: 503 });
   try {
     const body = await req.json().catch(() => ({}));
     const settings = cleanBot({ ...(body.settings || {}), enabled: false });

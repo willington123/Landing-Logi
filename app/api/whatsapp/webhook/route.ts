@@ -1,35 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { cloudEnabled } from '@/lib/server/db';
-import { parseWebhook, verifySignature, verifyToken } from '@/lib/server/whatsapp';
-import { handleInbound } from '@/lib/server/wa-actions';
-import { applyStatus, noteWebhook } from '@/lib/server/wa-store';
+import { parseWebhook, verifySignature } from '@/lib/server/whatsapp';
+import { noteWebhook } from '@/lib/server/wa-store';
+import { orgForWhatsAppNumber } from '@/lib/server/integrations';
+import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
+import { byNumber, processForOrg } from '@/lib/server/wa-webhook';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // the AI assistant answers right after the reply to Meta
 
-// Meta webhook verification: echo hub.challenge when the verify token matches.
+const env = (k: string) => (process.env[k] || '').trim();
+
+// Shared webhook for the number in Vercel and for stores connected through the platform's Meta app
+// (Embedded Signup). Stores that use their own Meta app have their own URL: /api/whatsapp/webhook/<store>.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const token = verifyToken();
-  if (token && q.get('hub.mode') === 'subscribe' && q.get('hub.verify_token') === token) {
+  const tokens = [env('WHATSAPP_VERIFY_TOKEN'), env('META_VERIFY_TOKEN')].filter(Boolean);
+  const given = q.get('hub.verify_token') || '';
+  if (q.get('hub.mode') === 'subscribe' && tokens.includes(given)) {
     return new NextResponse(q.get('hub.challenge') || '', { status: 200, headers: { 'Content-Type': 'text/plain' } });
   }
   return new NextResponse('Forbidden', { status: 403 });
 }
 
-// Incoming messages and delivery statuses. Only requests signed with the app secret are accepted.
-// WhatsApp/Vapi keys in Vercel belong to one account: everything this webhook stores goes there.
+// Signed with the Vercel number's app secret or the platform app's secret; each notice goes to the store of its number.
 export async function POST(req: NextRequest) {
-  return runWithOrg(integrationsOrg(), () => handle(req));
-}
-
-async function handle(req: NextRequest) {
   const raw = await req.text();
   const signature = req.headers.get('x-hub-signature-256');
-  if (!verifySignature(raw, signature)) {
-    // Meta always signs; a signed notice that fails means WHATSAPP_APP_SECRET is wrong (shown in Integrations).
-    if (signature && cloudEnabled()) await noteWebhook({ lastInvalidAt: new Date().toISOString() });
+  const secrets = [env('WHATSAPP_APP_SECRET'), env('META_APP_SECRET')].filter(Boolean);
+  if (!secrets.some((s) => verifySignature(raw, signature, s))) {
+    // Meta always signs; a signed notice that fails means the app secret is wrong (shown in Integrations).
+    if (signature && cloudEnabled()) await runWithOrg(integrationsOrg(), () => noteWebhook({ lastInvalidAt: new Date().toISOString() }));
     return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
   }
   let body: unknown;
@@ -41,15 +42,15 @@ async function handle(req: NextRequest) {
   const { messages, statuses } = parseWebhook(body);
   if (!cloudEnabled()) return NextResponse.json({ ok: true, stored: false, messages: messages.length, statuses: statuses.length });
 
-  // Errors are logged, not returned: a non-200 makes Meta retry the same batch.
-  let lastError: string | undefined;
-  const fail = (what: string, id: string) => (e: any) => {
-    console.error(`WhatsApp webhook: ${what}`, id, e);
-    lastError = e?.message || String(e);
-  };
-  for (const m of messages) await handleInbound(m).catch(fail('mensaje', m.waMessageId));
-  for (const s of statuses) await applyStatus(s).catch(fail('estado', s.waMessageId));
-  const now = new Date().toISOString();
-  await noteWebhook({ lastOkAt: now, lastMessages: messages.length, lastStatuses: statuses.length, ...(lastError ? { lastErrorAt: now, lastError: lastError.slice(0, 300) } : {}) });
-  return NextResponse.json({ ok: true, messages: messages.length, statuses: statuses.length });
+  let unknown = 0;
+  for (const [phoneNumberId, group] of Array.from(byNumber(messages, statuses))) {
+    // Notices without a number (never sent by Meta, only by old test tools) go to the Vercel number's store.
+    const org = phoneNumberId ? await orgForWhatsAppNumber(phoneNumberId) : integrationsOrg();
+    if (!org) {
+      unknown += group.messages.length + group.statuses.length; // a number no store has connected
+      continue;
+    }
+    await processForOrg(org, group.messages, group.statuses);
+  }
+  return NextResponse.json({ ok: true, messages: messages.length, statuses: statuses.length, ...(unknown ? { ignored: unknown } : {}) });
 }
