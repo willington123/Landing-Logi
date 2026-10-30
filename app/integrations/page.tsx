@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { KeyConnection, VapiConnection, WhatsAppConnection, WhatsAppTemplates, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
+import { KeyConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -518,7 +518,15 @@ function WhatsAppCard({ status, integ, onChanged }: { status: WaStatus | null | 
       </p>
 
       {integ ? <WhatsAppConnection info={integ} onChanged={onChanged} /> : <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}
-      {integ?.whatsapp.connected && integ.whatsapp.wabaId && <WhatsAppTemplates info={integ} onChanged={onChanged} />}
+      {integ?.whatsapp.connected && (
+        <a href="/plantillas" className="rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition">
+          <span>
+            <span className="block text-[13px] font-semibold text-slate-900">Plantillas y límites de mensajes</span>
+            <span className="block text-[11px] text-slate-500">Crea y revisa tus plantillas por tipo, y mira cuántos clientes nuevos puedes contactar al día.</span>
+          </span>
+          <span className="text-xs font-semibold text-brand-navy whitespace-nowrap">Abrir →</span>
+        </a>
+      )}
 
       {status?.sending && (
         <WhatsAppModePicker
