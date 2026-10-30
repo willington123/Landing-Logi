@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cloudEnabled, rawDb } from '@/lib/server/supabase';
 import { currentOrgId } from '@/lib/server/tenant';
+import { access, assertCanAddLanding } from '@/lib/server/billing';
 import type { LandingPageConfig, OrderItem } from '@/lib/types';
 
 export { cloudEnabled };
@@ -113,6 +114,7 @@ export async function upsertLanding(input: LandingPageConfig) {
   const storedViews = (existing?.data as LandingPageConfig | undefined)?.viewsCount || 0;
   const landing = { ...uploaded.landing, viewsCount: Math.max(storedViews, uploaded.landing.viewsCount || 0) };
   const row = { slug: landing.slug, data: landing, published: landing.isPublished !== false, updated_at: new Date().toISOString() };
+  if (!existing) await assertCanAddLanding(d.orgId);
   const { error } = existing ? await d.from('landings').update(row).eq('id', landing.id) : await d.from('landings').insert({ id: landing.id, ...row });
   if (error) throw new Error(/landings_slug_key|duplicate key/.test(error.message) ? 'Ese enlace de landing ya está en uso. Cambia el enlace (slug) por otro.' : error.message);
   return { landing, replaced };
@@ -152,7 +154,10 @@ export async function getPublicLandingWithOrg(slugOrId: string): Promise<{ landi
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? { landing: data.data as LandingPageConfig, orgId: data.org_id as string } : null;
+  if (!data) return null;
+  // A store whose plan ended more than a few days ago stops selling.
+  if ((await access(data.org_id as string)).landingsOff) return null;
+  return { landing: data.data as LandingPageConfig, orgId: data.org_id as string };
 }
 
 export async function getPublicLanding(slugOrId: string): Promise<LandingPageConfig | null> {

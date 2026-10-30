@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     // Everything below (order, WhatsApp, calls) belongs to the landing's account.
     return await runWithOrg(found.orgId, () => placeOrder(req, b, found.landing));
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
 
@@ -110,6 +110,6 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
 
     return NextResponse.json({ success: true, order });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

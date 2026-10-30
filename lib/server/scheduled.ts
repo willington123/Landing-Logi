@@ -7,6 +7,7 @@ import { processCallQueue } from '@/lib/server/voice-actions';
 import { processWaFallback } from '@/lib/server/wa-actions';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { orgsWithConnections } from '@/lib/server/integrations';
+import { processBilling } from '@/lib/server/billing';
 
 export type RunSource = 'cron' | 'visita' | 'panel';
 
@@ -76,7 +77,9 @@ export async function runScheduled(origin?: string, source: RunSource = 'cron') 
     });
     if (org === integrationsOrg()) main = r;
   }
-  return { ...main, stores: orgs.length };
+  // Plans: automatic monthly charges and payments Wompi hasn't confirmed yet (platform-wide).
+  const billing = cloudEnabled() ? await processBilling().catch((e) => ({ error: String(e?.message || e) })) : null;
+  return { ...main, stores: orgs.length, billing };
 }
 
 async function runScheduledForOrg(origin: string | undefined, source: RunSource) {

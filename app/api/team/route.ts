@@ -3,6 +3,7 @@ import { ROLES, createInvite, listInvites, listMembers, normalizeEmail, removeMe
 import { currentOrgId, currentRole, sessionUserId } from '@/lib/server/tenant';
 import { publicBaseUrl } from '@/lib/server/vapi';
 import { fail, failFrom, ok } from '@/lib/server/http';
+import { assertCanAddMember } from '@/lib/server/billing';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     if (newRole === 'owner' && role !== 'owner') return fail('Solo un dueño puede invitar a otro dueño.', 403);
     const email = body.email ? normalizeEmail(body.email) : null;
     if (email && !validEmail(email)) return fail('El correo no es válido.');
+    await assertCanAddMember(orgId);
     const invite = await createInvite(orgId, newRole, email, sessionUserId()!);
     return ok({ invite: { token: invite.token, role: invite.role, email: invite.email, expiresAt: invite.expires_at, url: `${publicBaseUrl(req.nextUrl.origin)}/invitacion/${invite.token}` } });
   } catch (e) {

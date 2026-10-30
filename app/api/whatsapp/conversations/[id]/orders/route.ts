@@ -14,6 +14,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       .map((o) => ({ id: o.id, orderNumber: o.orderNumber, productName: o.productName, comboName: o.comboName, totalAmount: o.totalAmount, status: o.status, city: o.city, createdAt: o.createdAt }));
     return NextResponse.json({ success: true, orders });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

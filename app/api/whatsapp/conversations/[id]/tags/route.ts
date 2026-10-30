@@ -14,6 +14,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const saved = await setConversationTags(params.id, tags.map(String).slice(0, 30));
     return NextResponse.json({ success: true, tags: saved });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

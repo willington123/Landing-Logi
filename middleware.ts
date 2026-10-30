@@ -9,6 +9,7 @@ const PUBLIC_PREFIXES = [
   '/api/whatsapp/webhook',
   '/api/vapi/webhook',
   '/api/cron/',
+  '/api/billing/wompi/webhook',
   '/api/auth/',
   '/login',
   '/registro',
@@ -21,7 +22,7 @@ const PUBLIC_PREFIXES = [
   '/apple-icon',
 ];
 
-const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv'];
+const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv', 'x-lp-path'];
 
 function deny(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -54,6 +55,7 @@ export async function middleware(req: NextRequest) {
   headers.set('x-lp-org', session.o);
   headers.set('x-lp-uid', session.u);
   headers.set('x-lp-sv', String(session.v));
+  headers.set('x-lp-path', req.nextUrl.pathname);
   return pass();
 }
 

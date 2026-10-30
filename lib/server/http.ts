@@ -10,6 +10,7 @@ export const migrationMissing = (msg: string) => /app_users|organizations|member
 
 export function failFrom(e: any) {
   if (e instanceof AuthError) return fail(e.message, 401);
+  if (e?.status === 402 || e?.status === 403) return fail(e.message, e.status, e.status === 402 ? { code: 'plan_required' } : {});
   const msg = String(e?.message || e);
   if (migrationMissing(msg)) return fail('Falta ejecutar en Supabase el SQL de cuentas (supabase/migrations/004_accounts.sql).', 503, { code: 'migration_missing' });
   return fail(msg, 500);

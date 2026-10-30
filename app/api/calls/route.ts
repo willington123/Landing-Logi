@@ -11,7 +11,7 @@ export async function GET() {
   try {
     return NextResponse.json({ success: true, calls: await listCalls() });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }
 
@@ -25,6 +25,6 @@ export async function POST(req: NextRequest) {
     if (!r.ok) return NextResponse.json({ success: false, error: r.error }, { status: 409 });
     return NextResponse.json({ success: true, callId: r.callId });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
 }

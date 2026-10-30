@@ -10,12 +10,14 @@ import {
   noteFailure,
   normalizeEmail,
   passwordProblem,
+  roleIn,
   tooManyAttempts,
   useInvite,
   validEmail,
   withSession,
 } from '@/lib/server/accounts';
 import { fail, failFrom, ok } from '@/lib/server/http';
+import { assertCanAddMember } from '@/lib/server/billing';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
         if (!name) return fail('Escribe tu nombre.');
         const problem = passwordProblem(body.password);
         if (problem) return fail(problem);
+        await assertCanAddMember(invite.org_id); // before creating the account, so nobody is left without a store
         user = await createUser({ email, name, password: String(body.password) });
       } else {
         if (tooManyAttempts(email)) return fail('Demasiados intentos. Espera 15 minutos.', 429);
@@ -70,6 +73,7 @@ export async function POST(req: NextRequest) {
         user = found;
       }
     }
+    if (!(await roleIn(invite.org_id, user.id))) await assertCanAddMember(invite.org_id);
     await useInvite(invite, user.id);
     return withSession(NextResponse.json({ success: true }), user, invite.org_id);
   } catch (e) {

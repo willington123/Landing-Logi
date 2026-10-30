@@ -141,6 +141,30 @@ Cada tienda conecta sus propias cuentas en **Integraciones**; las claves se comp
 - Tu tienda (`INTEGRATIONS_ORG_ID`, por defecto `org_main`) sigue usando las claves de Vercel mientras no conecte otras en el panel. Para administrar las plantillas de ese número agrega `WHATSAPP_BUSINESS_ACCOUNT_ID`.
 - La revisión automática (`/api/cron/run`) atiende a todas las tiendas con WhatsApp o Vapi conectados.
 
+## Planes y pagos (Wompi)
+Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. Después elige un plan en **Plan y pagos**:
+
+| Plan | Precio/mes | Landings | Pedidos/mes | Personas | Respuestas IA incluidas |
+|---|---|---|---|---|---|
+| Básico | $99.000 | 3 | 300 | 2 | — (con su propia clave de Claude) |
+| Pro | $199.000 | 15 | 2.000 | 5 | 1.000 |
+| Escala | $399.000 | ilimitadas | ilimitados | 15 | 3.000 |
+
+- **Formas de pago:** tarjeta con cobro automático cada mes, o un mes con PSE, Nequi, Bancolombia o tarjeta en la página de Wompi.
+- **Si el plan vence:** el panel se bloquea (solo abre Plan y pagos) y las landings siguen recibiendo pedidos **3 días más**; luego se pausan. Nada se borra.
+- **Cobro automático fallido:** se reintenta cada día; a la tercera falla se apaga el cobro automático.
+- **Asistente IA:** usa la clave de Claude de la plataforma mientras queden respuestas del plan (la prueba trae 100); después, o en Básico, la tienda conecta su propia clave en Integraciones.
+- Los pedidos por encima del límite **nunca se rechazan**; solo se avisa. Las landings y personas sí tienen tope.
+- Tu tienda (`org_main`) no paga.
+
+### Activarlo (una sola vez)
+1. **Supabase → SQL Editor:** ejecuta `supabase/migrations/005_billing.sql` **antes** de publicar. Tu tienda queda sin costo y las otras tiendas que ya existan empiezan 7 días de prueba.
+2. **Wompi** (comercios.wompi.co → Desarrolladores): copia las 4 llaves y agrégalas en Vercel: `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`. Usa primero las de **pruebas** (`pub_test_…`): no cobran dinero real.
+3. En Wompi → Desarrolladores → **URL de eventos**: `https://<tu-dominio>/api/billing/wompi/webhook`.
+4. En Vercel agrega `PLATFORM_ADMIN_EMAILS` con tu correo: verás **Admin plataforma** en el menú (todas las tiendas, MRR, activar planes pagados por transferencia, dar días de prueba y editar precios).
+5. Cuando quieras recibir tiendas nuevas, pon `SIGNUP_OPEN=true`.
+6. Los cobros automáticos corren con la tarea programada (`/api/cron/run`), igual que los reintentos de llamadas.
+
 ## WhatsApp
 
 Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.
