@@ -1,6 +1,7 @@
 // Vapi (AI phone calls). Server-only: uses the private API key.
 import { fillTemplate, type VoiceConfig } from '@/lib/voice-config';
 import { formatMoney } from '@/lib/whatsapp-link';
+import { envIntegrationsAllowed } from '@/lib/server/tenant';
 
 // Overridable for tests or a proxy; defaults to Vapi's API.
 const API = (process.env.VAPI_API_BASE_URL || 'https://api.vapi.ai').replace(/\/+$/, '');
@@ -9,11 +10,12 @@ const env = (k: string) => (process.env[k] || '').trim();
 export const VAPI_ENV = ['VAPI_API_KEY', 'VAPI_PHONE_NUMBER_ID', 'VAPI_WEBHOOK_SECRET'] as const;
 
 export function vapiEnabled(): boolean {
-  return Boolean(env('VAPI_API_KEY') && env('VAPI_PHONE_NUMBER_ID'));
+  return envIntegrationsAllowed() && Boolean(env('VAPI_API_KEY') && env('VAPI_PHONE_NUMBER_ID'));
 }
 
 export function vapiStatus() {
   return {
+    managed: envIntegrationsAllowed(),
     ready: vapiEnabled(),
     webhookSecret: Boolean(env('VAPI_WEBHOOK_SECRET')),
     cron: Boolean(env('CRON_SECRET')),

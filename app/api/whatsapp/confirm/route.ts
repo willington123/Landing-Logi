@@ -13,13 +13,13 @@ export async function POST(req: NextRequest) {
   const { orderId } = await req.json().catch(() => ({}));
   if (typeof orderId !== 'string' || !/^[\w-]{1,80}$/.test(orderId)) return NextResponse.json({ success: false, error: 'Pedido no válido.' }, { status: 400 });
   try {
-    const { data } = await db().from('orders').select('data, status').eq('id', orderId).maybeSingle();
+    const { data } = await (await db()).from('orders').select('data, status').eq('id', orderId).maybeSingle();
     if (!data) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 });
     const order = { ...(data.data as OrderItem), status: data.status as OrderStatus };
     const r = await sendConfirmationForOrder(order);
     if (!r?.ok) return NextResponse.json({ success: false, error: `WhatsApp no lo envió: ${r?.error || 'error desconocido'}` }, { status: 502 });
     return NextResponse.json({ success: true });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }

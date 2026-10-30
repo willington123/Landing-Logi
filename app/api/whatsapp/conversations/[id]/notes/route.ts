@@ -10,7 +10,7 @@ const check = (id: string) =>
     : !/^\d{6,20}$/.test(id)
       ? NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 })
       : null;
-const fail = (e: any) => NextResponse.json({ success: false, error: e?.message || String(e) }, { status: 500 });
+const fail = (e: any) => NextResponse.json({ success: false, error: e?.message || String(e) }, { status: (e as any)?.status === 401 ? 401 : 500 });
 
 // Admin: internal notes about a customer (never sent to them).
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

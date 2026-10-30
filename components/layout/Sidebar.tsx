@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT } from '@/lib/cloud';
+import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOrg } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
 import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import Link from 'next/link';
@@ -19,7 +19,15 @@ import {
   Settings,
   X,
   LogOut,
+  ChevronsUpDown,
+  Check,
 } from 'lucide-react';
+
+interface AccountInfo {
+  user: { id: string; email: string; name: string | null } | null;
+  org: { id: string; name: string; role: string } | null;
+  orgs: { id: string; name: string; role: string }[];
+}
 
 // Header's menu button dispatches this event to open the sidebar on mobile.
 export const SIDEBAR_TOGGLE_EVENT = 'lp:toggle-sidebar';
@@ -73,13 +81,42 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
     const readName = () => setStoreName(logiStore.getStoreSettings().storeName);
     readName();
     window.addEventListener(CLOUD_SYNC_EVENT, readName);
-    pullFromCloud();
     fetch('/api/status')
       .then((r) => r.json())
       .then((d) => setAuthOn(Boolean(d.auth)))
       .catch(() => {});
+    isCloud().then(async (cloud) => {
+      if (!cloud) return pullFromCloud();
+      // Who is signed in, and in which store. The local cache is cleared if it belongs to another store.
+      try {
+        const res = await fetch('/api/account', { cache: 'no-store' });
+        if (res.status === 401) {
+          clearLocalData();
+          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+          return;
+        }
+        const d = await res.json();
+        if (d.success && d.org) {
+          setAccount(d);
+          ensureLocalOrg(d.org.id);
+        }
+      } catch {
+        // offline: keep the cached data
+      }
+      pullFromCloud();
+    });
     return () => window.removeEventListener(CLOUD_SYNC_EVENT, readName);
   }, []);
+
+  const [account, setAccount] = useState<AccountInfo | null>(null);
+  const [orgMenu, setOrgMenu] = useState(false);
+  const switchOrg = async (orgId: string) => {
+    const res = await fetch('/api/account/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId }) });
+    if (res.ok) {
+      clearLocalData();
+      window.location.href = '/dashboard';
+    }
+  };
 
   // Unread WhatsApp messages: badge on "Mensajes", count in the tab title and a sound when a new one arrives.
   const [unread, setUnread] = useState(0);
@@ -133,6 +170,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    clearLocalData();
     window.location.href = '/login';
   };
 
@@ -214,13 +252,39 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
         {/* Account */}
         <div className="p-3 border-t border-slate-200/80">
-          <Link href="/settings" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition">
-            <img src="/brand/logipages-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-slate-900 truncate">{storeName || 'Mi tienda'}</p>
-              <p className="text-xs text-slate-500 truncate">{storeName ? 'Configuración' : 'Pon el nombre de tu tienda'}</p>
-            </div>
-          </Link>
+          <div className="relative">
+            <button
+              onClick={() => (account && account.orgs.length > 1 ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
+              className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
+            >
+              <img src="/brand/logipages-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-slate-900 truncate">{account?.org?.name || storeName || 'Mi tienda'}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {account?.user ? account.user.name || account.user.email : storeName ? 'Configuración' : 'Pon el nombre de tu tienda'}
+                </p>
+              </div>
+              {account && account.orgs.length > 1 && <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />}
+            </button>
+            {orgMenu && account && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5 z-10">
+                <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tus tiendas</p>
+                {account.orgs.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => (o.id === account.org?.id ? setOrgMenu(false) : switchOrg(o.id))}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-800"
+                  >
+                    <span className="truncate flex-1">{o.name}</span>
+                    {o.id === account.org?.id && <Check className="w-3.5 h-3.5 text-slate-900" />}
+                  </button>
+                ))}
+                <Link href="/settings" className="block mt-1 border-t border-slate-100 px-2 pt-2 pb-1 text-xs font-medium text-slate-600 hover:text-slate-900">
+                  Configuración y equipo
+                </Link>
+              </div>
+            )}
+          </div>
           {authOn && (
             <button onClick={logout} className="mt-1 w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">
               <LogOut className="w-4 h-4" /> Cerrar sesión

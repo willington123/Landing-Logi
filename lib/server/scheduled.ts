@@ -5,6 +5,7 @@ import { timingSafeEqual } from 'crypto';
 import { cloudEnabled, db } from '@/lib/server/db';
 import { processCallQueue } from '@/lib/server/voice-actions';
 import { processWaFallback } from '@/lib/server/wa-actions';
+import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 
 export type RunSource = 'cron' | 'visita' | 'panel';
 
@@ -29,25 +30,29 @@ export function cronAuthorized(authHeader: string | null, querySecret: string | 
 }
 
 export async function getSchedulerInfo(): Promise<SchedulerInfo> {
-  const { data } = await db().from('settings').select('data').eq('id', 'scheduler').maybeSingle();
+  const { data } = await (await db()).from('settings').select('data').eq('id', 'scheduler').maybeSingle();
   return (data?.data as SchedulerInfo) || {};
 }
 
 async function noteRun(source: RunSource) {
   const now = new Date().toISOString();
   const current = await getSchedulerInfo().catch(() => ({}) as SchedulerInfo);
-  await db()
+  await (await db())
     .from('settings')
     .upsert({ id: 'scheduler', data: { ...current, lastRunAt: now, lastSource: source, ...(source === 'cron' ? { lastCronAt: now } : {}) } });
 }
 
 async function patchInfo(patch: Partial<SchedulerInfo>) {
   const current = await getSchedulerInfo().catch(() => ({}) as SchedulerInfo);
-  await db().from('settings').upsert({ id: 'scheduler', data: { ...current, ...patch } });
+  await (await db()).from('settings').upsert({ id: 'scheduler', data: { ...current, ...patch } });
 }
 
 // A call with the wrong secret (e.g. CRON_SECRET changed after the SQL was copied). At most once a minute.
 export async function noteDenied() {
+  return runWithOrg(integrationsOrg(), noteDeniedForOrg);
+}
+
+async function noteDeniedForOrg() {
   try {
     if (!cloudEnabled()) return;
     const info = await getSchedulerInfo();
@@ -59,6 +64,11 @@ export async function noteDenied() {
 }
 
 export async function runScheduled(origin?: string, source: RunSource = 'cron') {
+  // Calls and WhatsApp templates use the keys in Vercel, which belong to one account.
+  return runWithOrg(integrationsOrg(), () => runScheduledForOrg(origin, source));
+}
+
+async function runScheduledForOrg(origin: string | undefined, source: RunSource) {
   if (!cloudEnabled()) return { calls: null, whatsapp: null };
   await noteRun(source).catch(() => {});
   const [calls, whatsapp] = await Promise.all([
@@ -77,6 +87,10 @@ export async function runScheduled(origin?: string, source: RunSource = 'cron') 
 
 // Backup trigger: runs the scheduled work if nobody did in the last few minutes. Never throws.
 export async function maybeRunScheduled(origin: string | undefined, source: RunSource) {
+  return runWithOrg(integrationsOrg(), () => maybeRunScheduledForOrg(origin, source));
+}
+
+async function maybeRunScheduledForOrg(origin: string | undefined, source: RunSource) {
   try {
     if (!cloudEnabled()) return;
     const info = await getSchedulerInfo();

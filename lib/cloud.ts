@@ -38,7 +38,6 @@ export async function pullFromCloud(): Promise<boolean> {
     return false;
   }
   try {
-    await migrateLocalLandings();
     const [l, o, st] = await Promise.all([getJSON('/api/landings'), getJSON('/api/orders'), getJSON('/api/settings')]);
     localStorage.setItem('logipages_landings', JSON.stringify(l.landings as LandingPageConfig[]));
     localStorage.setItem('logipages_orders', JSON.stringify(o.orders as OrderItem[]));
@@ -51,25 +50,38 @@ export async function pullFromCloud(): Promise<boolean> {
   }
 }
 
-// First time the panel runs with Supabase: upload landings that exist only in this
-// browser, so replacing the local cache with the cloud copy never loses work.
-const DEMO_IDS = new Set(['lp-titan-pro-01']); // never upload the old demo landing
-async function migrateLocalLandings() {
-  const FLAG = 'logipages_cloud_migrated';
-  if (localStorage.getItem(FLAG)) return;
-  const raw = localStorage.getItem('logipages_landings');
-  const local: LandingPageConfig[] = raw ? JSON.parse(raw) : [];
-  const toUpload = local.filter((l) => !DEMO_IDS.has(l.id));
-  if (toUpload.length) {
-    const { landings: remote } = await getJSON('/api/landings');
-    const remoteIds = new Set((remote as LandingPageConfig[]).map((l) => l.id));
-    for (const l of toUpload) {
-      if (!remoteIds.has(l.id)) await pushLanding(l);
+// The browser keeps a copy of the current store's data. With several stores (accounts),
+// it is cleared on sign-in, sign-out and store switch so nobody sees another store's data.
+// (Landings that only existed in the browser are no longer uploaded automatically.)
+const KEEP = new Set(['logipages_gemini_api_key']);
+export const ORG_KEY = 'lp_org';
+
+export function clearLocalData() {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('logipages_') || k === ORG_KEY || k === 'lp_order_filters') && !KEEP.has(k)) keys.push(k);
     }
-    const st = logiStore.getStoreSettings();
-    if (st.storeName || st.metaPixelId) await pushSettings(st);
+    keys.forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem('logipages_cloud_migrated', new Date().toISOString());
+  } catch {
+    // storage blocked: nothing cached
   }
-  localStorage.setItem(FLAG, new Date().toISOString());
+}
+
+// Called with the signed-in store: clears the cache if it belongs to another store. Returns true if it cleared.
+export function ensureLocalOrg(orgId: string): boolean {
+  try {
+    const cached = localStorage.getItem(ORG_KEY);
+    if (cached === orgId) return false;
+    if (cached) clearLocalData();
+    localStorage.setItem(ORG_KEY, orgId);
+    localStorage.setItem('logipages_cloud_migrated', new Date().toISOString());
+    return Boolean(cached);
+  } catch {
+    return false;
+  }
 }
 
 // Saves a landing in Supabase. Returns the stored version (images as URLs) and the

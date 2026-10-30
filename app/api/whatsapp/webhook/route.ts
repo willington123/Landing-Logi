@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { cloudEnabled } from '@/lib/server/db';
 import { parseWebhook, verifySignature, verifyToken } from '@/lib/server/whatsapp';
 import { handleInbound } from '@/lib/server/wa-actions';
@@ -18,7 +19,12 @@ export async function GET(req: NextRequest) {
 }
 
 // Incoming messages and delivery statuses. Only requests signed with the app secret are accepted.
+// WhatsApp/Vapi keys in Vercel belong to one account: everything this webhook stores goes there.
 export async function POST(req: NextRequest) {
+  return runWithOrg(integrationsOrg(), () => handle(req));
+}
+
+async function handle(req: NextRequest) {
   const raw = await req.text();
   const signature = req.headers.get('x-hub-signature-256');
   if (!verifySignature(raw, signature)) {

@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createOrder, db, getSettings } from '@/lib/server/db';
 import { linkConversationOrder, listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
 import { publicBaseUrl } from '@/lib/server/vapi';
+import { envIntegrationsAllowed } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
 import { DEFAULT_BOT, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
@@ -13,7 +14,7 @@ const MODEL = (process.env.ANTHROPIC_MODEL || '').trim() || 'claude-opus-5-5';
 const HISTORY = 30; // messages of the chat sent to the model
 const MAX_STEPS = 4; // model calls per customer message (tool use included)
 
-export const botConfigured = () => Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
+export const botConfigured = () => envIntegrationsAllowed() && Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
 
 let client: Anthropic | null = null;
 // The key set in Vercel for this app (explicit, so no other credential on the machine is picked up).
@@ -22,12 +23,12 @@ const anthropic = () => (client ||= new Anthropic({ apiKey: (process.env.ANTHROP
 // ---------- settings and per-chat state (Supabase "settings" table) ----------
 
 async function readSetting<T>(id: string): Promise<T | null> {
-  const { data, error } = await db().from('settings').select('data').eq('id', id).maybeSingle();
+  const { data, error } = await (await db()).from('settings').select('data').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.data as T) ?? null;
 }
 async function writeSetting(id: string, data: unknown) {
-  const { error } = await db().from('settings').upsert({ id, data });
+  const { error } = await (await db()).from('settings').upsert({ id, data });
   if (error) throw new Error(error.message);
 }
 
@@ -93,7 +94,7 @@ function landingText(l: LandingPageConfig, base: string): string {
 
 async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
   const [{ data }, settings] = await Promise.all([
-    db().from('landings').select('data, published').order('updated_at', { ascending: false }).limit(20),
+    (await db()).from('landings').select('data, published').order('updated_at', { ascending: false }).limit(20),
     getSettings<{ storeName?: string }>().catch(() => null),
   ]);
   const landings = (data || []).filter((r: any) => r.published !== false).map((r: any) => r.data as LandingPageConfig);
@@ -200,7 +201,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
 ];
 
 async function ordersFor(phone: string) {
-  const { data, error } = await db().from('orders').select('data, status').order('created_at', { ascending: false }).limit(500);
+  const { data, error } = await (await db()).from('orders').select('data, status').order('created_at', { ascending: false }).limit(500);
   if (error) throw new Error(error.message);
   return (data || [])
     .map((r) => ({ ...(r.data as OrderItem), status: r.status as OrderStatus }))
@@ -272,7 +273,7 @@ async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; lan
   if (ctx.dryRun) return { ok: true, pedido: 'LP-PRUEBA', ...summary, nota: 'Simulador: no se creó ningún pedido real.' };
 
   // Same customer, same product and offer in the last 30 minutes: it's the same order.
-  const { data: recent } = await db().from('orders').select('data').gte('created_at', new Date(Date.now() - 30 * 60000).toISOString()).limit(50);
+  const { data: recent } = await (await db()).from('orders').select('data').gte('created_at', new Date(Date.now() - 30 * 60000).toISOString()).limit(50);
   const dup = (recent || [])
     .map((r) => r.data as OrderItem)
     .find((o) => o.source === 'whatsapp_bot' && o.landingPageId === landing.id && o.units === combo.units && samePhone(o, ctx.phone));

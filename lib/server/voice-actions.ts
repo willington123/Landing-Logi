@@ -225,7 +225,7 @@ export async function processCallQueue(origin?: string) {
   if (!vapiEnabled() || !cloudEnabled()) return out;
 
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  const { data: stale } = await db()
+  const { data: stale } = await (await db())
     .from('calls')
     .select('vapi_call_id')
     .in('status', ['queued', 'ringing', 'in-progress', 'forwarding'])

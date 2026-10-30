@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
     if (e instanceof Anthropic.AuthenticationError) return NextResponse.json({ success: false, error: 'La clave ANTHROPIC_API_KEY no es válida.' }, { status: 502 });
     if (e instanceof Anthropic.RateLimitError) return NextResponse.json({ success: false, error: 'Demasiadas solicitudes a Claude en este momento. Intenta en un minuto.' }, { status: 429 });
     if (e instanceof Anthropic.APIError) return NextResponse.json({ success: false, error: `Claude respondió con un error (${e.status}): ${e.message}` }, { status: 502 });
-    return NextResponse.json({ success: false, error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: e?.message || String(e) }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }

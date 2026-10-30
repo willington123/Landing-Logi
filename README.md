@@ -116,6 +116,22 @@ La primera vez que abras el panel publicado, las landings que tenías en el nave
 
 > El plan gratuito de Vercel (Hobby) es para uso no comercial; para vender con anuncios usa el plan Pro.
 
+## Cuentas (varias tiendas)
+Cada persona entra con **su correo y contraseña**, y cada tienda (cuenta) tiene sus propias landings, pedidos, mensajes, equipo y configuración. Ninguna tienda ve los datos de otra.
+
+### Activarlo (una sola vez)
+1. **Supabase → SQL Editor:** ejecuta `supabase/migrations/004_accounts.sql`. Todo lo que ya tienes queda en tu tienda (`org_main`). La versión anterior sigue funcionando después de ejecutarlo, así que hazlo **antes** de publicar.
+2. **Vercel:** agrega `AUTH_SECRET` (texto aleatorio largo) y deja `ADMIN_PASSWORD` como está. Redeploy.
+3. Entra al panel: como aún no hay usuarios, te pide **crear la cuenta del dueño** con tu correo y la contraseña actual del panel (`ADMIN_PASSWORD`) para confirmar que eres tú.
+
+### Equipo e invitaciones
+En **Configuración → Equipo** creas un enlace de invitación (Equipo, Administrador o Dueño) y lo envías por WhatsApp. Vence en 7 días y sirve una vez. Si quitas a alguien, pierde el acceso en segundos. Cambiar la contraseña cierra las otras sesiones abiertas.
+
+### Nuevas tiendas
+- Con `SIGNUP_OPEN=true` cualquiera puede crear su tienda en `/registro` (por defecto está cerrado).
+- Las claves de WhatsApp, Vapi, Meta y Claude de Vercel solo las usa tu tienda (`INTEGRATIONS_ORG_ID`, por defecto `org_main`). Las demás tiendas tienen landings, pedidos y panel; la conexión de sus propias cuentas llega en la siguiente fase.
+- Una misma persona puede estar en varias tiendas y cambiar entre ellas desde el menú (abajo a la izquierda).
+
 ## WhatsApp
 
 Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cloudEnabled, createOrder, getPublicLanding, patchOrderData } from '@/lib/server/db';
+import { cloudEnabled, createOrder, getPublicLandingWithOrg, patchOrderData } from '@/lib/server/db';
+import { runWithOrg } from '@/lib/server/tenant';
 import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
 import { sendOrderConfirmation } from '@/lib/server/wa-actions';
 import { getWaSettings } from '@/lib/server/wa-store';
 import { onNewOrder } from '@/lib/server/voice-actions';
-import type { OrderItem } from '@/lib/types';
+import type { LandingPageConfig, OrderItem } from '@/lib/types';
 import { serverOrderErrors } from '@/lib/order-form';
 
 export const dynamic = 'force-dynamic';
@@ -18,8 +19,17 @@ export async function POST(req: NextRequest) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   try {
     const b = await req.json();
-    const landing = await getPublicLanding(clean(b.landingId, 120));
-    if (!landing) return NextResponse.json({ success: false, error: 'Landing no encontrada.' }, { status: 404 });
+    const found = await getPublicLandingWithOrg(clean(b.landingId, 120));
+    if (!found) return NextResponse.json({ success: false, error: 'Landing no encontrada.' }, { status: 404 });
+    // Everything below (order, WhatsApp, calls) belongs to the landing's account.
+    return await runWithOrg(found.orgId, () => placeOrder(req, b, found.landing));
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
+  }
+}
+
+async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) {
+  try {
 
     const units = Number(b.units) || 0;
     const combo = landing.combos.find((c) => c.units === units) || landing.combos[0];
@@ -100,6 +110,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, order });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }

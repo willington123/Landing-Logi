@@ -54,7 +54,7 @@ export const PENDING_STATUSES: OrderStatus[] = ['pending_call', 'retry_scheduled
 const preview = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 160);
 
 async function getConversation(id: string): Promise<WaConversation | null> {
-  const { data, error } = await db().from('wa_conversations').select('*').eq('id', id).maybeSingle();
+  const { data, error } = await (await db()).from('wa_conversations').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   return (data as WaConversation) || null;
 }
@@ -62,7 +62,7 @@ async function getConversation(id: string): Promise<WaConversation | null> {
 async function upsertConversation(id: string, patch: Partial<WaConversation>) {
   const existing = await getConversation(id);
   const row = { ...(existing || { id, unread_count: 0 }), ...patch, id, updated_at: new Date().toISOString() };
-  const { error } = await db().from('wa_conversations').upsert(row);
+  const { error } = await (await db()).from('wa_conversations').upsert(row);
   if (error) throw new Error(error.message);
   return row as WaConversation;
 }
@@ -70,7 +70,7 @@ async function upsertConversation(id: string, patch: Partial<WaConversation>) {
 // Only ids of orders that exist can be linked (test buttons use "prueba"; an order may have been deleted).
 async function existingOrderId(id?: string): Promise<string | null> {
   if (!id) return null;
-  const { data } = await db().from('orders').select('id').eq('id', id).maybeSingle();
+  const { data } = await (await db()).from('orders').select('id').eq('id', id).maybeSingle();
   return (data?.id as string) || null;
 }
 
@@ -86,7 +86,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
     last_message: preview(p.body),
     last_message_at: p.auto && existing?.last_message_at ? existing.last_message_at : now,
   });
-  const { error } = await db().from('wa_messages').insert({
+  const { error } = await (await db()).from('wa_messages').insert({
     id: randomUUID(),
     conversation_id: p.phone,
     wa_message_id: p.result.messageId || null,
@@ -106,7 +106,7 @@ export async function recordInbound(m: InboundMessage): Promise<{ isNew: boolean
   const existing = await getConversation(m.from);
   if (!existing) await upsertConversation(m.from, { name: m.profileName || null });
   const orderId = await existingOrderId(m.orderId);
-  const { data, error } = await db()
+  const { data, error } = await (await db())
     .from('wa_messages')
     .upsert(
       {
@@ -142,10 +142,10 @@ const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, fa
 
 // Applies a sent/delivered/read/failed update. Never moves a status backwards.
 export async function applyStatus(s: StatusUpdate) {
-  const { data: row } = await db().from('wa_messages').select('id, status').eq('wa_message_id', s.waMessageId).maybeSingle();
+  const { data: row } = await (await db()).from('wa_messages').select('id, status').eq('wa_message_id', s.waMessageId).maybeSingle();
   if (!row) return;
   if ((STATUS_RANK[s.status] || 0) <= (STATUS_RANK[row.status as string] || 0)) return;
-  await db().from('wa_messages').update({ status: s.status, error: s.error || null }).eq('id', row.id);
+  await (await db()).from('wa_messages').update({ status: s.status, error: s.error || null }).eq('id', row.id);
 }
 
 // ---------- orders ----------
@@ -163,7 +163,7 @@ export function samePhone(order: OrderItem & { whatsapp?: { to?: string } }, pho
 // With a button payload order id, only that order counts (and only if it belongs to this phone),
 // so tapping a button on an old message never changes a different order.
 export async function findPendingOrder(phone: string, orderId?: string): Promise<OrderItem | null> {
-  const { data, error } = await db()
+  const { data, error } = await (await db())
     .from('orders')
     .select('data, status')
     .in('status', PENDING_STATUSES)
@@ -178,7 +178,7 @@ export async function findPendingOrder(phone: string, orderId?: string): Promise
 
 // Order by its public number ("LP-12345"); with pendingOnly, only if it still waits for confirmation.
 export async function findOrderByNumber(orderNumber: string, pendingOnly = false): Promise<OrderItem | null> {
-  let q = db().from('orders').select('data, status').eq('order_number', orderNumber);
+  let q = (await db()).from('orders').select('data, status').eq('order_number', orderNumber);
   if (pendingOnly) q = q.in('status', PENDING_STATUSES);
   const { data, error } = await q.order('created_at', { ascending: false }).limit(1);
   if (error) throw new Error(error.message);
@@ -195,7 +195,7 @@ export type OrderSummary = Pick<
 
 async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummary>> {
   if (!ids.length) return {};
-  const { data, error } = await db().from('orders').select('id, data, status').in('id', ids);
+  const { data, error } = await (await db()).from('orders').select('id, data, status').in('id', ids);
   if (error) throw new Error(error.message);
   const out: Record<string, OrderSummary> = {};
   for (const r of data || []) {
@@ -221,7 +221,7 @@ async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummar
 }
 
 export async function listConversations(limit = 200) {
-  const { data, error } = await db().from('wa_conversations').select('*').order('last_message_at', { ascending: false, nullsFirst: false }).limit(limit);
+  const { data, error } = await (await db()).from('wa_conversations').select('*').order('last_message_at', { ascending: false, nullsFirst: false }).limit(limit);
   if (error) throw new Error(error.message);
   const rows = (data || []) as WaConversation[];
   const orders = await orderSummaries(Array.from(new Set(rows.map((r) => r.order_id).filter(Boolean) as string[])));
@@ -236,7 +236,7 @@ export async function getConversationWithOrder(id: string) {
 }
 
 export async function listMessages(conversationId: string, limit = 300): Promise<WaMessage[]> {
-  const { data, error } = await db()
+  const { data, error } = await (await db())
     .from('wa_messages')
     .select('id, conversation_id, wa_message_id, direction, type, body, status, error, order_id, created_at, payload')
     .eq('conversation_id', conversationId)
@@ -250,7 +250,7 @@ export async function listMessages(conversationId: string, limit = 300): Promise
 
 // For the menu badge and the new-message sound.
 export async function unreadSummary() {
-  const { data, error } = await db().from('wa_conversations').select('unread_count, last_inbound_at, last_message_at').gt('unread_count', 0).limit(1000);
+  const { data, error } = await (await db()).from('wa_conversations').select('unread_count, last_inbound_at, last_message_at').gt('unread_count', 0).limit(1000);
   if (error) throw new Error(error.message);
   const rows = data || [];
   return {
@@ -261,12 +261,12 @@ export async function unreadSummary() {
 }
 
 export async function markConversationRead(id: string) {
-  const { error } = await db().from('wa_conversations').update({ unread_count: 0 }).eq('id', id);
+  const { error } = await (await db()).from('wa_conversations').update({ unread_count: 0 }).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
 export async function linkConversationOrder(id: string, orderId: string) {
-  await db().from('wa_conversations').update({ order_id: orderId }).eq('id', id);
+  await (await db()).from('wa_conversations').update({ order_id: orderId }).eq('id', id);
 }
 
 // ---------- webhook health (shown in Integrations) ----------
@@ -282,15 +282,15 @@ export interface WebhookHealth {
 
 export async function noteWebhook(patch: WebhookHealth) {
   try {
-    const { data } = await db().from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
-    await db().from('settings').upsert({ id: 'wa_webhook', data: { ...((data?.data as WebhookHealth) || {}), ...patch } });
+    const { data } = await (await db()).from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
+    await (await db()).from('settings').upsert({ id: 'wa_webhook', data: { ...((data?.data as WebhookHealth) || {}), ...patch } });
   } catch {
     // Diagnostics must never break the webhook.
   }
 }
 
 export async function getWebhookHealth(): Promise<WebhookHealth | null> {
-  const { data, error } = await db().from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
+  const { data, error } = await (await db()).from('settings').select('data').eq('id', 'wa_webhook').maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.data as WebhookHealth) || null;
 }
@@ -310,7 +310,7 @@ export interface WaSettings {
 const FALLBACK_OPTIONS = [0, 10, 15, 30, 60, 120];
 
 export async function getWaSettings(): Promise<WaSettings> {
-  const { data } = await db().from('settings').select('data').eq('id', 'whatsapp').maybeSingle();
+  const { data } = await (await db()).from('settings').select('data').eq('id', 'whatsapp').maybeSingle();
   const d = (data?.data || {}) as Partial<WaSettings>;
   return {
     mode: d.mode === 'customer_first' ? 'customer_first' : 'template',
@@ -328,14 +328,14 @@ export async function saveWaSettings(input: Partial<WaSettings>) {
     mode: input.mode === 'customer_first' || input.mode === 'template' ? input.mode : current.mode,
     fallbackMinutes: FALLBACK_OPTIONS.includes(Number(input.fallbackMinutes)) ? Number(input.fallbackMinutes) : current.fallbackMinutes,
   };
-  const { error } = await db().from('settings').upsert({ id: 'whatsapp', data: next });
+  const { error } = await (await db()).from('settings').upsert({ id: 'whatsapp', data: next });
   if (error) throw new Error(error.message);
   return next;
 }
 
 // Orders whose fallback template time has come (set in order data as waFallbackAt).
 export async function dueWaFallbackOrders(limit = 20): Promise<OrderItem[]> {
-  const { data, error } = await db()
+  const { data, error } = await (await db())
     .from('orders')
     .select('data, status')
     .lte('data->>waFallbackAt', new Date().toISOString())

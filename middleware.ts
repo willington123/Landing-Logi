@@ -1,18 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AUTH_COOKIE, authEnabled, expectedToken, safeEqual } from '@/lib/auth';
+import { AUTH_COOKIE, SESSION_COOKIE, cloudConfigured, expectedToken, safeEqual, verifySession } from '@/lib/auth';
 
-// Public: landing pages, their order endpoint, webhooks (WhatsApp, Vapi) and the cron endpoint (each checks its own secret),
-// the login flow and static assets.
-const PUBLIC_PREFIXES = ['/p/', '/api/public/', '/api/whatsapp/webhook', '/api/vapi/webhook', '/api/cron/', '/api/auth/', '/login', '/privacidad', '/_next/', '/brand/', '/favicon', '/icon', '/apple-icon'];
+// Public: landing pages, their order endpoint, webhooks (WhatsApp, Vapi), the cron endpoint (each checks its own secret),
+// sign-in / sign-up / invitations and static assets.
+const PUBLIC_PREFIXES = [
+  '/p/',
+  '/api/public/',
+  '/api/whatsapp/webhook',
+  '/api/vapi/webhook',
+  '/api/cron/',
+  '/api/auth/',
+  '/login',
+  '/registro',
+  '/invitacion/',
+  '/privacidad',
+  '/_next/',
+  '/brand/',
+  '/favicon',
+  '/icon',
+  '/apple-icon',
+];
 
-export async function middleware(req: NextRequest) {
-  if (!authEnabled()) return NextResponse.next();
+const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv'];
+
+function deny(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
-
-  const cookie = req.cookies.get(AUTH_COOKIE)?.value || '';
-  if (cookie && safeEqual(cookie, await expectedToken())) return NextResponse.next();
-
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ success: false, error: 'No autorizado. Inicia sesión en el panel.' }, { status: 401 });
   }
@@ -20,6 +32,29 @@ export async function middleware(req: NextRequest) {
   url.pathname = '/login';
   url.search = `?next=${encodeURIComponent(pathname + search)}`;
   return NextResponse.redirect(url);
+}
+
+export async function middleware(req: NextRequest) {
+  // Never trust session headers sent by the browser.
+  const headers = new Headers(req.headers);
+  SESSION_HEADERS.forEach((h) => headers.delete(h));
+  const pass = () => NextResponse.next({ request: { headers } });
+  const isPublic = PUBLIC_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p));
+
+  // Local demo without a database: optional single password.
+  if (!cloudConfigured()) {
+    if (!process.env.ADMIN_PASSWORD?.trim() || isPublic) return pass();
+    const cookie = req.cookies.get(AUTH_COOKIE)?.value || '';
+    return cookie && safeEqual(cookie, await expectedToken()) ? pass() : deny(req);
+  }
+
+  if (isPublic) return pass();
+  const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!session) return deny(req);
+  headers.set('x-lp-org', session.o);
+  headers.set('x-lp-uid', session.u);
+  headers.set('x-lp-sv', String(session.v));
+  return pass();
 }
 
 export const config = {

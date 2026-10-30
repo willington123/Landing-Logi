@@ -16,6 +16,6 @@ export async function GET(req: NextRequest) {
   try {
     return NextResponse.json({ ok: true, ...(await runScheduled(req.nextUrl.origin, 'cron')) });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }
