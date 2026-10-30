@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   '/registro',
   '/invitacion/',
   '/privacidad',
+  '/terminos',
   '/_next/',
   '/brand/',
   '/favicon',
@@ -40,7 +41,7 @@ export async function middleware(req: NextRequest) {
   const headers = new Headers(req.headers);
   SESSION_HEADERS.forEach((h) => headers.delete(h));
   const pass = () => NextResponse.next({ request: { headers } });
-  const isPublic = PUBLIC_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p));
+  const isPublic = req.nextUrl.pathname === '/' || PUBLIC_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p)); // '/' = sales page
 
   // Local demo without a database: optional single password.
   if (!cloudConfigured()) {

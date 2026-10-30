@@ -157,6 +157,12 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 - Los pedidos por encima del límite **nunca se rechazan**; solo se avisa. Las landings y personas sí tienen tope.
 - Tu tienda (`org_main`) no paga.
 
+### Página de ventas
+- Quien entra a tu dominio sin sesión ve la página de LogiPages (funciones, precios y preguntas). Quien ya inició sesión va directo al panel.
+- Los precios salen de **Admin plataforma → Planes y precios**.
+- Con `SIGNUP_OPEN=true` los botones llevan a crear la tienda; si no, a tu WhatsApp (`PLATFORM_WHATSAPP`) o al inicio de sesión.
+- `/terminos` tiene los Términos del servicio. Pon tu nombre legal en `PLATFORM_COMPANY_NAME` y tu correo en `PLATFORM_SUPPORT_EMAIL`, y haz que un abogado los revise.
+
 ### Activarlo (una sola vez)
 1. **Supabase → SQL Editor:** ejecuta `supabase/migrations/005_billing.sql` **antes** de publicar. Tu tienda queda sin costo y las otras tiendas que ya existan empiezan 7 días de prueba.
 2. **Wompi** (comercios.wompi.co → Desarrolladores): copia las 4 llaves y agrégalas en Vercel: `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`. Usa primero las de **pruebas** (`pub_test_…`): no cobran dinero real.
