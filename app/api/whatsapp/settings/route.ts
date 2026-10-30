@@ -10,7 +10,7 @@ export async function GET() {
   try {
     return NextResponse.json({ success: true, ...(await getWaSettings()) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }
 
@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
   try {
     return NextResponse.json({ success: true, ...(await saveWaSettings(body)) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }

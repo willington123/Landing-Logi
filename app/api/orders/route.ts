@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     await maybeRunScheduled(req.nextUrl.origin, 'panel');
     return NextResponse.json({ success: true, orders: await listOrders() });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }
 
@@ -25,6 +25,6 @@ export async function DELETE(req: NextRequest) {
     const deleted = await deleteOrders(valid);
     return NextResponse.json({ success: true, deleted });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }

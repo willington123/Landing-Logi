@@ -2,13 +2,14 @@
 // Sends the same event_id as the browser pixel so Meta deduplicates them.
 import { createHash } from 'crypto';
 import { CALLING_CODES, normalizePhone } from '@/lib/phone';
+import { envIntegrationsAllowed } from '@/lib/server/tenant';
 
 export { normalizePhone };
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
 
 export function capiEnabled(): boolean {
-  return Boolean(process.env.META_CAPI_ACCESS_TOKEN?.trim());
+  return envIntegrationsAllowed() && Boolean(process.env.META_CAPI_ACCESS_TOKEN?.trim());
 }
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');

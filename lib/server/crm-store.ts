@@ -3,13 +3,13 @@ import { db } from '@/lib/server/db';
 import { DEFAULT_AUTO, DEFAULT_QUICK_REPLIES, DEFAULT_TAGS, type Agent, type AutoSettings, type CrmTag, type QuickReply } from '@/lib/crm';
 
 async function readSetting<T>(id: string): Promise<T | null> {
-  const { data, error } = await db().from('settings').select('data').eq('id', id).maybeSingle();
+  const { data, error } = await (await db()).from('settings').select('data').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.data as T) ?? null;
 }
 
 async function writeSetting(id: string, data: unknown) {
-  const { error } = await db().from('settings').upsert({ id, data });
+  const { error } = await (await db()).from('settings').upsert({ id, data });
   if (error) throw new Error(error.message);
 }
 

@@ -6,6 +6,7 @@ import { pushSettings, CLOUD_SYNC_EVENT } from '@/lib/cloud';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
+import TeamSettings from '@/components/account/TeamSettings';
 import {
   Settings,
   Store,
@@ -59,6 +60,8 @@ export default function SettingsPage() {
     };
     logiStore.saveStoreSettings(next);
     pushSettings(next);
+    // The store name is also the account's name (shown in the menu and invitations).
+    if (next.storeName) fetch('/api/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: next.storeName }) }).catch(() => {});
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -227,6 +230,7 @@ export default function SettingsPage() {
               </button>
             </div>
           </form>
+          <TeamSettings />
         </main>
       </div>
 

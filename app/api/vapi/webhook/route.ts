@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { timingSafeEqual } from 'crypto';
 import { cloudEnabled } from '@/lib/server/db';
 import { getVapiCall, parseToolCalls, webhookSecret } from '@/lib/server/vapi';
@@ -15,7 +16,12 @@ const sameSecret = (a: string, b: string) => {
 
 // Server messages from Vapi: status updates, tool calls ("registrar_resultado") and end-of-call reports.
 // Only calls created by this app (known vapi_call_id) are processed.
+// WhatsApp/Vapi keys in Vercel belong to one account: everything this webhook stores goes there.
 export async function POST(req: NextRequest) {
+  return runWithOrg(integrationsOrg(), () => handle(req));
+}
+
+async function handle(req: NextRequest) {
   const secret = webhookSecret();
   if (secret && !sameSecret(req.headers.get('x-logipages-secret') || '', secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

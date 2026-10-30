@@ -1,6 +1,7 @@
 // WhatsApp Business Cloud API: sending, webhook signature check and payload parsing.
 // Server-only: uses the WhatsApp access token and app secret.
 import { createHmac, timingSafeEqual } from 'crypto';
+import { envIntegrationsAllowed } from '@/lib/server/tenant';
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
 
@@ -10,7 +11,8 @@ export const WHATSAPP_ENV = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHAT
 
 // Can send messages (free text and templates).
 export function whatsappEnabled(): boolean {
-  return Boolean(env('WHATSAPP_TOKEN') && env('WHATSAPP_PHONE_NUMBER_ID'));
+  // The number in Vercel belongs to one account (other accounts connect theirs in a later phase).
+  return envIntegrationsAllowed() && Boolean(env('WHATSAPP_TOKEN') && env('WHATSAPP_PHONE_NUMBER_ID'));
 }
 
 // Can send the automatic order confirmation template.
@@ -19,7 +21,9 @@ export function confirmTemplateEnabled(): boolean {
 }
 
 export function whatsappStatus() {
+  if (!envIntegrationsAllowed()) return { sending: false, confirmTemplate: false, webhook: false, cron: false, missing: [...WHATSAPP_ENV], managed: false };
   return {
+    managed: true,
     sending: whatsappEnabled(),
     confirmTemplate: confirmTemplateEnabled(),
     webhook: Boolean(env('WHATSAPP_VERIFY_TOKEN') && env('WHATSAPP_APP_SECRET')),

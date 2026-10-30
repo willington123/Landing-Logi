@@ -684,8 +684,10 @@ export default function IntegrationsPage() {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
 
+  // Stores other than the one that owns the keys in Vercel can't set up WhatsApp/Vapi here yet (next phase).
+  const managed = !waStatus || (waStatus as any).managed !== false;
   const filtered = INTEGRATIONS.filter(
-    (item) => selectedCategory === 'all' || item.category === selectedCategory
+    (item) => (selectedCategory === 'all' || item.category === selectedCategory) && (managed || (item.id !== 'whatsapp_cloud' && item.id !== 'vapi_ai'))
   );
 
   const toggleShowSecret = (fieldKey: string) => {
@@ -705,6 +707,15 @@ export default function IntegrationsPage() {
         <Header onOpenWizard={() => setIsWizardOpen(true)} title="Integraciones" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+          {waStatus && (waStatus as any).managed === false && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
+              <p className="text-[15px] font-semibold text-indigo-950">Conecta tu WhatsApp, llamadas y píxel muy pronto</p>
+              <p className="text-sm text-indigo-900/80 mt-1">
+                Tu tienda ya puede crear landings y recibir pedidos. La conexión de tus propias cuentas de WhatsApp Business, llamadas con IA y Meta llega en la próxima
+                actualización: aquí verás un botón para conectarlas en pocos clics.
+              </p>
+            </div>
+          )}
           {/* Header Description */}
           <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>

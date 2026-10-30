@@ -37,7 +37,7 @@ export async function botTakesMessage(m: InboundMessage, fallback: () => Promise
 }
 
 async function isLatestInbound(conversationId: string, waMessageId: string) {
-  const { data } = await db()
+  const { data } = await (await db())
     .from('wa_messages')
     .select('wa_message_id')
     .eq('conversation_id', conversationId)

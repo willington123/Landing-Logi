@@ -10,6 +10,6 @@ export async function GET() {
   try {
     return NextResponse.json({ success: true, ...(await unreadSummary()) });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: e.message }, { status: (e as any)?.status === 401 ? 401 : 500 });
   }
 }
