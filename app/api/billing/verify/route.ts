@@ -12,7 +12,16 @@ export async function POST(req: NextRequest) {
     const orgId = await currentOrgId();
     const { id } = await req.json().catch(() => ({}));
     if (!/^[\w-]{4,80}$/.test(String(id || ''))) return fail('Transacción no válida.');
-    const tx = await getTransaction(String(id));
+    let tx;
+    try {
+      tx = await getTransaction(String(id));
+    } catch (e) {
+      // Wompi didn't answer the lookup: the events webhook may already have applied it.
+      console.error('Wompi verify', id, e);
+      const { data: known } = await rawDb().from('payments').select('status').eq('wompi_id', String(id)).eq('org_id', orgId).maybeSingle();
+      if (known?.status === 'APPROVED') return ok({ status: 'APPROVED', applied: false });
+      return ok({ status: 'PENDING', applied: false });
+    }
     const { data: pay } = await rawDb().from('payments').select('org_id').eq('reference', tx.reference).maybeSingle();
     if (!pay || pay.org_id !== orgId) return fail('Este pago no es de tu tienda.', 404);
     const r = await applyTransaction(tx);

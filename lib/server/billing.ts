@@ -235,8 +235,10 @@ export async function acceptanceTokens() {
   };
 }
 
+// Wompi's transaction lookup is a public endpoint; the private key is only a fallback.
 export async function getTransaction(id: string) {
-  const d = await wompi(`/transactions/${encodeURIComponent(id)}`);
+  const path = `/transactions/${encodeURIComponent(id)}`;
+  const d = await wompi(path, { auth: 'public' }).catch(() => wompi(path));
   return d.data as WompiTx;
 }
 
