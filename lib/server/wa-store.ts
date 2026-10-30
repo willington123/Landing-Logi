@@ -346,3 +346,18 @@ export async function dueWaFallbackOrders(limit = 20): Promise<OrderItem[]> {
   return (data || []).map((r) => ({ ...(r.data as OrderItem), status: r.status as OrderStatus }));
 }
 
+
+// Different customers this store wrote to first with a template in the last 24 h (what Meta's daily limit counts).
+export async function templateRecipients24h(): Promise<number> {
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { data, error } = await (await db())
+    .from('wa_messages')
+    .select('conversation_id')
+    .eq('direction', 'out')
+    .eq('type', 'template')
+    .neq('status', 'failed')
+    .gte('created_at', since)
+    .limit(20000);
+  if (error) throw new Error(error.message);
+  return new Set((data || []).map((r: { conversation_id: string }) => r.conversation_id)).size;
+}

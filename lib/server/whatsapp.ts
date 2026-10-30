@@ -348,3 +348,60 @@ export async function deleteTemplate(name: string) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(graphError(data, res.status));
 }
+
+// ---------- number health and messaging limits ----------
+
+// How many different customers the number may start conversations with (templates) in a rolling 24 h.
+export const LIMIT_TIERS: Record<string, number | null> = {
+  TIER_50: 50,
+  TIER_250: 250,
+  TIER_1K: 1000,
+  TIER_2K: 2000,
+  TIER_10K: 10000,
+  TIER_100K: 100000,
+  TIER_UNLIMITED: null, // no limit
+};
+
+export interface NumberHealth {
+  displayPhone: string | null;
+  verifiedName: string | null;
+  nameStatus: string | null;
+  quality: string | null; // GREEN | YELLOW | RED | UNKNOWN
+  tier: string | null; // TIER_250…
+  limit: number | null | undefined; // undefined = unknown, null = unlimited
+  throughput: string | null; // STANDARD | HIGH
+  status: string | null; // CONNECTED, FLAGGED, RESTRICTED…
+}
+
+// Meta adds and renames fields over time: the extra ones are asked separately so a missing field never
+// breaks the basic check.
+export async function numberHealth(): Promise<{ ok: true; health: NumberHealth } | { ok: false; error: string }> {
+  const c = await waConfig();
+  if (!c) return { ok: false, error: 'WhatsApp no está conectado.' };
+  const get = async (fields: string) => {
+    const res = await fetch(`${GRAPH}/${c.phoneNumberId}?fields=${fields}`, { headers: { Authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(8000), cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(graphError(data, res.status));
+    return data as Record<string, any>;
+  };
+  try {
+    const basic = await get('display_phone_number,verified_name,name_status,quality_rating');
+    const extra = await get('messaging_limit_tier,throughput,status').catch(() => ({}) as Record<string, any>);
+    const tier = typeof extra.messaging_limit_tier === 'string' ? extra.messaging_limit_tier : null;
+    return {
+      ok: true,
+      health: {
+        displayPhone: basic.display_phone_number || null,
+        verifiedName: basic.verified_name || null,
+        nameStatus: basic.name_status || null,
+        quality: basic.quality_rating || null,
+        tier,
+        limit: tier ? (tier in LIMIT_TIERS ? LIMIT_TIERS[tier] : undefined) : undefined,
+        throughput: extra.throughput?.level || null,
+        status: extra.status || null,
+      },
+    };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}

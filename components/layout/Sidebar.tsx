@@ -19,6 +19,7 @@ import {
   Settings,
   X,
   LogOut,
+  FileText,
   ChevronsUpDown,
   Check,
 } from 'lucide-react';
@@ -46,6 +47,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/voice-ai', label: 'Llamadas IA', icon: PhoneCall },
       { href: '/crm', label: 'Mensajes', icon: MessageSquare },
+      { href: '/plantillas', label: 'Plantillas', icon: FileText },
     ],
   },
   {
