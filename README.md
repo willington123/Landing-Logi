@@ -171,6 +171,12 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 5. Cuando quieras recibir tiendas nuevas, pon `SIGNUP_OPEN=true`.
 6. Los cobros automáticos corren con la tarea programada (`/api/cron/run`), igual que los reintentos de llamadas.
 
+## Correos y recuperar contraseña
+- **¿Olvidaste tu contraseña?** en el inicio de sesión envía un enlace que sirve una vez y vence en 1 hora. Al cambiarla se cierran las otras sesiones.
+- Correos automáticos: bienvenida al crear la tienda, pago recibido, cobro automático rechazado, prueba por terminar (2 días antes), plan sin cobro automático por vencer (3 días antes) y plan vencido. Cada aviso se envía una sola vez.
+- **Activarlo:** crea una cuenta en resend.com, verifica tu dominio (Domains → Add domain, y copias los registros DNS que te da) y agrega en Vercel `RESEND_API_KEY` y `EMAIL_FROM` (ej. `LogiPages <hola@tudominio.com>`).
+- Sin correos configurados: en **Admin plataforma** cada tienda tiene **Enlace para cambiar contraseña** (vence en 24 horas) para enviarlo por WhatsApp.
+
 ## WhatsApp
 
 Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.

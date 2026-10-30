@@ -20,6 +20,7 @@ interface Data {
   stores: Store[];
   plans: Plan[];
   summary: { total: number; active: number; trialing: number; mrr: number };
+  emailEnabled: boolean;
 }
 
 async function call(url: string, method = 'GET', body?: unknown) {
@@ -48,14 +49,16 @@ function StoreActions({ store, plans, onDone }: { store: Store; plans: Plan[]; o
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [link, setLink] = useState<{ url: string; email: string } | null>(null);
 
   const run = async () => {
     if (action === 'expire' && !confirm(`¿Vencer el plan de "${store.name}"? Se bloqueará su panel.`)) return;
     setBusy(true);
     setErr('');
     try {
-      await call('/api/admin/stores', 'POST', { orgId: store.id, action, plan, months, days });
-      onDone(`Listo: ${store.name} actualizada.`);
+      const d = await call('/api/admin/stores', 'POST', { orgId: store.id, action, plan, months, days });
+      if (action === 'reset_link') setLink({ url: d.url, email: d.email });
+      else onDone(`Listo: ${store.name} actualizada.`);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -70,6 +73,7 @@ function StoreActions({ store, plans, onDone }: { store: Store; plans: Plan[]; o
         <option value="trial">Dar días de prueba</option>
         <option value="exempt">Sin costo</option>
         <option value="expire">Vencer</option>
+        <option value="reset_link">Enlace para cambiar contraseña</option>
       </select>
       {action === 'activate' && (
         <>
@@ -97,6 +101,19 @@ function StoreActions({ store, plans, onDone }: { store: Store; plans: Plan[]; o
         Aplicar
       </button>
       {err && <span className="text-xs text-red-600">{err}</span>}
+      {link && (
+        <div className="basis-full mt-1 rounded-lg bg-slate-50 border border-slate-200 p-2 text-xs text-slate-600">
+          <p>
+            Envíale este enlace a <b>{link.email}</b> (por WhatsApp). Sirve una vez y vence en 24 horas.
+          </p>
+          <div className="mt-1.5 flex gap-1.5">
+            <input readOnly value={link.url} className={`${input} flex-1 min-w-0 font-mono text-[11px]`} onFocus={(e) => e.target.select()} />
+            <button onClick={() => navigator.clipboard?.writeText(link.url)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium">
+              Copiar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,6 +256,12 @@ export default function AdminPanel() {
         ))}
       </div>
 
+      {!data.emailEnabled && (
+        <div className="rounded-xl bg-amber-50 text-amber-800 text-sm px-4 py-2.5">
+          Los correos están apagados (falta <code>RESEND_API_KEY</code> en Vercel): no se envían bienvenidas, avisos de pago ni enlaces para recuperar contraseña. Mientras tanto usa
+          “Enlace para cambiar contraseña” en cada tienda.
+        </div>
+      )}
       {notice && <div className="rounded-xl bg-emerald-50 text-emerald-800 text-sm px-4 py-2.5">{notice}</div>}
 
       <section className={card}>

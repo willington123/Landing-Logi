@@ -119,6 +119,13 @@ function LoginForm() {
             hint="La que usabas hasta hoy para entrar (ADMIN_PASSWORD). Confirma que eres el dueño."
           />
         )}
+        {!setup && state.mode === 'cloud' && (
+          <div className="-mt-1 text-right">
+            <Link href={`/recuperar${email ? `?email=${encodeURIComponent(email)}` : ''}`} className="text-[13px] font-medium text-brand-navy hover:underline">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
+        )}
         <FormError error={error} />
         <SubmitButton
           busy={busy}
@@ -137,7 +144,10 @@ function LoginForm() {
         </p>
       )}
       <p className="mt-10 text-xs text-slate-400 text-center lg:text-left">
-        {state.mode === 'cloud' && !setup ? '¿Olvidaste tu contraseña? Pídele al dueño de tu tienda una nueva invitación. · ' : ''}
+        <Link href="/terminos" className="underline underline-offset-2 hover:text-slate-600">
+          Términos
+        </Link>
+        {' · '}
         <Link href="/privacidad" className="underline underline-offset-2 hover:text-slate-600">
           Privacidad
         </Link>

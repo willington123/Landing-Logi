@@ -4,6 +4,10 @@ import { computeSub, extendPeriod, getPlans, getSubscription, updateSubscription
 import { requirePlatformAdmin } from '@/lib/server/admin';
 import { fail, failFrom, ok } from '@/lib/server/http';
 import { randomBytes } from 'crypto';
+import { getUser } from '@/lib/server/accounts';
+import { resetToken } from '@/lib/server/password-reset';
+import { emailConfigured } from '@/lib/server/email';
+import { publicBaseUrl } from '@/lib/server/vapi';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +50,7 @@ export async function GET() {
       }),
     );
     const mrr = stores.filter((s) => s.status === 'active').reduce((n, s) => n + (plans.find((p) => p.id === s.plan)?.price || 0), 0);
-    return ok({ stores, plans, summary: { total: stores.length, active: stores.filter((s) => s.status === 'active').length, trialing: stores.filter((s) => s.status === 'trialing').length, mrr } });
+    return ok({ stores, plans, emailEnabled: emailConfigured(), summary: { total: stores.length, active: stores.filter((s) => s.status === 'active').length, trialing: stores.filter((s) => s.status === 'trialing').length, mrr } });
   } catch (e) {
     return handle(e);
   }
@@ -81,6 +85,12 @@ export async function POST(req: NextRequest) {
         applied_at: new Date().toISOString(),
       });
       await extendPeriod(orgId, plan.id, months);
+    } else if (b.action === 'reset_link') {
+      // For an owner who can't receive emails: a 24-hour link to set a new password, shared by WhatsApp.
+      const { data: owner } = await rawDb().from('memberships').select('user_id').eq('org_id', orgId).eq('role', 'owner').limit(1).maybeSingle();
+      const user = owner ? await getUser(owner.user_id) : null;
+      if (!user) return fail('Esta tienda no tiene dueño.', 404);
+      return ok({ url: `${publicBaseUrl(req.nextUrl.origin)}/restablecer?t=${encodeURIComponent(resetToken(user, 24 * 3600000))}`, email: user.email });
     } else if (b.action === 'trial') {
       const days = Math.min(60, Math.max(1, Math.round(Number(b.days) || 7)));
       await updateSubscription(orgId, { status: 'trialing', trial_ends_at: new Date(Date.now() + days * 86400000).toISOString() });

@@ -2,6 +2,8 @@
 import { createHash, randomBytes } from 'crypto';
 import { rawDb } from '@/lib/server/supabase';
 import { MAIN_ORG } from '@/lib/server/constants';
+import { emailConfigured } from '@/lib/server/email';
+import { notifyPaymentApproved, notifyPlanEnding, notifyPlanExpired, notifyRenewalFailed, notifyTrialEnding } from '@/lib/server/notify';
 import { DEFAULT_PLANS, GRACE_DAYS, TRIAL_AI_REPLIES, TRIAL_DAYS, TRIAL_PLAN, type Plan, type PlanId, type SubStatus } from '@/lib/plans';
 
 const env = (k: string) => (process.env[k] || '').trim();
@@ -305,6 +307,8 @@ export async function applyTransaction(tx: WompiTx): Promise<{ applied: boolean;
     const { data: claimed } = await rawDb().from('payments').update({ applied_at: now }).eq('id', pay.id).is('applied_at', null).select('id');
     if (!claimed?.length) return { applied: false, status: tx.status, orgId: pay.org_id };
     await extendPeriod(pay.org_id, pay.plan, pay.months || 1);
+    const after = await getSubscription(pay.org_id).catch(() => null);
+    await notifyPaymentApproved(pay.org_id, { planName: after?.planInfo.name || pay.plan, amountCents: Number(pay.amount_cents), periodEnd: after?.current_period_end || null }).catch(() => {});
     return { applied: true, status: tx.status, orgId: pay.org_id };
   }
   if (['DECLINED', 'ERROR', 'VOIDED'].includes(tx.status) && pay.kind === 'auto') {
@@ -316,6 +320,7 @@ export async function applyTransaction(tx: WompiTx): Promise<{ applied: boolean;
     }
     const retries = (sub.retries || 0) + 1;
     await updateSubscription(pay.org_id, { status: 'past_due', retries, next_retry_at: retries >= 3 ? null : new Date(Date.now() + DAY).toISOString(), ...(retries >= 3 ? { auto_renew: false } : {}) });
+    await notifyRenewalFailed(pay.org_id, { planName: sub.planInfo.name, reason: tx.status_message || null, lastTry: retries >= 3, periodEnd: sub.current_period_end }).catch(() => {});
   }
   return { applied: false, status: tx.status, orgId: pay.org_id };
 }
@@ -372,6 +377,41 @@ export async function processBilling() {
       out.checked++;
     } catch (e: any) {
       out.errors.push(`${p.id}: ${e?.message || e}`);
+    }
+  }
+  return out;
+}
+
+// Reminder emails (trial ending, plan ending without automatic charge, plan expired). Each one is sent once.
+export async function runBillingNotices() {
+  const out = { sent: 0 };
+  if (!emailConfigured()) return out;
+  const { data } = await rawDb().from('subscriptions').select('*').in('status', ['trialing', 'active', 'past_due']).limit(1000);
+  const plans = await getPlans();
+  for (const row of (data || []) as SubRow[]) {
+    const s = computeSub(row, plans.find((p) => p.id === row.plan) || plans[1]);
+    const endMs = s.accessEndsAt ? new Date(s.accessEndsAt).getTime() : null;
+    if (!endMs) continue;
+    let key: string | null = null;
+    let send: (() => Promise<unknown>) | null = null;
+    if (s.effective === 'trialing' && s.daysLeft !== null && s.daysLeft <= 2) {
+      key = `trial:${s.accessEndsAt}`;
+      send = () => notifyTrialEnding(row.org_id, { endsAt: s.accessEndsAt!, daysLeft: s.daysLeft! });
+    } else if (s.effective === 'active' && !row.auto_renew && s.daysLeft !== null && s.daysLeft <= 3) {
+      key = `ending:${s.accessEndsAt}`;
+      send = () => notifyPlanEnding(row.org_id, { planName: s.planInfo.name, endsAt: s.accessEndsAt!, daysLeft: s.daysLeft! });
+    } else if (s.effective === 'expired' && Date.now() - endMs < GRACE_DAYS * DAY) {
+      key = `expired:${s.accessEndsAt}`;
+      send = () => notifyPlanExpired(row.org_id, { graceUntil: new Date(endMs + GRACE_DAYS * DAY).toISOString() });
+    }
+    if (!key || !send) continue;
+    const { data: n } = await rawDb().from('settings').select('data').eq('org_id', row.org_id).eq('id', 'notices').maybeSingle();
+    const sent: string[] = Array.isArray((n?.data as any)?.sent) ? (n!.data as any).sent : [];
+    if (sent.includes(key)) continue;
+    const r = (await send().catch(() => ({ ok: false }))) as { ok: boolean; skipped?: boolean };
+    if (r.ok || r.skipped) {
+      await rawDb().from('settings').upsert({ org_id: row.org_id, id: 'notices', data: { sent: [...sent, key].slice(-20) } });
+      if (r.ok) out.sent++;
     }
   }
   return out;

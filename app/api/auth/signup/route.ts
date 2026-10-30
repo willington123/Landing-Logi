@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudConfigured } from '@/lib/auth';
 import { addMember, countUsers, createOrg, createUser, normalizeEmail, passwordProblem, signupOpen, validEmail, withSession } from '@/lib/server/accounts';
 import { fail, failFrom } from '@/lib/server/http';
+import { waitUntil } from '@vercel/functions';
 import { startTrial } from '@/lib/server/billing';
+import { sendWelcome } from '@/lib/server/notify';
+import { TRIAL_DAYS } from '@/lib/plans';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +29,7 @@ export async function POST(req: NextRequest) {
     const orgId = await createOrg(storeName);
     await addMember(orgId, user.id, 'owner');
     await startTrial(orgId).catch((e) => console.error('No se pudo iniciar la prueba gratis', e));
+    waitUntil(sendWelcome({ email, name, store: storeName, trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86400000).toISOString() }).catch(() => {}));
     return withSession(NextResponse.json({ success: true }), user, orgId);
   } catch (e) {
     return failFrom(e);
