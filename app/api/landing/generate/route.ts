@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON, imagePart, resolveApiKey, GeminiError, GeminiPart } from '@/lib/gemini';
 import { ICON_NAMES, GeneratedCopy } from '@/lib/landing-ai';
+import { ClaudeLandingError, claudeLandingAvailable, writeLandingWithClaude } from '@/lib/server/landing-claude';
+import { currentOrgId } from '@/lib/server/tenant';
+import { cloudEnabled } from '@/lib/server/db';
 
 // Gemini can be slow when saturated; Vercel allows up to 300 s with Fluid compute.
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 const S = { type: 'STRING' } as const;
 const strArr = (n: number) => ({ type: 'ARRAY', items: S, minItems: n, maxItems: n });
@@ -64,6 +67,21 @@ const SCHEMA = {
   },
 };
 (SCHEMA as any).required = Object.keys(SCHEMA.properties);
+
+// Lists keep the exact number of items the page layout expects (structured outputs can't enforce counts).
+function fitCounts(value: any, schema: any): any {
+  if (!schema || value == null) return value;
+  if (schema.type === 'ARRAY' && Array.isArray(value)) {
+    const items = value.map((v) => fitCounts(v, schema.items));
+    return typeof schema.maxItems === 'number' ? items.slice(0, schema.maxItems) : items;
+  }
+  if (schema.type === 'OBJECT' && typeof value === 'object') {
+    const out: any = { ...value };
+    for (const [k, sub] of Object.entries(schema.properties || {})) out[k] = fitCounts(out[k], sub);
+    return out;
+  }
+  return value;
+}
 
 function offersText(b: any): string {
   const offers = (Array.isArray(b.offers) ? b.offers : []).filter((o: any) => o.units > 0 && o.price > 0);
@@ -130,14 +148,29 @@ PROMPTS DE IMAGEN (en INGLÉS, se usarán con la foto del producto como referenc
 }
 
 export async function POST(req: NextRequest) {
+  let claudeNote: string | null = null;
   try {
     const body = await req.json();
-    const apiKey = resolveApiKey(body.geminiApiKey);
     if (!body.imageBase64) {
       return NextResponse.json({ success: false, error: 'Sube una foto del producto.' }, { status: 400 });
     }
+    const prompt = buildPrompt(body);
 
-    const parts: GeminiPart[] = [{ text: buildPrompt(body) }, imagePart(body.imageBase64)];
+    // 1) Claude writes the page (copy, design and image prompts) when the store has it.
+    const orgId = cloudEnabled() ? await currentOrgId().catch(() => null) : null;
+    if (body.writer !== 'gemini') {
+      try {
+        const { copy, model } = await writeLandingWithClaude({ orgId, prompt, images: [body.imageBase64, ...(body.extraImages || []).slice(0, 2)], schema: SCHEMA });
+        return NextResponse.json({ success: true, copy: fitCounts(copy, SCHEMA), writer: 'claude', model });
+      } catch (e) {
+        claudeNote = e instanceof ClaudeLandingError ? e.message : String((e as Error)?.message || e);
+        console.error('Landing con Claude', claudeNote);
+      }
+    }
+
+    // 2) Gemini as the fallback writer.
+    const apiKey = resolveApiKey(body.geminiApiKey);
+    const parts: GeminiPart[] = [{ text: prompt }, imagePart(body.imageBase64)];
     for (const extra of (body.extraImages || []).slice(0, 2)) {
       try {
         parts.push(imagePart(extra));
@@ -147,22 +180,25 @@ export async function POST(req: NextRequest) {
     }
 
     const copy = await generateJSON<GeneratedCopy>(apiKey, parts, SCHEMA);
-    return NextResponse.json({ success: true, copy });
+    return NextResponse.json({ success: true, copy, writer: 'gemini', claudeNote });
   } catch (err) {
     const status = err instanceof GeminiError ? err.status : 500;
     const raw = err instanceof Error ? err.message : 'Error interno';
     let message = raw;
-    if (/api key/i.test(raw)) message = 'Google rechazó la API Key. Revisa que esté bien copiada.';
+    if (/^Falta la API Key/.test(raw)) message = raw;
+    else if (/api key/i.test(raw)) message = 'Google rechazó la API Key. Revisa que esté bien copiada.';
     else if (status === 429)
       message = /per day/i.test(raw)
         ? 'Tu clave gratuita de Gemini agotó su límite diario en todos los modelos. Se renueva mañana, o activa la facturación para quitar el límite.'
         : 'Límite de uso de tu clave de Gemini alcanzado. Espera un minuto y vuelve a intentarlo.';
     else if (status >= 500) message = 'Google está saturado en este momento. Inténtalo de nuevo en unos minutos.';
+    if (claudeNote) message = `Claude no pudo escribir la página (${claudeNote}) y Gemini tampoco: ${message}`;
     return NextResponse.json({ success: false, error: message, rawError: raw }, { status: status >= 400 ? status : 500 });
   }
 }
 
-// Lets the UI know whether a server-side key exists, so it can hide the key field.
+// Lets the UI know whether a server-side Gemini key exists (hides the key field) and whether Claude writes the page.
 export async function GET() {
-  return NextResponse.json({ serverKey: Boolean(process.env.GEMINI_API_KEY) });
+  const orgId = cloudEnabled() ? await currentOrgId().catch(() => null) : null;
+  return NextResponse.json({ serverKey: Boolean(process.env.GEMINI_API_KEY), claude: await claudeLandingAvailable(orgId) });
 }

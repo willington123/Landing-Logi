@@ -147,6 +147,12 @@ Cada tienda conecta sus propias cuentas en **Integraciones**; las claves se comp
 - Tu tienda (`INTEGRATIONS_ORG_ID`, por defecto `org_main`) sigue usando las claves de Vercel mientras no conecte otras en el panel. Para administrar las plantillas de ese número agrega `WHATSAPP_BUSINESS_ACCOUNT_ID`.
 - La revisión automática (`/api/cron/run`) atiende a todas las tiendas con WhatsApp o Vapi conectados.
 
+## Landings con IA: Claude escribe, Nano Banana ilustra
+- **Claude** (`claude-opus-5-5`) mira la foto del producto y escribe la landing completa: textos, estructura, paleta de colores y las instrucciones de cada imagen. Usa la clave de Claude de la tienda (Integraciones), la de Vercel en tu tienda, o las respuestas incluidas en el plan (una landing cuenta como 10 respuestas).
+- **Nano Banana** (Gemini) genera las imágenes con el producto real, como antes (o Replicate / Cloudflare si los configuras).
+- Si Claude no está disponible o falla, Gemini escribe la página como respaldo.
+- Opcional: `ANTHROPIC_LANDING_MODEL` para usar otro modelo de Claude solo en las landings.
+
 ## Planes y pagos (Wompi)
 Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. Después elige un plan en **Plan y pagos**:
 
