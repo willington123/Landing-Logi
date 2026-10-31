@@ -184,6 +184,13 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
   Meta reemplaza `{{ad.id}}` por el id de cada anuncio y el pedido queda ligado a él.
 - En **Pedidos** el detalle muestra el anuncio, y el Excel trae las columnas "Anuncio (id)" y "Anuncio".
 
+### Creativos (gasto vs. ventas confirmadas)
+- Cada tienda conecta su cuenta publicitaria en **Integraciones → Meta Ads** (solo lectura, permiso `ads_read`). El menú **Creativos** muestra por anuncio: gasto, clics, chats, pedidos, confirmados, ventas, costo por venta y ROAS real, con alertas 🏆 ganadores, 🔥 gastan sin vender y ⚠️ se cancelan mucho.
+- **Botón "Conectar con Facebook":** aparece con `META_APP_ID` y `META_APP_SECRET`. En tu app de Meta agrega el producto **Inicio de sesión con Facebook** y en **URI de redireccionamiento de OAuth válidos** pon `https://<tu-dominio>/api/integrations/meta-ads/oauth/callback`.
+  Mientras Meta no apruebe el acceso avanzado a `ads_read`, solo funciona para personas con rol en la app (administradores, desarrolladores o evaluadores).
+- **Sin botón:** la tienda pega el id de su cuenta publicitaria y un token con `ads_read` (por ejemplo de un usuario del sistema en el Business Manager).
+- La conexión con Facebook dura unos 60 días; el panel avisa cuando falta poco para reconectar.
+
 ## WhatsApp
 
 Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.

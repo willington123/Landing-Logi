@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { anthropicKey, capiConfig, storedIntegrations, vapiConfig, waConfig } from '@/lib/server/integrations';
+import { adsConfig, anthropicKey, capiConfig, storedIntegrations, vapiConfig, waConfig } from '@/lib/server/integrations';
+import { oauthAvailable } from '@/lib/server/meta-ads';
 import { currentOrgId, currentRole } from '@/lib/server/tenant';
 import { decrypt, mask } from '@/lib/server/secrets';
 import { getWebhookHealth } from '@/lib/server/wa-store';
@@ -17,13 +18,14 @@ export async function GET(req: NextRequest) {
     const role = await currentRole();
     const manager = role === 'owner' || role === 'admin';
     const base = publicBaseUrl(req.nextUrl.origin);
-    const [s, wa, vapi, capi, claude, health] = await Promise.all([
+    const [s, wa, vapi, capi, claude, health, ads] = await Promise.all([
       storedIntegrations(orgId),
       waConfig(orgId),
       vapiConfig(orgId),
       capiConfig(orgId),
       anthropicKey(orgId),
       getWebhookHealth().catch(() => null),
+      adsConfig(orgId),
     ]);
     const manual = wa?.mode === 'manual';
     return ok({
@@ -56,6 +58,16 @@ export async function GET(req: NextRequest) {
       vapi: vapi
         ? { connected: true, source: vapi.source, phoneNumberId: vapi.phoneNumberId, apiKey: mask(vapi.apiKey), webhookSecretSet: Boolean(vapi.webhookSecret) }
         : { connected: false },
+      metaAds: {
+        connected: Boolean(ads?.accountId),
+        pending: Boolean(ads && !ads.accountId),
+        accountId: ads?.accountId || null,
+        accountName: ads?.accountName || null,
+        currency: ads?.currency || null,
+        mode: ads?.mode || null,
+        expiresAt: ads?.expiresAt || null,
+        oauthAvailable: oauthAvailable(),
+      },
       capi: capi ? { connected: true, source: capi.source, token: mask(capi.token), testCode: capi.testCode } : { connected: false },
       anthropic: claude
         ? { connected: true, source: claude.source, apiKey: claude.source === 'plan' ? null : mask(claude.key), left: claude.left ?? null }

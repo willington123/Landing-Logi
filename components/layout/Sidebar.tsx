@@ -24,8 +24,7 @@ import {
   ShieldCheck,
   FileText,
   ChevronsUpDown,
-  Check,
-} from 'lucide-react';
+  Check, Megaphone } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -57,6 +56,7 @@ const NAV_GROUPS = [
   {
     label: 'Crecer',
     items: [
+      { href: '/creativos', label: 'Creativos', icon: Megaphone },
       { href: '/automations', label: 'Automatizaciones', icon: Workflow },
       { href: '/analytics', label: 'Analíticas', icon: BarChart3 },
     ],
