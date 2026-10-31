@@ -321,44 +321,94 @@ export interface AdPreviewData {
   notes: string[]; // what could not be loaded and why
 }
 
+// Meta answers with an <iframe> snippet. Take its src, whatever the quoting/escaping, if it is a Meta host.
+export function iframeSrc(body: string): { src: string | null; why: string } {
+  if (!body.trim()) return { src: null, why: 'respuesta vacía' };
+  const html = body.replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\\\//g, '/');
+  const m = /<iframe[^>]*\ssrc\s*=\s*["']([^"']+)["']/i.exec(html);
+  if (!m) return { src: null, why: 'sin iframe' };
+  const url = m[1].replace(/&amp;/g, '&');
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {}
+  if (url.startsWith('https://') && /(^|\.)(facebook\.com|fbsbx\.com|instagram\.com)$/.test(host)) return { src: url, why: '' };
+  return { src: null, why: `dominio ${host || 'desconocido'}` };
+}
+
+const FALLBACK_FORMAT: Partial<Record<PreviewFormat, string>> = { MOBILE_FEED_STANDARD: 'DESKTOP_FEED_STANDARD', INSTAGRAM_STANDARD: 'INSTAGRAM_EXPLORE_GRID_HOME' };
+
 export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFormat): Promise<AdPreviewData> {
   if (!cfg.accountId || !/^\d{6,25}$/.test(adId)) throw new AdsError('Anuncio no válido.');
-  return cached(`pv2:${cfg.accounts.map((a) => a.id).join(',')}:${adId}:${format}`, 30 * 60000, async () => {
-    // The ad must belong to one of the store's connected accounts.
-    const ad = await graph(adId, cfg.token, {
-      fields: 'account_id,preview_shareable_link,creative{video_id,object_story_spec{video_data{video_id}},asset_feed_spec{videos{video_id}}}',
-    }).catch(() => graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' }));
-    if (!cfg.accounts.some((a) => a.id === String(ad.account_id || ''))) throw new AdsError('Este anuncio no es de tus cuentas publicitarias.');
-    const notes: string[] = [];
-    let src: string | null = null;
+  const key = `pv3:${cfg.accounts.map((a) => a.id).join(',')}:${adId}:${format}`;
+  const hit = cache.get(key);
+  if (hit && hit.until > Date.now()) return hit.data as AdPreviewData;
+
+  // The ad must belong to one of the store's connected accounts.
+  const ad = await graph(adId, cfg.token, {
+    fields: 'account_id,preview_shareable_link,creative{video_id,object_story_spec{video_data{video_id}},asset_feed_spec{videos{video_id}}}',
+  }).catch(() => graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' }));
+  const accountId = String(ad.account_id || '');
+  if (!cfg.accounts.some((a) => a.id === accountId)) throw new AdsError('Este anuncio no es de tus cuentas publicitarias.');
+  const notes: string[] = [];
+
+  // Preview iframe (plays videos). If this format gives nothing, try a close one.
+  let src: string | null = null;
+  const tried: string[] = [];
+  for (const f of [format, FALLBACK_FORMAT[format]].filter(Boolean) as string[]) {
     try {
-      const d = await graph(`${adId}/previews`, cfg.token, { ad_format: format });
-      const body = String(d?.data?.[0]?.body || '');
-      const m = /src="([^"]+)"/.exec(body);
-      const url = m ? m[1].replace(/&amp;/g, '&') : '';
-      if (/^https:\/\/(www\.)?facebook\.com\//.test(url)) src = url;
-      else notes.push('Meta no entregó la vista previa para este formato.');
+      const d = await graph(`${adId}/previews`, cfg.token, { ad_format: f });
+      const r = iframeSrc(String(d?.data?.[0]?.body || ''));
+      if (r.src) {
+        src = r.src;
+        break;
+      }
+      tried.push(`${f}: ${r.why}`);
+      if (r.why !== 'respuesta vacía') console.error('Meta Ads preview body', adId, f, String(d?.data?.[0]?.body || '').slice(0, 300));
     } catch (e: any) {
-      notes.push(`Vista previa: ${e?.message || e}`);
+      tried.push(`${f}: ${e?.message || e}`);
     }
-    const c = ad?.creative || {};
-    const vid = c.video_id || c.object_story_spec?.video_data?.video_id || c.asset_feed_spec?.videos?.[0]?.video_id || null;
-    let video: string | null = null;
-    let poster: string | null = null;
-    let videoLink: string | null = null;
-    if (vid) {
+  }
+  if (!src) notes.push(`Meta no entregó la vista previa (${tried.join(' · ')}).`);
+
+  // The video file: from the video itself, else from the ad account's video library.
+  const c = ad?.creative || {};
+  const vid = c.video_id || c.object_story_spec?.video_data?.video_id || c.asset_feed_spec?.videos?.[0]?.video_id || null;
+  let video: string | null = null;
+  let poster: string | null = null;
+  let videoLink: string | null = null;
+  if (vid) {
+    const why: string[] = [];
+    const take = (v: any) => {
+      if (!video && v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
+      if (!poster && v?.picture) poster = String(v.picture);
+      if (!videoLink && v?.permalink_url) videoLink = String(v.permalink_url).startsWith('http') ? String(v.permalink_url) : `https://www.facebook.com${v.permalink_url}`;
+    };
+    try {
+      take(await graph(String(vid), cfg.token, { fields: 'source,picture,permalink_url' }));
+      if (!video) why.push('el video no trae archivo');
+    } catch (e: any) {
+      why.push(String(e?.message || e));
+    }
+    if (!video) {
       try {
-        const v = await graph(String(vid), cfg.token, { fields: 'source,picture,permalink_url' });
-        if (v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
-        else notes.push('Meta no permite descargar este video desde aquí; ábrelo en Facebook.');
-        if (v?.picture) poster = String(v.picture);
-        if (v?.permalink_url) videoLink = String(v.permalink_url).startsWith('http') ? String(v.permalink_url) : `https://www.facebook.com${v.permalink_url}`;
+        const d = await graph(`act_${accountId}/advideos`, cfg.token, {
+          fields: 'id,source,picture,permalink_url',
+          filtering: JSON.stringify([{ field: 'id', operator: 'IN', value: [String(vid)] }]),
+          limit: '5',
+        });
+        take((d?.data || []).find((x: any) => String(x?.id) === String(vid)));
+        if (!video) why.push('la biblioteca de videos de la cuenta no lo trae');
       } catch (e: any) {
-        notes.push(`Video: ${e?.message || e}`);
+        why.push(`biblioteca de videos: ${e?.message || e}`);
       }
     }
-    return { src, video, poster, previewLink: typeof ad?.preview_shareable_link === 'string' ? ad.preview_shareable_link : null, videoLink, notes };
-  });
+    if (!video) notes.push(`No se pudo traer el archivo del video (${why.join(' · ')}). Usa “Ver anuncio en Facebook”.`);
+  }
+  const out: AdPreviewData = { src, video, poster, previewLink: typeof ad?.preview_shareable_link === 'string' ? ad.preview_shareable_link : null, videoLink, notes };
+  // Only keep good answers: a failure is retried next time.
+  if (src || video) cache.set(key, { data: out, until: Date.now() + 30 * 60000 });
+  return out;
 }
 
 // Total spend of one ad account in a date range (for the "Mis tiendas" overview).
