@@ -3,7 +3,7 @@
 // Creativos: which ads sell (confirmed cash-on-delivery sales) and which spend without selling.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Check, Copy, Flame, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, Trophy } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, Eye, Flame, X, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, Trophy } from 'lucide-react';
 
 type Range = 'today' | '7d' | '30d' | 'month';
 type Flag = 'winner' | 'waste' | 'cancels';
@@ -85,6 +85,7 @@ const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_
 export default function CreativesPage() {
   const [range, setRange] = useState<Range>('7d');
   const [filter, setFilter] = useState<'all' | Flag>('all');
+  const [openAd, setOpenAd] = useState<Row | null>(null);
   const [state, setState] = useState<{ loading: boolean; connected?: boolean; pending?: boolean; error?: string; expired?: boolean; report?: Report; account?: { name: string | null; currency: string | null } }>({ loading: true });
 
   const load = useCallback(async (r: Range) => {
@@ -245,7 +246,7 @@ export default function CreativesPage() {
                   {rows.map((r) => (
                     <tr key={r.adId} className={r.flags.includes('waste') ? 'bg-red-50/30' : r.flags.includes('winner') ? 'bg-emerald-50/30' : ''}>
                       <td className="px-4 py-3">
-                        <AdCell r={r} />
+                        <AdCell r={r} onOpen={setOpenAd} />
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums font-medium">{money(r.spend)}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{r.clicks.toLocaleString('es-CO')}</td>
@@ -269,7 +270,7 @@ export default function CreativesPage() {
             <ul className="md:hidden divide-y divide-slate-100">
               {rows.map((r) => (
                 <li key={r.adId} className="p-4 space-y-3">
-                  <AdCell r={r} />
+                  <AdCell r={r} onOpen={setOpenAd} />
                   <div className="grid grid-cols-3 gap-2 text-center">
                     {[
                       ['Gasto', money(r.spend)],
@@ -297,29 +298,55 @@ export default function CreativesPage() {
           actualiza cada 10 minutos.
         </p>
       )}
+      {openAd && <AdPreview r={openAd} money={money} onClose={() => setOpenAd(null)} />}
     </div>
   );
 }
 
-function AdCell({ r }: { r: Row }) {
+const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+  ACTIVE: { label: 'activo', cls: 'text-emerald-600' },
+  PAUSED: { label: 'pausado', cls: 'text-slate-400' },
+  CAMPAIGN_PAUSED: { label: 'campaña pausada', cls: 'text-slate-400' },
+  ADSET_PAUSED: { label: 'conjunto pausado', cls: 'text-slate-400' },
+  IN_PROCESS: { label: 'en revisión', cls: 'text-amber-600' },
+  PENDING_REVIEW: { label: 'en revisión', cls: 'text-amber-600' },
+  PREAPPROVED: { label: 'en revisión', cls: 'text-amber-600' },
+  DISAPPROVED: { label: 'rechazado', cls: 'text-red-600' },
+  WITH_ISSUES: { label: 'con problemas', cls: 'text-red-600' },
+  PENDING_BILLING_INFO: { label: 'falta método de pago', cls: 'text-red-600' },
+  ARCHIVED: { label: 'archivado', cls: 'text-slate-400' },
+  DELETED: { label: 'eliminado', cls: 'text-slate-400' },
+};
+const statusOf = (s: string | null) => (s ? STATUS_LABEL[s.toUpperCase()] || { label: s.toLowerCase().replace(/_/g, ' '), cls: 'text-slate-400' } : null);
+
+function AdCell({ r, onOpen }: { r: Row; onOpen: (r: Row) => void }) {
   const [broken, setBroken] = useState(false);
+  const st = statusOf(r.status);
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="relative w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={() => onOpen(r)}
+        className="group relative w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center ring-1 ring-slate-200 hover:ring-2 hover:ring-brand-blue transition"
+        aria-label={`Ver el anuncio ${r.name}`}
+        title="Ver el anuncio"
+      >
         {r.thumb && !broken ? (
           <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
         ) : (
           <ImageIcon className="w-5 h-5 text-slate-300" />
         )}
-        {r.kind === 'video' && <PlayCircle className="absolute w-5 h-5 text-white drop-shadow" />}
-      </div>
+        <span className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+          {r.kind === 'video' ? <PlayCircle className="w-7 h-7 text-white drop-shadow" /> : <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 drop-shadow" />}
+        </span>
+      </button>
       <div className="min-w-0">
-        <p className="font-medium text-slate-900 truncate max-w-[280px]" title={r.name}>
+        <button type="button" onClick={() => onOpen(r)} className="block font-medium text-slate-900 truncate max-w-[280px] text-left hover:text-brand-blue" title={r.name}>
           {r.name}
-        </p>
+        </button>
         <p className="text-[11px] text-slate-500 truncate max-w-[280px]">
           {r.campaign || `id ${r.adId}`}
-          {r.status && r.status !== 'ACTIVE' && <span className="ml-1 text-slate-400">· {r.status === 'PAUSED' ? 'pausado' : r.status.toLowerCase()}</span>}
+          {st && <span className={`ml-1 ${st.cls}`}>· {st.label}</span>}
         </p>
         {r.flags.length > 0 && (
           <div className="mt-1 flex gap-1 flex-wrap">
@@ -333,6 +360,116 @@ function AdCell({ r }: { r: Row }) {
             })}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+const FORMATS = [
+  { id: 'MOBILE_FEED_STANDARD', label: 'Facebook', h: 640 },
+  { id: 'INSTAGRAM_STANDARD', label: 'Instagram', h: 640 },
+  { id: 'INSTAGRAM_STORY', label: 'Historias / Reels', h: 720 },
+] as const;
+
+function AdPreview({ r, money, onClose }: { r: Row; money: (n: number) => string; onClose: () => void }) {
+  const [format, setFormat] = useState<(typeof FORMATS)[number]['id']>('MOBILE_FEED_STANDARD');
+  const [mode, setMode] = useState<'preview' | 'video'>('preview');
+  const [data, setData] = useState<{ src: string | null; video: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    fetch(`/api/ads/preview?adId=${r.adId}&format=${format}`, { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((d) => (d.success ? setData({ src: d.src, video: d.video }) : setError(d.error)))
+      .catch(() => setError('Sin conexión. Intenta de nuevo.'));
+  }, [r.adId, format]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  const h = FORMATS.find((f) => f.id === format)!.h;
+  const st = statusOf(r.status);
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-[920px] max-h-[95vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 p-4 sm:p-5 border-b border-slate-100">
+          <div className="min-w-0">
+            <h3 className="text-[16px] font-semibold text-slate-900 truncate">{r.name}</h3>
+            <p className="text-xs text-slate-500 truncate">
+              {r.campaign} {st && <span className={st.cls}>· {st.label}</span>} <span className="text-slate-400">· id {r.adId}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1" aria-label="Cerrar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="grid md:grid-cols-[minmax(0,1fr)_260px] gap-5 p-4 sm:p-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-[12.5px] font-medium text-slate-600 w-fit max-w-full overflow-x-auto">
+              {FORMATS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => {
+                    setFormat(f.id);
+                    setMode('preview');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${mode === 'preview' && format === f.id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+              {data?.video && (
+                <button onClick={() => setMode('video')} className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${mode === 'video' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
+                  Solo video
+                </button>
+              )}
+            </div>
+            <div className="mt-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden" style={{ minHeight: 320 }}>
+              {error ? (
+                <p className="p-6 text-sm text-red-600 text-center">{error}</p>
+              ) : !data ? (
+                <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+              ) : mode === 'video' && data.video ? (
+                <video src={data.video} controls autoPlay playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+              ) : data.src ? (
+                <iframe src={data.src} title="Vista previa del anuncio" className="w-full max-w-[420px] border-0" style={{ height: h }} scrolling="no" />
+              ) : data.video ? (
+                <video src={data.video} controls playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+              ) : r.thumb ? (
+                <img src={r.thumb} alt="" className="max-h-[60vh] w-auto" referrerPolicy="no-referrer" />
+              ) : (
+                <p className="p-6 text-sm text-slate-500">Meta no entregó una vista previa para este formato.</p>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {[
+              ['Gasto', money(r.spend)],
+              ['Clics', r.clicks.toLocaleString('es-CO')],
+              ['Chats', Math.max(r.chats, r.metaChats).toLocaleString('es-CO')],
+              ['Pedidos', `${r.orders}${r.cancelled ? ` (${r.cancelled} cancelados)` : ''}`],
+              ['Confirmados', String(r.confirmed)],
+              ['Ventas confirmadas', `$${Math.round(r.revenue).toLocaleString('es-CO')}`],
+              ['Costo por venta', r.cpa === null ? '—' : money(r.cpa)],
+              ['ROAS real', r.roas === null ? '—' : `${r.roas.toFixed(2)}x`],
+            ].map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-[13px]">
+                <span className="text-slate-500">{k}</span>
+                <span className="font-semibold text-slate-900 tabular-nums">{v}</span>
+              </div>
+            ))}
+            <a
+              href={`https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=${r.adId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5"
+            >
+              Abrir en el Administrador de anuncios <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -232,3 +232,35 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
   }
   return { creatives: out, error };
 }
+
+// ---------- ad preview (how the ad looks, video playable) ----------
+
+export const PREVIEW_FORMATS = ['MOBILE_FEED_STANDARD', 'INSTAGRAM_STANDARD', 'INSTAGRAM_STORY'] as const;
+export type PreviewFormat = (typeof PREVIEW_FORMATS)[number];
+
+// Meta returns an <iframe> snippet; only its src (a facebook.com preview page) is passed to the browser.
+export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFormat): Promise<{ src: string | null; video: string | null }> {
+  if (!cfg.accountId || !/^\d{6,25}$/.test(adId)) throw new AdsError('Anuncio no válido.');
+  return cached(`pv:${cfg.accountId}:${adId}:${format}`, 30 * 60000, async () => {
+    // The ad must belong to the store's connected account.
+    const ad = await graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' });
+    if (String(ad.account_id || '') !== cfg.accountId) throw new AdsError('Este anuncio no es de tu cuenta publicitaria.');
+    let src: string | null = null;
+    try {
+      const d = await graph(`${adId}/previews`, cfg.token, { ad_format: format });
+      const body = String(d?.data?.[0]?.body || '');
+      const m = /src="([^"]+)"/.exec(body);
+      const url = m ? m[1].replace(/&amp;/g, '&') : '';
+      if (/^https:\/\/(www\.)?facebook\.com\//.test(url)) src = url;
+    } catch (e: any) {
+      console.error('Meta Ads preview', adId, format, e?.message || e);
+    }
+    let video: string | null = null;
+    const vid = ad?.creative?.video_id;
+    if (vid) {
+      const v = await graph(String(vid), cfg.token, { fields: 'source' }).catch(() => null);
+      if (v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
+    }
+    return { src, video };
+  });
+}
