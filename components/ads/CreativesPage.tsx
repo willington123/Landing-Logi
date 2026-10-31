@@ -36,6 +36,7 @@ interface Report {
   totals: { spend: number; orders: number; confirmed: number; cancelled: number; revenue: number; chats: number; cpa: number | null; roas: number | null };
   unattributed: number;
   wasteMin: number;
+  creativesError?: string | null;
 }
 
 const RANGES: { id: Range; label: string }[] = [
@@ -148,6 +149,13 @@ export default function CreativesPage() {
               <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">{v}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {rep?.creativesError && (
+        <div className="rounded-xl bg-amber-50 text-amber-900 text-[13px] px-4 py-3 flex gap-2">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>No pudimos traer las imágenes de los anuncios desde Meta: {rep.creativesError}</p>
         </div>
       )}
 

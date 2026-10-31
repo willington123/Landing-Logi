@@ -56,6 +56,7 @@ export interface AdsReport {
   totals: { spend: number; orders: number; confirmed: number; cancelled: number; revenue: number; chats: number; cpa: number | null; roas: number | null };
   unattributed: number; // orders in the range without an ad id (links without utm_content={{ad.id}})
   wasteMin: number; // spend that counts as "gastó sin vender"
+  creativesError: string | null; // why thumbnails could not be read
 }
 
 export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<AdsReport> {
@@ -105,7 +106,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
     if (a?.id && a.at >= fromIso && a.at <= toIso) row(a.id).chats++;
   }
 
-  const creatives = await adCreatives(cfg, Array.from(rows.keys())).catch(() => ({}) as Awaited<ReturnType<typeof adCreatives>>);
+  const { creatives, error: creativesError } = await adCreatives(cfg, Array.from(rows.keys())).catch((e) => ({ creatives: {} as Awaited<ReturnType<typeof adCreatives>>['creatives'], error: String(e?.message || e) }));
   for (const r of Array.from(rows.values())) {
     const c = creatives[r.adId];
     if (c) {
@@ -141,5 +142,5 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
     .forEach((r) => r.flags.push('winner'));
 
   list.sort((a, b) => b.spend - a.spend || b.revenue - a.revenue);
-  return { range, since, until, currency: cfg.currency, sameCurrency, rows: list, totals, unattributed, wasteMin };
+  return { range, since, until, currency: cfg.currency, sameCurrency, rows: list, totals, unattributed, wasteMin, creativesError: rows.size && !Object.keys(creatives).length ? creativesError : null };
 }
