@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const stats = [
     { label: 'Pedidos', value: orders.length.toString(), hint: 'Capturados en tus landings', Icon: ShoppingBag, tone: 'text-brand-navy bg-brand-navy/[0.07]' },
     { label: 'Confirmados por IA', value: confirmedOrdersCount.toString(), hint: `${confirmationRate}% de confirmación`, Icon: PhoneCall, tone: 'text-emerald-600 bg-emerald-50' },
-    { label: 'Ventas contraentrega', value: money(totalRevenue), hint: 'COP en pedidos activos', Icon: TrendingUp, tone: 'text-brand-red bg-brand-red/[0.07]' },
+    { label: 'Ventas contraentrega', value: money(totalRevenue), hint: 'COP en pedidos activos', Icon: TrendingUp, tone: 'text-brand-blue bg-brand-blue/[0.07]' },
     { label: 'Llamadas en cola', value: pendingCallsCount.toString(), hint: 'Pedidos por confirmar', Icon: Clock, tone: 'text-amber-600 bg-amber-50' },
   ];
 
@@ -84,7 +84,7 @@ export default function DashboardPage() {
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           {/* Welcome */}
           <section className={`${card} relative overflow-hidden p-6 sm:p-8`}>
-            <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-orange/10 blur-3xl pointer-events-none" />
+            <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-green/10 blur-3xl pointer-events-none" />
             <div className="absolute -bottom-32 right-40 w-72 h-72 rounded-full bg-brand-navy/10 blur-3xl pointer-events-none" />
             <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="max-w-2xl">
@@ -99,7 +99,7 @@ export default function DashboardPage() {
               <div className="flex flex-col sm:flex-row gap-2.5 flex-shrink-0">
                 <button
                   onClick={() => setIsWizardOpen(true)}
-                  className="h-11 px-5 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_10px_24px_-10px_rgba(255,37,43,0.7)] hover:brightness-105 active:scale-[0.98] transition"
+                  className="h-11 px-5 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_10px_24px_-10px_rgba(10,108,240,0.7)] hover:brightness-105 active:scale-[0.98] transition"
                 >
                   <Sparkles className="w-4 h-4" />
                   Crear landing con IA
@@ -144,7 +144,7 @@ export default function DashboardPage() {
                 {landings.length === 0 ? (
                   <div className="px-5 pb-6 text-center">
                     <p className="text-sm text-slate-500 mb-3">Aún no tienes landings.</p>
-                    <button onClick={() => setIsWizardOpen(true)} className="text-sm font-semibold text-brand-red">
+                    <button onClick={() => setIsWizardOpen(true)} className="text-sm font-semibold text-brand-blue">
                       Crear la primera
                     </button>
                   </div>

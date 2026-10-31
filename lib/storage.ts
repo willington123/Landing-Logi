@@ -14,7 +14,7 @@ export const DEFAULT_VOICE_AGENT: VoiceAgentSettings = {
   accent: 'colombia',
   voiceName: 'Valentina Neural (Bogotá - Amable)',
   tone: 'amable_comercial',
-  promptScript: `Eres Valentina, la asistente virtual oficial de LogiPages para confirmar pedidos contraentrega.
+  promptScript: `Eres Valentina, la asistente virtual de la tienda para confirmar pedidos contraentrega.
 Tu objetivo es:
 1. Saludar cortésmente al cliente por su nombre.
 2. Indicar que llamas para confirmar su pedido del producto registrado.
@@ -82,7 +82,7 @@ export const DEFAULT_AUTOMATIONS: AutomationFlow[] = [
     actions: [
       { type: 'update_order_status', payload: { status: 'confirmed_by_voice' } },
       { type: 'send_whatsapp_template', payload: { template: 'order_confirmed_success' } },
-      { type: 'trigger_webhook', payload: { endpoint: 'https://api.logipages.com/logistics/dispatch' } },
+      { type: 'trigger_webhook', payload: { endpoint: 'https://api.tu-transportadora.com/despachos' } },
     ],
     isActive: false,
     executionsCount: 0,

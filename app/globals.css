@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --brand-red: #FF252B;
-  --brand-orange: #FF5A16;
-  --brand-navy: #172C8A;
-  --brand-navyDark: #0d1b54;
+  --brand-blue: #0A6CF0;
+  --brand-green: #10C569;
+  --brand-navy: #0047C2;
+  --brand-navyDark: #011B52;
   --brand-light: #F5F7FA;
 }
 
@@ -38,11 +38,11 @@ body {
 @keyframes pulseSubtle {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 37, 43, 0.4);
+    box-shadow: 0 0 0 0 rgba(10, 108, 240, 0.4);
   }
   50% {
     transform: scale(1.02);
-    box-shadow: 0 0 20px 4px rgba(255, 90, 22, 0.3);
+    box-shadow: 0 0 20px 4px rgba(16, 197, 105, 0.3);
   }
 }
 

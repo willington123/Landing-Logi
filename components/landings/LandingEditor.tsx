@@ -206,8 +206,8 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-semibold text-slate-500">Cargando editor visual de LogiPages...</p>
+          <div className="w-10 h-10 border-4 border-brand-blue border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-xs font-semibold text-slate-500">Cargando editor visual de Konnexa...</p>
         </div>
       </div>
     );
@@ -271,7 +271,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="bg-white px-2 py-1 rounded-md hidden sm:flex items-center shadow-sm">
-            <img src="/brand/logipages-logo-darkmode.png" alt="LogiPages" className="h-4 w-auto object-contain" />
+            <img src="/brand/konnexa-logo-dark.png" alt="Konnexa" className="h-4 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
@@ -359,7 +359,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <button
               onClick={() => setActiveTab('text')}
               className={`py-3 flex flex-col items-center gap-1 transition ${
-                activeTab === 'text' ? 'text-brand-orange border-b-2 border-brand-orange bg-slate-900' : 'hover:text-white'
+                activeTab === 'text' ? 'text-brand-green border-b-2 border-brand-green bg-slate-900' : 'hover:text-white'
               }`}
             >
               <Type className="w-3.5 h-3.5" />
@@ -368,7 +368,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <button
               onClick={() => setActiveTab('images')}
               className={`py-3 flex flex-col items-center gap-1 transition ${
-                activeTab === 'images' ? 'text-brand-orange border-b-2 border-brand-orange bg-slate-900' : 'hover:text-white'
+                activeTab === 'images' ? 'text-brand-green border-b-2 border-brand-green bg-slate-900' : 'hover:text-white'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -386,7 +386,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <button
               onClick={() => setActiveTab('pricing')}
               className={`py-3 flex flex-col items-center gap-1 transition ${
-                activeTab === 'pricing' ? 'text-brand-orange border-b-2 border-brand-orange bg-slate-900' : 'hover:text-white'
+                activeTab === 'pricing' ? 'text-brand-green border-b-2 border-brand-green bg-slate-900' : 'hover:text-white'
               }`}
             >
               <Tag className="w-3.5 h-3.5" />
@@ -395,7 +395,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
             <button
               onClick={() => setActiveTab('design')}
               className={`py-3 flex flex-col items-center gap-1 transition ${
-                activeTab === 'design' ? 'text-brand-orange border-b-2 border-brand-orange bg-slate-900' : 'hover:text-white'
+                activeTab === 'design' ? 'text-brand-green border-b-2 border-brand-green bg-slate-900' : 'hover:text-white'
               }`}
             >
               <Palette className="w-3.5 h-3.5" />
@@ -425,7 +425,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     type="text"
                     value={config.headline}
                     onChange={(e) => setConfig({ ...config, headline: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-1 focus:ring-brand-orange"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-1 focus:ring-brand-green"
                   />
                 </div>
 
@@ -437,7 +437,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     rows={4}
                     value={config.subheadline}
                     onChange={(e) => setConfig({ ...config, subheadline: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-1 focus:ring-brand-orange"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-1 focus:ring-brand-green"
                   />
                 </div>
 
@@ -449,7 +449,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     type="text"
                     value={config.urgencyText}
                     onChange={(e) => setConfig({ ...config, urgencyText: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-orange"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-green"
                   />
                 </div>
 
@@ -461,7 +461,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     type="text"
                     value={config.guaranteeText}
                     onChange={(e) => setConfig({ ...config, guaranteeText: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-orange"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-green"
                   />
                 </div>
 
@@ -473,7 +473,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     type="text"
                     value={config.whatsappNumber}
                     onChange={(e) => setConfig({ ...config, whatsappNumber: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-orange"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:ring-1 focus:ring-brand-green"
                   />
                   <label className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-300 cursor-pointer">
                     <span>Al terminar el pedido, llevar al cliente a WhatsApp con sus datos</span>
@@ -481,7 +481,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                       type="checkbox"
                       checked={config.whatsappRedirect !== false}
                       onChange={(e) => setConfig({ ...config, whatsappRedirect: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-brand-orange focus:ring-brand-orange"
+                      className="rounded bg-slate-900 border-slate-700 text-brand-green focus:ring-brand-green"
                     />
                   </label>
                 </div>
@@ -505,7 +505,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                   </div>
 
                   <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition">
-                    <Plus className="w-3.5 h-3.5 text-brand-orange" />
+                    <Plus className="w-3.5 h-3.5 text-brand-green" />
                     <span>Subir Foto Principal desde PC</span>
                     <input
                       type="file"
@@ -579,7 +579,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     type="button"
                     onClick={handleOptimizeCreativesWithGemini}
                     disabled={isOptimizingCreatives}
-                    className="w-full py-2.5 bg-gradient-to-r from-brand-red via-brand-orange to-indigo-600 hover:opacity-95 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 bg-gradient-to-r from-brand-blue via-brand-green to-indigo-600 hover:opacity-95 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {isOptimizingCreatives ? (
                       <>
@@ -601,7 +601,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     <span className="text-[11px] font-bold text-slate-300">
                       Galería de Fotos ({config.galleryImages.length}):
                     </span>
-                    <label className="text-[10px] font-bold text-brand-orange hover:underline cursor-pointer flex items-center gap-1">
+                    <label className="text-[10px] font-bold text-brand-green hover:underline cursor-pointer flex items-center gap-1">
                       <Plus className="w-3 h-3" />
                       <span>Añadir fotos</span>
                       <input
@@ -651,7 +651,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                       type="button"
                       onClick={handleOptimizeCreativesWithGemini}
                       disabled={isOptimizingCreatives}
-                      className="px-2.5 py-1 rounded bg-gradient-to-r from-brand-red to-brand-orange text-white text-[10px] font-bold shadow hover:opacity-90 flex items-center gap-1"
+                      className="px-2.5 py-1 rounded bg-gradient-to-r from-brand-blue to-brand-green text-white text-[10px] font-bold shadow hover:opacity-90 flex items-center gap-1"
                     >
                       <Sparkles className="w-3 h-3 text-yellow-300" />
                       <span>{isOptimizingCreatives ? 'Optimizando...' : 'Optimizar con Gemini'}</span>
@@ -682,7 +682,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                       onClick={() => setSelectedEditorCreativeTab(tab.id as any)}
                       className={`p-2 rounded-lg text-left transition border ${
                         selectedEditorCreativeTab === tab.id
-                          ? 'bg-slate-900 text-brand-orange border-brand-orange shadow-sm'
+                          ? 'bg-slate-900 text-brand-green border-brand-green shadow-sm'
                           : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
                       }`}
                     >
@@ -721,7 +721,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                         </span>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {[
-                            { id: 'brand', label: 'LogiPages' },
+                            { id: 'brand', label: 'Konnexa' },
                             { id: 'dark', label: 'Dark Luxe' },
                             { id: 'emerald', label: 'Verde' },
                             { id: 'blue', label: 'Azul' },
@@ -733,7 +733,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                               onClick={() => handleChangeTheme(current.id, th.id)}
                               className={`px-2 py-1 rounded text-[10px] font-semibold border transition ${
                                 current.theme === th.id
-                                  ? 'bg-brand-orange text-white border-brand-orange'
+                                  ? 'bg-brand-green text-white border-brand-green'
                                   : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
                               }`}
                             >
@@ -764,14 +764,14 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-brand-red uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-bold text-brand-blue uppercase tracking-wider mb-1">
                       Precio Promo:
                     </label>
                     <input
                       type="number"
                       value={config.promoPrice}
                       onChange={(e) => setConfig({ ...config, promoPrice: Number(e.target.value) })}
-                      className="w-full bg-slate-900 border border-red-500/50 rounded-lg p-2 text-xs text-brand-red font-bold"
+                      className="w-full bg-slate-900 border border-red-500/50 rounded-lg p-2 text-xs text-brand-blue font-bold"
                     />
                   </div>
                 </div>
@@ -783,11 +783,11 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                   {config.combos.map((combo, idx) => (
                     <div key={combo.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-brand-orange">
+                        <span className="text-[11px] font-bold text-brand-green">
                           Combo #{idx + 1} ({combo.units} Unidades)
                         </span>
                         {combo.isPopular && (
-                          <span className="text-[9px] bg-brand-red text-white px-1.5 py-0.5 rounded font-black">
+                          <span className="text-[9px] bg-brand-blue text-white px-1.5 py-0.5 rounded font-black">
                             POPULAR
                           </span>
                         )}
@@ -811,7 +811,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                             updated[idx].promoPrice = Number(e.target.value);
                             setConfig({ ...config, combos: updated });
                           }}
-                          className="w-1/2 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-brand-red font-bold"
+                          className="w-1/2 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-brand-blue font-bold"
                         />
                         <input
                           type="text"
@@ -850,7 +850,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                         onClick={() => setConfig({ ...config, themeStyle: style.id as any })}
                         className={`p-2.5 rounded-lg text-left text-xs font-semibold border transition ${
                           config.themeStyle === style.id
-                            ? 'border-brand-orange bg-brand-orange/10 text-brand-orange'
+                            ? 'border-brand-green bg-brand-green/10 text-brand-green'
                             : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
                         }`}
                       >
@@ -867,7 +867,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                       type="checkbox"
                       checked={config.enableStickyBar}
                       onChange={(e) => setConfig({ ...config, enableStickyBar: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-brand-orange focus:ring-brand-orange"
+                      className="rounded bg-slate-900 border-slate-700 text-brand-green focus:ring-brand-green"
                     />
                   </label>
 
@@ -877,7 +877,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
                       type="checkbox"
                       checked={config.enableRecentSalesPopup}
                       onChange={(e) => setConfig({ ...config, enableRecentSalesPopup: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-brand-orange focus:ring-brand-orange"
+                      className="rounded bg-slate-900 border-slate-700 text-brand-green focus:ring-brand-green"
                     />
                   </label>
                 </div>
@@ -967,7 +967,7 @@ export default function LandingEditor({ landingId }: LandingEditorProps) {
       {isSavedToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle className="w-4 h-4 text-emerald-200" />
-          <span>¡Cambios guardados con éxito en LogiPages!</span>
+          <span>¡Cambios guardados con éxito en Konnexa!</span>
         </div>
       )}
     </div>

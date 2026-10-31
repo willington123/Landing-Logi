@@ -16,6 +16,8 @@ const PUBLIC_PREFIXES = [
   '/invitacion/',
   '/privacidad',
   '/terminos',
+  '/recuperar',
+  '/restablecer',
   '/_next/',
   '/brand/',
   '/favicon',

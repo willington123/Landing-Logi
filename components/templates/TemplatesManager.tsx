@@ -299,7 +299,7 @@ export default function TemplatesManager() {
               <div className="rounded-lg bg-white border border-emerald-200 p-3 flex flex-wrap items-center gap-3">
                 <div className="flex-1 min-w-[220px]">
                   <p className="text-[13px] font-semibold text-slate-900">Confirmación de pedidos (recomendada)</p>
-                  <p className="text-[11px] text-slate-500">La que usa LogiPages para confirmar cada pedido con los botones Confirmar pedido / Cancelar.</p>
+                  <p className="text-[11px] text-slate-500">La que usa Konnexa para confirmar cada pedido con los botones Confirmar pedido / Cancelar.</p>
                 </div>
                 <button onClick={() => run('preset', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'confirm' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla

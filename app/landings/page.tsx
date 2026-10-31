@@ -73,7 +73,7 @@ export default function LandingsPage() {
             </div>
             <button
               onClick={() => setIsWizardOpen(true)}
-              className="h-10 px-4 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(255,37,43,0.6)] hover:brightness-105 active:scale-[0.98] transition"
+              className="h-10 px-4 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(10,108,240,0.6)] hover:brightness-105 active:scale-[0.98] transition"
             >
               <Plus className="w-4 h-4" />
               Nueva landing
@@ -82,7 +82,7 @@ export default function LandingsPage() {
 
           {landings.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-brand-red/[0.07] text-brand-red flex items-center justify-center mx-auto mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-brand-blue/[0.07] text-brand-blue flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-6 h-6" />
               </div>
               <h3 className="text-base font-semibold text-slate-900">Crea tu primera landing</h3>

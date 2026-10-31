@@ -7,7 +7,7 @@ import { processCallQueue } from '@/lib/server/voice-actions';
 import { processWaFallback } from '@/lib/server/wa-actions';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { orgsWithConnections } from '@/lib/server/integrations';
-import { processBilling } from '@/lib/server/billing';
+import { processBilling, runBillingNotices } from '@/lib/server/billing';
 
 export type RunSource = 'cron' | 'visita' | 'panel';
 
@@ -79,7 +79,8 @@ export async function runScheduled(origin?: string, source: RunSource = 'cron') 
   }
   // Plans: automatic monthly charges and payments Wompi hasn't confirmed yet (platform-wide).
   const billing = cloudEnabled() ? await processBilling().catch((e) => ({ error: String(e?.message || e) })) : null;
-  return { ...main, stores: orgs.length, billing };
+  const notices = cloudEnabled() ? await runBillingNotices().catch((e) => ({ error: String(e?.message || e) })) : null;
+  return { ...main, stores: orgs.length, billing, notices };
 }
 
 async function runScheduledForOrg(origin: string | undefined, source: RunSource) {
@@ -120,7 +121,7 @@ export function supabaseCronSql(baseUrl: string): string | null {
   const secret = (process.env.CRON_SECRET || '').trim();
   if (!secret || !baseUrl) return null;
   const q = (s: string) => s.replace(/'/g, "''");
-  return `-- LogiPages: revisión automática cada 5 minutos (llamadas IA y plantillas de WhatsApp de respaldo).
+  return `-- Konnexa: revisión automática cada 5 minutos (llamadas IA y plantillas de WhatsApp de respaldo).
 -- Pégalo en Supabase → SQL Editor → New query → Run. Se puede volver a ejecutar sin problema.
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;

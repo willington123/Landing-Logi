@@ -1,4 +1,4 @@
-// Public sales page of LogiPages (shown at / to visitors who are not signed in).
+// Public sales page of Konnexa (shown at / to visitors who are not signed in).
 import React from 'react';
 import Link from 'next/link';
 import {
@@ -52,11 +52,11 @@ const FAQ = [
 ];
 
 function Logo() {
-  return <img src="/brand/logipages-logo.png" alt="LogiPages" className="h-8 w-auto" />;
+  return <img src="/brand/konnexa-logo.png" alt="Konnexa" className="h-8 w-auto" />;
 }
 
 function Cta({ signupOpen, contactUrl, size = 'lg', label }: { signupOpen: boolean; contactUrl: string | null; size?: 'md' | 'lg'; label?: string }) {
-  const cls = `inline-flex items-center justify-center gap-2 rounded-xl bg-brand-gradient text-white font-semibold shadow-glow-red transition hover:brightness-105 ${
+  const cls = `inline-flex items-center justify-center gap-2 rounded-xl bg-brand-gradient text-white font-semibold shadow-glow-blue transition hover:brightness-105 ${
     size === 'lg' ? 'h-12 px-6 text-[15px]' : 'h-10 px-4 text-sm'
   }`;
   if (signupOpen)
@@ -162,7 +162,7 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
         <div className="pointer-events-none absolute inset-0 bg-glow-gradient" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-14 pb-24 lg:pt-20 lg:pb-28 grid lg:grid-cols-[1.05fr_1fr] gap-14 items-center">
           <div>
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-red bg-brand-red/5 border border-brand-red/15 rounded-full px-3 py-1">
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-blue bg-brand-blue/5 border border-brand-blue/15 rounded-full px-3 py-1">
               <Sparkles className="w-3.5 h-3.5" /> Para tiendas contraentrega en Colombia
             </p>
             <h1 className="mt-5 text-[38px] leading-[1.08] sm:text-5xl font-bold tracking-tight">
@@ -219,7 +219,7 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {FEATURES.map((f) => (
             <div key={f.title} className="rounded-2xl border border-slate-200/80 p-5 hover:shadow-[0_10px_30px_-15px_rgba(15,23,42,0.25)] transition">
-              <span className="w-10 h-10 rounded-xl bg-brand-red/[0.07] text-brand-red inline-flex items-center justify-center">
+              <span className="w-10 h-10 rounded-xl bg-brand-blue/[0.07] text-brand-blue inline-flex items-center justify-center">
                 <f.icon className="w-5 h-5" />
               </span>
               <h3 className="mt-4 text-[15px] font-semibold">{f.title}</h3>
@@ -240,7 +240,7 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
             {plans.map((p) => (
               <div
                 key={p.id}
-                className={`relative rounded-2xl bg-white p-6 flex flex-col ${p.highlight ? 'border-2 border-brand-red/60 shadow-[0_20px_50px_-25px_rgba(255,37,43,0.45)]' : 'border border-slate-200'}`}
+                className={`relative rounded-2xl bg-white p-6 flex flex-col ${p.highlight ? 'border-2 border-brand-blue/60 shadow-[0_20px_50px_-25px_rgba(10,108,240,0.45)]' : 'border border-slate-200'}`}
               >
                 {p.highlight && <span className="absolute -top-3 left-6 text-[11px] font-semibold text-white bg-brand-gradient rounded-full px-2.5 py-1">Más elegido</span>}
                 <h3 className="text-lg font-semibold">{p.name}</h3>
@@ -286,7 +286,7 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
       {/* final cta */}
       <section className="px-4 sm:px-6 pb-20">
         <div className="max-w-6xl mx-auto rounded-3xl bg-navy-gradient text-white px-6 py-14 text-center relative overflow-hidden">
-          <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[300px] rounded-full bg-brand-red/30 blur-3xl" />
+          <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[300px] rounded-full bg-brand-blue/30 blur-3xl" />
           <div className="relative">
             <Tags className="w-8 h-8 mx-auto opacity-80" />
             <h2 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight">Tu próxima landing puede estar lista hoy</h2>
@@ -301,7 +301,7 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
       <footer className="border-t border-slate-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
           <Logo />
-          <p className="sm:ml-4">© {year} LogiPages</p>
+          <p className="sm:ml-4">© {year} Konnexa</p>
           <nav className="sm:ml-auto flex gap-5">
             <Link href="/terminos" className="hover:text-slate-800">Términos</Link>
             <Link href="/privacidad" className="hover:text-slate-800">Privacidad</Link>
