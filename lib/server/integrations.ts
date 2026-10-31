@@ -46,6 +46,8 @@ export interface StoredIntegrations {
   vapi?: { apiKey: string; phoneNumberId: string; webhookSecret: string; connectedAt: string };
   capi?: { token: string; testCode?: string | null; connectedAt: string };
   anthropic?: { apiKey: string; connectedAt: string };
+  // Meta Ads (read-only): spend and creatives of the store's ad account. accountId null = signed in, account not chosen yet.
+  metaAds?: { token: string; accountId: string | null; accountName?: string | null; currency?: string | null; mode: 'oauth' | 'manual'; expiresAt?: string | null; connectedAt: string };
 }
 
 // ---------- reading (cached a few seconds per store) ----------
@@ -190,4 +192,23 @@ export async function orgsWithConnections(): Promise<string[]> {
   const out = new Set<string>([integrationsOrg()]);
   for (const r of data || []) if ((r.data as StoredIntegrations)?.whatsapp || (r.data as StoredIntegrations)?.vapi) out.add(r.org_id as string);
   return Array.from(out);
+}
+
+export interface AdsConfig {
+  token: string;
+  accountId: string | null;
+  accountName: string | null;
+  currency: string | null;
+  mode: 'oauth' | 'manual';
+  expiresAt: string | null;
+}
+
+export async function adsConfig(orgId?: string | null): Promise<AdsConfig | null> {
+  const org = orgOrNull(orgId);
+  if (!org) return null;
+  const s = (await stored(org)).metaAds;
+  if (!s) return null;
+  const token = decrypt(s.token);
+  if (!token) return null;
+  return { token, accountId: s.accountId, accountName: s.accountName || null, currency: s.currency || null, mode: s.mode, expiresAt: s.expiresAt || null };
 }

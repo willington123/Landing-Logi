@@ -24,6 +24,16 @@ export interface IntegrationsInfo {
   vapi: { connected: boolean; source?: 'env' | 'store'; phoneNumberId?: string; apiKey?: string | null };
   capi: { connected: boolean; source?: 'env' | 'store'; token?: string | null; testCode?: string | null };
   anthropic: { connected: boolean; source?: 'env' | 'store' | 'plan'; apiKey?: string | null; left?: number | null };
+  metaAds: {
+    connected: boolean;
+    pending: boolean;
+    accountId: string | null;
+    accountName: string | null;
+    currency: string | null;
+    mode: 'oauth' | 'manual' | null;
+    expiresAt: string | null;
+    oauthAvailable: boolean;
+  };
 }
 
 export async function loadIntegrations(): Promise<IntegrationsInfo | null> {
@@ -462,6 +472,154 @@ export function KeyConnection({
       <a href={docs.href} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1">
         {docs.label} <ExternalLink className="w-3 h-3" />
       </a>
+    </div>
+  );
+}
+
+const ADS_NOTICE: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: 'Cuenta publicitaria conectada. Ya puedes ver tus creativos.' },
+  choose: { ok: true, text: 'Listo. Ahora elige la cuenta publicitaria de esta tienda.' },
+  cancelled: { ok: false, text: 'Cancelaste la conexión con Facebook.' },
+  invalid: { ok: false, text: 'La conexión venció. Inténtalo de nuevo.' },
+  error: { ok: false, text: 'Facebook no completó la conexión. Inténtalo de nuevo o pega un token.' },
+  forbidden: { ok: false, text: 'Solo el dueño o un administrador pueden conectar Meta Ads.' },
+  not_available: { ok: false, text: 'El botón de Facebook aún no está activo en la plataforma. Usa un token.' },
+};
+
+// Meta Ads (read-only): spend and creatives for the "Creativos" page.
+export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo; onChanged: () => void }) {
+  const st = info.metaAds;
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string; active: boolean }[] | null>(null);
+  const [accountId, setAccountId] = useState('');
+  const [token, setToken] = useState('');
+  const [manual, setManual] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('ads');
+    if (q && ADS_NOTICE[q]) setMsg(ADS_NOTICE[q]);
+  }, []);
+  useEffect(() => {
+    if (!st.pending || !info.canManage) return;
+    call('/api/integrations/meta-ads/accounts', 'GET')
+      .then((d) => setAccounts(d.accounts))
+      .catch((e) => setMsg({ ok: false, text: e.message }));
+  }, [st.pending, info.canManage]);
+
+  const save = async (body: Record<string, string>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const d = await call('/api/integrations/meta-ads', 'PUT', body);
+      setMsg({ ok: true, text: `Conectada: ${d.account.name}.` });
+      setToken('');
+      setManual(false);
+      onChanged();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const days = st.expiresAt ? Math.ceil((new Date(st.expiresAt).getTime() - Date.now()) / 86400000) : null;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-[15px] font-semibold text-slate-900">Meta Ads (anuncios)</h3>
+          <p className="text-xs text-slate-500">Solo lectura: trae el gasto y la imagen de cada anuncio para ver en Creativos cuáles venden y cuáles gastan sin vender.</p>
+        </div>
+        {st.connected ? (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3" /> Conectado
+          </span>
+        ) : (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+            <AlertCircle className="w-3 h-3" /> Sin conectar
+          </span>
+        )}
+      </div>
+
+      {st.connected && (
+        <div className="text-xs text-slate-600 space-y-1">
+          <p>
+            Cuenta: <b>{st.accountName}</b> <span className="font-mono text-slate-400">act_{st.accountId}</span> {st.currency && <span className="text-slate-400">· {st.currency}</span>}
+          </p>
+          {days !== null && (
+            <p className={days <= 7 ? 'text-amber-700' : 'text-slate-500'}>
+              {days > 0 ? `La conexión con Facebook vence en ${days} días: vuelve a conectar antes.` : 'La conexión con Facebook venció: vuelve a conectar.'}
+            </p>
+          )}
+          {info.canManage && (
+            <div className="flex items-center gap-3 pt-1">
+              {st.oauthAvailable && (
+                <a href="/api/integrations/meta-ads/oauth" className="font-semibold text-brand-navy hover:underline">
+                  Volver a conectar
+                </a>
+              )}
+              <Disconnect kind="meta-ads" onDone={onChanged} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {info.canManage && st.pending && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-600">Elige la cuenta publicitaria de esta tienda:</p>
+          {!accounts ? (
+            <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+          ) : accounts.length ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select className={input} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">Selecciona…</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.currency}){a.active ? '' : ' · inactiva'}
+                  </option>
+                ))}
+              </select>
+              <button disabled={busy || !accountId} onClick={() => save({ accountId })} className={primary}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Usar esta
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-red-600">Tu usuario de Facebook no tiene cuentas publicitarias. Pide acceso en el Business Manager y vuelve a conectar.</p>
+          )}
+        </div>
+      )}
+
+      {info.canManage && !st.connected && !st.pending && (
+        <div className="space-y-2">
+          {st.oauthAvailable && !manual && (
+            <a href="/api/integrations/meta-ads/oauth" className={`${primary} w-full sm:w-auto justify-center`}>
+              <Plug className="w-4 h-4" /> Conectar con Facebook
+            </a>
+          )}
+          {(manual || !st.oauthAvailable) && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                save({ accountId, token });
+              }}
+              className="flex flex-col gap-2"
+            >
+              <input className={input} placeholder="Id de la cuenta publicitaria (ej. 917278074559623)" value={accountId} onChange={(e) => setAccountId(e.target.value)} />
+              <input className={input} type="password" autoComplete="off" placeholder="Token de acceso con permiso ads_read" value={token} onChange={(e) => setToken(e.target.value)} />
+              <button disabled={busy || !accountId || !token} className={primary}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Conectar
+              </button>
+            </form>
+          )}
+          {st.oauthAvailable && (
+            <button type="button" onClick={() => setManual((x) => !x)} className="text-xs font-semibold text-brand-navy hover:underline">
+              {manual ? 'Usar el botón de Facebook' : 'Prefiero pegar un token'}
+            </button>
+          )}
+        </div>
+      )}
+      {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
     </div>
   );
 }
