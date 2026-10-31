@@ -1,4 +1,6 @@
 // When a customer writes: let the AI assistant answer (after a short pause, so several messages get one reply).
+import { getConversationAds } from '@/lib/server/crm-store';
+import type { AdRef } from '@/lib/ads';
 import { waitUntil } from '@vercel/functions';
 import { db } from '@/lib/server/db';
 import { sendText, whatsappEnabled, type InboundMessage } from '@/lib/server/whatsapp';
@@ -62,7 +64,8 @@ async function answer(m: InboundMessage) {
     return;
   }
 
-  const run = await runBot({ settings, phone: m.from, customerName: m.profileName, history: await chatHistory(m.from) });
+  const ad = m.ad || (await getConversationAds().catch(() => ({}) as Record<string, AdRef>))[m.from] || null;
+  const run = await runBot({ settings, phone: m.from, customerName: m.profileName, ad, history: await chatHistory(m.from) });
 
   if (run.reply) {
     const result = await sendText(m.from, run.reply);

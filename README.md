@@ -177,6 +177,13 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 - **Activarlo:** crea una cuenta en resend.com, verifica tu dominio (Domains → Add domain, y copias los registros DNS que te da) y agrega en Vercel `RESEND_API_KEY` y `EMAIL_FROM` (ej. `Konnexa <hola@tudominio.com>`).
 - Sin correos configurados: en **Admin plataforma** cada tienda tiene **Enlace para cambiar contraseña** (vence en 24 horas) para enviarlo por WhatsApp.
 
+## Anuncios de Meta: de qué anuncio viene cada venta
+- **Clic a WhatsApp** (campañas de mensajes): cuando alguien escribe desde un anuncio, el chat queda marcado con **📣 Anuncio** y el título del anuncio. El asistente IA sabe qué anuncio vio el cliente, y el pedido que salga de ese chat queda ligado al anuncio.
+- **Landings:** en el anuncio, en **Parámetros de URL**, pon:
+  `utm_source=facebook&utm_campaign={{campaign.name}}&utm_content={{ad.id}}`
+  Meta reemplaza `{{ad.id}}` por el id de cada anuncio y el pedido queda ligado a él.
+- En **Pedidos** el detalle muestra el anuncio, y el Excel trae las columnas "Anuncio (id)" y "Anuncio".
+
 ## WhatsApp
 
 Cada pedido nuevo recibe un WhatsApp con una plantilla aprobada y dos botones. Si el cliente toca **Confirmar pedido**, el pedido pasa a *Confirmado*; si toca **Cancelar**, a *Cancelado*, y se le responde con un mensaje corto. Las conversaciones aparecen en **Mensajes**. Sin las variables `WHATSAPP_*` todo funciona igual que antes, sin WhatsApp.

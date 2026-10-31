@@ -1,6 +1,7 @@
 // WhatsApp Business Cloud API: sending, webhook signature check and payload parsing.
 // Server-only. Each store uses its own connection (lib/server/integrations); the store that owns the
 // keys in Vercel uses those.
+import { adFromReferral, type AdRef } from '@/lib/ads';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { waConfig, type WaConfig } from '@/lib/server/integrations';
 
@@ -168,6 +169,7 @@ export interface InboundMessage {
   orderId?: string; // from a button payload like "confirm:<orderId>"
   orderNumber?: string; // "LP-12345" written in the message (e.g. the landing's pre-filled text)
   phoneNumberId?: string; // the store's number that received it (routes the notice to its store)
+  ad?: AdRef; // the customer wrote from a click-to-WhatsApp ad
   raw: unknown;
 }
 
@@ -266,6 +268,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           orderId,
           orderNumber,
           phoneNumberId,
+          ad: adFromReferral(m.referral, iso(m.timestamp)) || undefined,
           raw: m,
         });
       }

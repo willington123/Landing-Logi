@@ -1,5 +1,6 @@
 // Server-only storage for CRM quick replies and tags (Supabase "settings" table, no extra migration).
 import { db } from '@/lib/server/db';
+import type { AdRef } from '@/lib/ads';
 import { DEFAULT_AUTO, DEFAULT_QUICK_REPLIES, DEFAULT_TAGS, type Agent, type AutoSettings, type CrmTag, type QuickReply } from '@/lib/crm';
 
 async function readSetting<T>(id: string): Promise<T | null> {
@@ -142,4 +143,21 @@ export async function noteAutoSent(conversationId: string, keys: string[]) {
   log[conversationId] = { ...(log[conversationId] || {}) };
   for (const k of keys) log[conversationId][k] = new Date(now).toISOString();
   await writeSetting(AUTO_LOG, log);
+}
+
+// ---------- ad each chat came from (click-to-WhatsApp ads) ----------
+
+export async function getConversationAds(): Promise<Record<string, AdRef>> {
+  return (await readSetting<Record<string, AdRef>>('wa_conv_ads')) || {};
+}
+
+// Last ad wins (the one that brought the customer back). Keeps the newest 5.000 chats.
+export async function setConversationAd(conversationId: string, ad: AdRef) {
+  const all = await getConversationAds();
+  all[conversationId] = ad;
+  const keys = Object.keys(all);
+  if (keys.length > 5000) {
+    keys.sort((a, b) => (all[a].at < all[b].at ? -1 : 1)).slice(0, keys.length - 5000).forEach((k) => delete all[k]);
+  }
+  await writeSetting('wa_conv_ads', all);
 }

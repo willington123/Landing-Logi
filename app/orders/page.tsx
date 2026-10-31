@@ -454,6 +454,12 @@ export default function OrdersPage() {
                 <p className="font-mono text-xs text-slate-600">
                   UTM: {selectedOrder.utmSource || 'directo'} / {selectedOrder.utmCampaign || 'general'}
                 </p>
+                {selectedOrder.adId && (
+                  <p className="text-xs text-sky-800 mt-1">
+                    📣 {selectedOrder.adChannel === 'whatsapp' ? 'Chat desde el anuncio' : 'Anuncio'}: {selectedOrder.adHeadline || selectedOrder.adId}{' '}
+                    <span className="font-mono text-slate-400">({selectedOrder.adId})</span>
+                  </p>
+                )}
               </div>
             </div>
 

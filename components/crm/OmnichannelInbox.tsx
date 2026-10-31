@@ -3,7 +3,7 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap, Megaphone } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
@@ -17,7 +17,22 @@ type Conversation = WaConversation & {
   tags?: string[];
   assignee?: string | null;
   bot?: { paused: boolean; reason: string | null; note: string | null } | null;
+  ad?: { id: string; headline: string | null; body: string | null; url: string | null; thumb: string | null; at: string } | null;
 };
+
+// "Vino de un anuncio" chip (click-to-WhatsApp ads).
+function AdChip({ ad, full }: { ad: NonNullable<Conversation['ad']>; full?: boolean }) {
+  const label = ad.headline || `Anuncio ${ad.id}`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 max-w-full text-[10px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-full px-1.5 py-0.5"
+      title={`Llegó desde el anuncio: ${label} (id ${ad.id})`}
+    >
+      <Megaphone className="w-3 h-3 shrink-0" />
+      <span className="truncate">{full ? label : 'Anuncio'}</span>
+    </span>
+  );
+}
 interface BotInfo {
   enabled: boolean;
   mode: 'always' | 'away';
@@ -219,7 +234,7 @@ export default function OmnichannelInbox() {
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, bot: c.bot, unread_count: c.unread_count } : c)));
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, bot: c.bot, ad: c.ad, unread_count: c.unread_count } : c)));
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
@@ -649,8 +664,9 @@ export default function OmnichannelInbox() {
                     <span className="text-xs text-slate-500 truncate">{preview(c.last_message)}</span>
                     {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center">{c.unread_count}</span>}
                   </div>
-                  {(c.order || isUnanswered(c) || (c.tags || []).length > 0) && (
+                  {(c.order || isUnanswered(c) || (c.tags || []).length > 0 || c.ad) && (
                     <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                      {c.ad && <AdChip ad={c.ad} />}
                       {isUnanswered(c) && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600" title="El cliente espera respuesta">
                           <Clock className="w-3 h-3" /> {waitingFor(c.last_inbound_at!)}
@@ -686,6 +702,7 @@ export default function OmnichannelInbox() {
                   <div className="flex items-center gap-1 flex-wrap">
                     <span className="text-xs text-slate-500 mr-1">{phoneLabel(active.id)}</span>
                     <WindowChip left={left} />
+                    {active.ad && <AdChip ad={active.ad} full />}
                     {(active.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
                   </div>
                 </div>

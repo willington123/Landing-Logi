@@ -1,6 +1,7 @@
 // Server-only storage for WhatsApp conversations and messages (Supabase).
 import { randomUUID } from 'crypto';
-import { db } from '@/lib/server/db';
+import { db, patchOrderData } from '@/lib/server/db';
+import { getConversationAds, setConversationAd } from '@/lib/server/crm-store';
 import { normalizePhone } from '@/lib/server/meta-capi';
 import type { OrderItem, OrderStatus } from '@/lib/types';
 import type { InboundMessage, SendResult, StatusUpdate } from '@/lib/server/whatsapp';
@@ -127,6 +128,7 @@ export async function recordInbound(m: InboundMessage): Promise<{ isNew: boolean
   if (error) throw new Error(error.message);
   if (!data?.length) return { isNew: false, conversation: (existing || (await getConversation(m.from)))! };
 
+  if (m.ad) await setConversationAd(m.from, m.ad).catch((e) => console.error('No se guardó el anuncio del chat', e));
   const current = (await getConversation(m.from))!;
   const conversation = await upsertConversation(m.from, {
     name: current.name || m.profileName || null,
@@ -267,6 +269,16 @@ export async function markConversationRead(id: string) {
 
 export async function linkConversationOrder(id: string, orderId: string) {
   await (await db()).from('wa_conversations').update({ order_id: orderId }).eq('id', id);
+  await attachAdToOrder(id, orderId).catch(() => {});
+}
+
+// If the chat came from an ad, the order linked to it counts for that ad (unless it already has one).
+export async function attachAdToOrder(conversationId: string, orderId: string) {
+  const ad = (await getConversationAds())[conversationId];
+  if (!ad) return;
+  const { data: row } = await (await db()).from('orders').select('data').eq('id', orderId).maybeSingle();
+  if (!row || (row.data as any)?.adId) return;
+  await patchOrderData(orderId, { adId: ad.id, adHeadline: ad.headline || null, adChannel: 'whatsapp' });
 }
 
 // ---------- webhook health (shown in Integrations) ----------
