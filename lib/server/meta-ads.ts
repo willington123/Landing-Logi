@@ -82,6 +82,7 @@ export interface AdAccount {
   name: string;
   currency: string;
   active: boolean;
+  business: { id: string; name: string } | null; // the portfolio (Business Manager) it belongs to
 }
 
 const toAccount = (a: any): AdAccount => ({
@@ -89,11 +90,19 @@ const toAccount = (a: any): AdAccount => ({
   name: String(a.name || a.account_id || ''),
   currency: String(a.currency || ''),
   active: Number(a.account_status) === 1,
+  business: a.business?.id ? { id: String(a.business.id), name: String(a.business.name || '') } : null,
 });
 
 export async function listAdAccounts(token: string): Promise<AdAccount[]> {
-  const d = await graph('me/adaccounts', token, { fields: 'account_id,name,currency,account_status', limit: '200' });
-  return (d.data || []).map(toAccount);
+  const out: AdAccount[] = [];
+  let d = await graph('me/adaccounts', token, { fields: 'account_id,name,currency,account_status,business{id,name}', limit: '200' });
+  for (let page = 0; page < 10; page++) {
+    out.push(...(d.data || []).map(toAccount));
+    const after = d.paging?.cursors?.after;
+    if (!d.paging?.next || !after) break;
+    d = await graph('me/adaccounts', token, { fields: 'account_id,name,currency,account_status,business{id,name}', limit: '200', after });
+  }
+  return out;
 }
 
 export const cleanAccountId = (v: unknown) => String(v ?? '').replace(/^act_/i, '').replace(/\D/g, '').slice(0, 25);
