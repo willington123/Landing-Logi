@@ -16,6 +16,7 @@ interface Row {
   campaign: string;
   status: string | null;
   thumb: string | null;
+  thumbs?: string[];
   kind: 'video' | 'image' | 'other' | null;
   previewLink?: string | null;
   spend: number;
@@ -358,8 +359,15 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 };
 const statusOf = (s: string | null) => (s ? STATUS_LABEL[s.toUpperCase()] || { label: s.toLowerCase().replace(/_/g, ' '), cls: 'text-slate-400' } : null);
 
+// Tries each image Meta gave, best first, until one loads.
+function AdImage({ r, className }: { r: Row; className: string }) {
+  const list = r.thumbs?.length ? r.thumbs : r.thumb ? [r.thumb] : [];
+  const [i, setI] = useState(0);
+  if (i >= list.length) return null;
+  return <img src={list[i]} alt="" className={className} loading="lazy" referrerPolicy="no-referrer" onError={() => setI((n) => n + 1)} />;
+}
+
 function AdCell({ r, onOpen }: { r: Row; onOpen: (r: Row) => void }) {
-  const [broken, setBroken] = useState(false);
   const st = statusOf(r.status);
   return (
     <div className="flex items-center gap-3 min-w-0">
@@ -370,11 +378,8 @@ function AdCell({ r, onOpen }: { r: Row; onOpen: (r: Row) => void }) {
         aria-label={`Ver el anuncio ${r.name}`}
         title="Ver el anuncio"
       >
-        {r.thumb && !broken ? (
-          <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
-        ) : (
-          <ImageIcon className="w-5 h-5 text-slate-300" />
-        )}
+        <ImageIcon className="absolute w-5 h-5 text-slate-300" />
+        <AdImage r={r} className="relative w-full h-full object-cover" />
         <span className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
           {r.kind === 'video' ? <PlayCircle className="w-7 h-7 text-white drop-shadow" /> : <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 drop-shadow" />}
         </span>
@@ -472,13 +477,13 @@ function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: str
               ) : !data ? (
                 <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
               ) : mode === 'video' && data.video ? (
-                <video src={data.video} poster={data.poster || undefined} controls autoPlay playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+                <video src={data.video} poster={data.poster || r.thumbs?.[0] || undefined} controls autoPlay playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
               ) : data.src ? (
                 <iframe src={data.src} title="Vista previa del anuncio" className="w-full max-w-[420px] border-0" style={{ height: h }} scrolling="no" />
               ) : data.video ? (
-                <video src={data.video} poster={data.poster || undefined} controls playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+                <video src={data.video} poster={data.poster || r.thumbs?.[0] || undefined} controls playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
               ) : r.thumb ? (
-                <img src={r.thumb} alt="" className="max-h-[60vh] w-auto" referrerPolicy="no-referrer" />
+                <AdImage r={r} className="max-h-[60vh] w-auto" />
               ) : (
                 <p className="p-6 text-sm text-slate-500">Meta no entregó una vista previa para este formato.</p>
               )}
