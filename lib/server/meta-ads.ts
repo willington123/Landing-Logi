@@ -178,23 +178,70 @@ export async function adInsights(cfg: AdsConfig, since: string, until: string): 
 export interface AdCreative {
   name: string;
   status: string; // ACTIVE, PAUSED, ...
-  thumb: string | null;
+  thumb: string | null; // good-resolution image (video cover for videos)
+  kind: 'video' | 'image' | 'other';
+  previewLink: string | null; // Meta's shareable preview (opens the real ad on Facebook)
+}
+
+// Images and status for a list of ads, in good resolution: the creative's own image (or the image behind its
+// hash), the video's best thumbnail, and only as a last resort Meta's small "thumbnail_url". Tries the account's
+// /ads edge, then a plain multi-id read. Failures are not cached and are reported so the page can say why.
+const CREATIVE_FIELDS =
+  'id,name,effective_status,preview_shareable_link,creative{thumbnail_url,image_url,image_hash,object_type,video_id,object_story_spec{video_data{image_url,video_id},link_data{picture,image_hash}},asset_feed_spec{images{hash,url},videos{video_id,thumbnail_url}}}';
+const CREATIVE_FIELDS_PLAIN = 'id,name,effective_status,preview_shareable_link,creative{thumbnail_url,image_url,image_hash,object_type,video_id}';
+
+interface RawCreative {
+  name: string;
+  status: string;
+  previewLink: string | null;
+  videoId: string | null;
+  hash: string | null;
+  direct: string | null; // a full-size image URL Meta already gave
+  small: string | null; // thumbnail_url (64px)
   kind: 'video' | 'image' | 'other';
 }
 
-// Thumbnails and status for a list of ads. Tries the account's /ads edge (bigger thumbnails), then a plain
-// multi-id read. Failures are not cached and are reported so the page can say why images are missing.
-const CREATIVE_FIELDS = 'id,name,effective_status,creative.thumbnail_width(256).thumbnail_height(256){thumbnail_url,image_url,object_type,video_id}';
-const CREATIVE_FIELDS_PLAIN = 'id,name,effective_status,creative{thumbnail_url,image_url,object_type,video_id}';
-
-function toCreative(a: any): AdCreative {
+function toRaw(a: any): RawCreative {
   const c = a?.creative || {};
+  const story = c.object_story_spec || {};
+  const feed = c.asset_feed_spec || {};
+  const videoId = c.video_id || story.video_data?.video_id || feed.videos?.[0]?.video_id || null;
+  const direct = c.image_url || story.link_data?.picture || feed.images?.find((i: any) => i?.url)?.url || story.video_data?.image_url || null;
+  const hash = c.image_hash || story.link_data?.image_hash || feed.images?.find((i: any) => i?.hash)?.hash || null;
   return {
     name: String(a?.name || ''),
     status: String(a?.effective_status || ''),
-    thumb: c.thumbnail_url || c.image_url || null,
-    kind: c.video_id || c.object_type === 'VIDEO' ? 'video' : c.image_url || c.object_type === 'PHOTO' ? 'image' : 'other',
+    previewLink: typeof a?.preview_shareable_link === 'string' ? a.preview_shareable_link : null,
+    videoId: videoId ? String(videoId) : null,
+    hash: hash ? String(hash) : null,
+    direct,
+    small: c.thumbnail_url || feed.videos?.[0]?.thumbnail_url || null,
+    kind: videoId || c.object_type === 'VIDEO' ? 'video' : direct || hash || c.object_type === 'PHOTO' ? 'image' : 'other',
   };
+}
+
+// Full-size URLs for image hashes of one ad account.
+async function imagesByHash(cfg: AdsConfig, accountId: string, hashes: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < hashes.length; i += 50) {
+    const d = await graph(`act_${accountId}/adimages`, cfg.token, { hashes: JSON.stringify(hashes.slice(i, i + 50)), fields: 'hash,url,permalink_url' }).catch(() => null);
+    for (const im of d?.data || []) if (im?.hash && (im.url || im.permalink_url)) out[String(im.hash)] = String(im.url || im.permalink_url);
+  }
+  return out;
+}
+
+// Biggest thumbnail of each video.
+async function videoPictures(cfg: AdsConfig, ids: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const d = await graph('', cfg.token, { ids: ids.slice(i, i + 50).join(','), fields: 'picture,thumbnails{uri,width,height,is_preferred}' }).catch(() => null);
+    for (const [id, v] of Object.entries((d || {}) as Record<string, any>)) {
+      const thumbs: any[] = v?.thumbnails?.data || [];
+      const best = thumbs.find((t) => t?.is_preferred && t.uri) || thumbs.filter((t) => t?.uri).sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+      if (best?.uri || v?.picture) out[id] = String(best?.uri || v.picture);
+    }
+  }
+  return out;
 }
 
 export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ creatives: Record<string, AdCreative>; error: string | null }> {
@@ -203,13 +250,13 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
   let error: string | null = null;
   for (let i = 0; i < todo.length; i += 50) {
     const chunk = todo.slice(i, i + 50);
-    const key = `cr:${cfg.accountId}:${chunk.join(',')}`;
+    const key = `cr2:${cfg.accountId}:${chunk.join(',')}`;
     const hit = cache.get(key);
     if (hit && hit.until > Date.now()) {
       Object.assign(out, hit.data as Record<string, AdCreative>);
       continue;
     }
-    const got: Record<string, AdCreative> = {};
+    const raw: Record<string, RawCreative> = {};
     const attempts: (() => Promise<void>)[] = [
       async () => {
         const d = await graph(`act_${cfg.accountId}/ads`, cfg.token, {
@@ -217,23 +264,38 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
           filtering: JSON.stringify([{ field: 'ad.id', operator: 'IN', value: chunk }]),
           limit: '100',
         });
-        for (const a of d.data || []) got[String(a.id)] = toCreative(a);
+        for (const a of d.data || []) raw[String(a.id)] = toRaw(a);
       },
       async () => {
-        const missing = chunk.filter((id) => !got[id]);
+        const missing = chunk.filter((id) => !raw[id]);
         if (!missing.length) return;
         const d = await graph('', cfg.token, { ids: missing.join(','), fields: CREATIVE_FIELDS_PLAIN });
-        for (const [id, a] of Object.entries(d as Record<string, any>)) got[id] = toCreative(a);
+        for (const [id, a] of Object.entries(d as Record<string, any>)) raw[id] = toRaw(a);
       },
     ];
     for (const run of attempts) {
       try {
         await run();
-        if (chunk.every((id) => got[id])) break; // ads of other accounts are filled by the next attempt
+        if (chunk.every((id) => raw[id])) break; // ads of other accounts are filled by the next attempt
       } catch (e: any) {
         error = e?.message || String(e);
         console.error('Meta Ads creatives', cfg.accountId, error);
       }
+    }
+    const list = Object.values(raw);
+    const [byHash, byVideo] = await Promise.all([
+      cfg.accountId ? imagesByHash(cfg, cfg.accountId, Array.from(new Set(list.filter((r) => !r.direct && r.hash).map((r) => r.hash!)))) : Promise.resolve({} as Record<string, string>),
+      videoPictures(cfg, Array.from(new Set(list.filter((r) => r.videoId).map((r) => r.videoId!)))),
+    ]);
+    const got: Record<string, AdCreative> = {};
+    for (const [id, r] of Object.entries(raw)) {
+      got[id] = {
+        name: r.name,
+        status: r.status,
+        thumb: (r.videoId && byVideo[r.videoId]) || r.direct || (r.hash && byHash[r.hash]) || r.small || null,
+        kind: r.kind,
+        previewLink: r.previewLink,
+      };
     }
     if (Object.keys(got).length) {
       error = null;
@@ -250,12 +312,24 @@ export const PREVIEW_FORMATS = ['MOBILE_FEED_STANDARD', 'INSTAGRAM_STANDARD', 'I
 export type PreviewFormat = (typeof PREVIEW_FORMATS)[number];
 
 // Meta returns an <iframe> snippet; only its src (a facebook.com preview page) is passed to the browser.
-export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFormat): Promise<{ src: string | null; video: string | null }> {
+export interface AdPreviewData {
+  src: string | null; // Meta's preview iframe (facebook.com)
+  video: string | null; // playable MP4, when Meta allows it
+  poster: string | null;
+  previewLink: string | null; // opens the ad on Facebook (needs a Facebook session)
+  videoLink: string | null; // the video on Facebook
+  notes: string[]; // what could not be loaded and why
+}
+
+export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFormat): Promise<AdPreviewData> {
   if (!cfg.accountId || !/^\d{6,25}$/.test(adId)) throw new AdsError('Anuncio no válido.');
-  return cached(`pv:${cfg.accounts.map((a) => a.id).join(',')}:${adId}:${format}`, 30 * 60000, async () => {
-    // The ad must belong to the store's connected account.
-    const ad = await graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' });
+  return cached(`pv2:${cfg.accounts.map((a) => a.id).join(',')}:${adId}:${format}`, 30 * 60000, async () => {
+    // The ad must belong to one of the store's connected accounts.
+    const ad = await graph(adId, cfg.token, {
+      fields: 'account_id,preview_shareable_link,creative{video_id,object_story_spec{video_data{video_id}},asset_feed_spec{videos{video_id}}}',
+    }).catch(() => graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' }));
     if (!cfg.accounts.some((a) => a.id === String(ad.account_id || ''))) throw new AdsError('Este anuncio no es de tus cuentas publicitarias.');
+    const notes: string[] = [];
     let src: string | null = null;
     try {
       const d = await graph(`${adId}/previews`, cfg.token, { ad_format: format });
@@ -263,16 +337,27 @@ export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFor
       const m = /src="([^"]+)"/.exec(body);
       const url = m ? m[1].replace(/&amp;/g, '&') : '';
       if (/^https:\/\/(www\.)?facebook\.com\//.test(url)) src = url;
+      else notes.push('Meta no entregó la vista previa para este formato.');
     } catch (e: any) {
-      console.error('Meta Ads preview', adId, format, e?.message || e);
+      notes.push(`Vista previa: ${e?.message || e}`);
     }
+    const c = ad?.creative || {};
+    const vid = c.video_id || c.object_story_spec?.video_data?.video_id || c.asset_feed_spec?.videos?.[0]?.video_id || null;
     let video: string | null = null;
-    const vid = ad?.creative?.video_id;
+    let poster: string | null = null;
+    let videoLink: string | null = null;
     if (vid) {
-      const v = await graph(String(vid), cfg.token, { fields: 'source' }).catch(() => null);
-      if (v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
+      try {
+        const v = await graph(String(vid), cfg.token, { fields: 'source,picture,permalink_url' });
+        if (v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
+        else notes.push('Meta no permite descargar este video desde aquí; ábrelo en Facebook.');
+        if (v?.picture) poster = String(v.picture);
+        if (v?.permalink_url) videoLink = String(v.permalink_url).startsWith('http') ? String(v.permalink_url) : `https://www.facebook.com${v.permalink_url}`;
+      } catch (e: any) {
+        notes.push(`Video: ${e?.message || e}`);
+      }
     }
-    return { src, video };
+    return { src, video, poster, previewLink: typeof ad?.preview_shareable_link === 'string' ? ad.preview_shareable_link : null, videoLink, notes };
   });
 }
 

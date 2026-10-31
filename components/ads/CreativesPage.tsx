@@ -17,6 +17,7 @@ interface Row {
   status: string | null;
   thumb: string | null;
   kind: 'video' | 'image' | 'other' | null;
+  previewLink?: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -413,14 +414,14 @@ const FORMATS = [
 function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: string | null) => string; onClose: () => void }) {
   const [format, setFormat] = useState<(typeof FORMATS)[number]['id']>('MOBILE_FEED_STANDARD');
   const [mode, setMode] = useState<'preview' | 'video'>('preview');
-  const [data, setData] = useState<{ src: string | null; video: string | null } | null>(null);
+  const [data, setData] = useState<{ src: string | null; video: string | null; poster?: string | null; previewLink?: string | null; videoLink?: string | null; notes?: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setData(null);
     setError(null);
     fetch(`/api/ads/preview?adId=${r.adId}&format=${format}`, { cache: 'no-store' })
       .then((res) => res.json())
-      .then((d) => (d.success ? setData({ src: d.src, video: d.video }) : setError(d.error)))
+      .then((d) => (d.success ? setData({ src: d.src, video: d.video, poster: d.poster, previewLink: d.previewLink, videoLink: d.videoLink, notes: d.notes }) : setError(d.error)))
       .catch(() => setError('Sin conexión. Intenta de nuevo.'));
   }, [r.adId, format]);
   useEffect(() => {
@@ -471,17 +472,27 @@ function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: str
               ) : !data ? (
                 <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
               ) : mode === 'video' && data.video ? (
-                <video src={data.video} controls autoPlay playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+                <video src={data.video} poster={data.poster || undefined} controls autoPlay playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
               ) : data.src ? (
                 <iframe src={data.src} title="Vista previa del anuncio" className="w-full max-w-[420px] border-0" style={{ height: h }} scrolling="no" />
               ) : data.video ? (
-                <video src={data.video} controls playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
+                <video src={data.video} poster={data.poster || undefined} controls playsInline className="max-h-[70vh] w-auto max-w-full bg-black" />
               ) : r.thumb ? (
                 <img src={r.thumb} alt="" className="max-h-[60vh] w-auto" referrerPolicy="no-referrer" />
               ) : (
                 <p className="p-6 text-sm text-slate-500">Meta no entregó una vista previa para este formato.</p>
               )}
             </div>
+            {data && (
+              <div className="mt-2 space-y-1 text-[12px] text-slate-500">
+                {mode === 'preview' && data.src && <p>¿La vista previa sale en blanco o no reproduce? Usa “Ver anuncio en Facebook”: abre el anuncio real con tu sesión de Facebook.</p>}
+                {(data.notes || []).map((n) => (
+                  <p key={n} className="text-amber-700">
+                    {n}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             {[
@@ -499,6 +510,26 @@ function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: str
                 <span className="font-semibold text-slate-900 tabular-nums">{v}</span>
               </div>
             ))}
+            {(data?.previewLink || r.previewLink) && (
+              <a
+                href={(data?.previewLink || r.previewLink)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 h-10 w-full rounded-xl bg-brand-gradient text-white text-[13px] font-semibold inline-flex items-center justify-center gap-1.5"
+              >
+                Ver anuncio en Facebook <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+            {data?.videoLink && (
+              <a
+                href={data.videoLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-10 w-full rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5"
+              >
+                Ver el video en Facebook <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
             <a
               href={`https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=${r.adId}`}
               target="_blank"

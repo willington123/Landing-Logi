@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     if (!cfg?.accountId) return fail('Conecta Meta Ads en Integraciones.', 400);
     const p = req.nextUrl.searchParams;
     const format = (PREVIEW_FORMATS as readonly string[]).includes(p.get('format') || '') ? (p.get('format') as PreviewFormat) : 'MOBILE_FEED_STANDARD';
-    return ok(await adPreview(cfg, String(p.get('adId') || ''), format));
+    return ok({ ...(await adPreview(cfg, String(p.get('adId') || ''), format)) });
   } catch (e: any) {
     if (e instanceof AdsError) return fail(e.message, e.expired ? 401 : 400);
     return failFrom(e);
