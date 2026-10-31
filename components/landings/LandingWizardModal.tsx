@@ -113,6 +113,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const [withImages, setWithImages] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [serverKey, setServerKey] = useState(false);
+  const [claudeWrites, setClaudeWrites] = useState(false);
 
   const currency = COUNTRIES.find((c) => c.name === country)?.currency || 'COP';
 
@@ -125,7 +126,10 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
     setGuaranteeDays((v) => (v && v !== '30' ? v : String(st.guaranteeDays || 30)));
     fetch('/api/landing/generate')
       .then((r) => r.json())
-      .then((d) => setServerKey(Boolean(d.serverKey)))
+      .then((d) => {
+        setServerKey(Boolean(d.serverKey));
+        setClaudeWrites(Boolean(d.claude));
+      })
       .catch(() => setServerKey(false));
   }, [isOpen]);
 
@@ -168,7 +172,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
     if (!serverKey && !apiKey.trim()) return setError('Introduce tu API Key de Google Gemini.');
     if (apiKey.trim()) logiStore.saveGeminiApiKey(apiKey);
 
-    const baseTasks: Task[] = [{ key: 'copy', label: 'Analizando la foto y escribiendo la página', state: 'running' }];
+    const baseTasks: Task[] = [{ key: 'copy', label: claudeWrites ? 'Claude está analizando la foto y escribiendo la página' : 'Analizando la foto y escribiendo la página', state: 'running' }];
     if (withImages) {
       baseTasks.push(
         { key: 'hero', label: 'Imagen principal (banner)', state: 'pending' },
@@ -205,7 +209,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         tone,
       });
       copy = data.copy;
-      updateTask('copy', { state: 'done', label: `Textos listos: “${copy.headline}”` });
+      updateTask('copy', { state: 'done', label: `${data.writer === 'claude' ? 'Claude escribió la página' : 'Textos listos'}: “${copy.headline.replace(/\*\*/g, '')}”` });
     } catch (e: any) {
       setError(`No se pudo generar la página: ${e.message}`);
       setPhase('form');

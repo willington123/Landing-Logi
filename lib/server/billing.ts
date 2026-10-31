@@ -148,9 +148,10 @@ async function aiUsed(orgId: string): Promise<number> {
   return u?.month === monthKey() ? u.aiReplies || 0 : 0;
 }
 
-export async function addAiReply(orgId: string) {
+// count > 1 for heavier jobs (a whole landing page counts as several replies).
+export async function addAiReply(orgId: string, count = 1) {
   const used = await aiUsed(orgId);
-  await rawDb().from('settings').upsert({ org_id: orgId, id: 'usage', data: { month: monthKey(), aiReplies: used + 1 } });
+  await rawDb().from('settings').upsert({ org_id: orgId, id: 'usage', data: { month: monthKey(), aiReplies: used + count } });
 }
 
 // Replies the store may still send this month with the platform's Claude key.
