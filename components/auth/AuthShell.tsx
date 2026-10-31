@@ -16,19 +16,19 @@ export function BrandPanel() {
   return (
     <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-navy-gradient p-12 text-white">
       {/* decoration */}
-      <div className="pointer-events-none absolute -top-40 -right-32 w-[520px] h-[520px] rounded-full bg-brand-red/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-48 -left-24 w-[460px] h-[460px] rounded-full bg-brand-orange/20 blur-3xl" />
+      <div className="pointer-events-none absolute -top-40 -right-32 w-[520px] h-[520px] rounded-full bg-brand-blue/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-48 -left-24 w-[460px] h-[460px] rounded-full bg-brand-green/20 blur-3xl" />
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.07]"
         style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '44px 44px' }}
       />
 
-      <img src="/brand/logipages-logo-darkmode.png" alt="LogiPages" className="relative h-9 w-auto self-start" />
+      <img src="/brand/konnexa-logo-dark.png" alt="Konnexa" className="relative h-9 w-auto self-start" />
 
       <div className="relative max-w-md">
         <h2 className="text-[34px] leading-[1.15] font-bold tracking-tight">
           Vende contraentrega
-          <span className="block bg-brand-gradient bg-clip-text text-transparent">sin perder pedidos.</span>
+          <span className="block bg-gradient-to-r from-[#5AA9FF] to-[#3DDC84] bg-clip-text text-transparent">sin perder pedidos.</span>
         </h2>
         <p className="mt-4 text-[15px] text-white/70">Todo tu negocio en un solo panel: desde la landing hasta la entrega.</p>
         <ul className="mt-10 space-y-5">
@@ -46,7 +46,7 @@ export function BrandPanel() {
         </ul>
       </div>
 
-      <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LogiPages</p>
+      <p className="relative text-xs text-white/40">© {new Date().getFullYear()} Konnexa</p>
     </div>
   );
 }
@@ -58,7 +58,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       <style>{`@keyframes lp-shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}`}</style>
       <BrandPanel />
       <main className="relative overflow-hidden flex items-center justify-center px-6 py-12 bg-white">
-        <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[560px] h-[420px] rounded-full bg-brand-red/10 blur-3xl lg:hidden" />
+        <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[560px] h-[420px] rounded-full bg-brand-blue/10 blur-3xl lg:hidden" />
         <div className="relative w-full flex justify-center">{children}</div>
       </main>
     </div>
@@ -68,9 +68,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 export function AuthHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: React.ReactNode }) {
   return (
     <>
-      <img src="/brand/logipages-logo.png" alt="LogiPages" className="lg:hidden h-9 w-auto mx-auto mb-10" />
+      <img src="/brand/konnexa-logo.png" alt="Konnexa" className="lg:hidden h-9 w-auto mx-auto mb-10" />
       <div className="text-center lg:text-left">
-        <div className="w-12 h-12 rounded-2xl bg-brand-gradient shadow-glow-red flex items-center justify-center mb-6 mx-auto lg:mx-0 text-white">{icon}</div>
+        <div className="w-12 h-12 rounded-2xl bg-brand-gradient shadow-glow-blue flex items-center justify-center mb-6 mx-auto lg:mx-0 text-white">{icon}</div>
         <h1 className="text-[26px] font-bold tracking-tight text-slate-900">{title}</h1>
         <p className="text-[15px] text-slate-500 mt-1.5">{subtitle}</p>
       </div>
@@ -158,7 +158,7 @@ export function SubmitButton({ busy, disabled, label, busyLabel }: { busy: boole
     <button
       type="submit"
       disabled={busy || disabled}
-      className="w-full h-12 rounded-xl bg-brand-gradient text-white text-[15px] font-semibold flex items-center justify-center gap-2 shadow-[0_10px_24px_-10px_rgba(255,37,43,0.7)] hover:brightness-105 active:scale-[0.99] transition disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
+      className="w-full h-12 rounded-xl bg-brand-gradient text-white text-[15px] font-semibold flex items-center justify-center gap-2 shadow-[0_10px_24px_-10px_rgba(10,108,240,0.7)] hover:brightness-105 active:scale-[0.99] transition disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
     >
       {busy ? (
         <>

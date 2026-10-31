@@ -174,7 +174,7 @@ function CardForm({ b, plan, onDone, onClose }: { b: Billing; plan: Plan; onDone
       >
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} {laterCharge ? 'Guardar tarjeta' : `Pagar ${cop(plan.price)}`}
       </button>
-      <p className="text-[10px] text-slate-400 text-center">Los datos de la tarjeta van directo a Wompi (Bancolombia). LogiPages no los guarda.</p>
+      <p className="text-[10px] text-slate-400 text-center">Los datos de la tarjeta van directo a Wompi (Bancolombia). Konnexa no los guarda.</p>
     </form>
   );
 }
@@ -299,7 +299,7 @@ export default function PlanPage() {
             const isCurrent = p.id === s.plan && s.effective === 'active';
             const payAgain = p.id === s.plan && s.effective === 'past_due';
             return (
-              <div key={p.id} className={`${card} p-5 flex flex-col ${p.highlight ? 'ring-2 ring-brand-red/60' : ''}`}>
+              <div key={p.id} className={`${card} p-5 flex flex-col ${p.highlight ? 'ring-2 ring-brand-blue/60' : ''}`}>
                 {p.highlight && <span className="self-start text-[11px] font-bold text-white bg-brand-gradient rounded-full px-2.5 py-0.5 mb-2">Más elegido</span>}
                 <h3 className="text-lg font-bold text-slate-900">{p.name}</h3>
                 <p className="mt-1">

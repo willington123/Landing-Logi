@@ -33,7 +33,7 @@ export default function Header({ title }: HeaderProps) {
       >
         <Menu className="w-5 h-5" />
       </button>
-      <img src="/brand/logipages-icon.png" alt="" className="lg:hidden w-7 h-7 rounded-md" />
+      <img src="/brand/konnexa-icon.png" alt="" className="lg:hidden w-7 h-7 rounded-md" />
 
       <h1 className="text-[17px] font-semibold text-slate-900 tracking-tight truncate">{title || 'Inicio'}</h1>
 

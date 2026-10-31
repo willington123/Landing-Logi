@@ -121,7 +121,7 @@ export function supabaseCronSql(baseUrl: string): string | null {
   const secret = (process.env.CRON_SECRET || '').trim();
   if (!secret || !baseUrl) return null;
   const q = (s: string) => s.replace(/'/g, "''");
-  return `-- LogiPages: revisión automática cada 5 minutos (llamadas IA y plantillas de WhatsApp de respaldo).
+  return `-- Konnexa: revisión automática cada 5 minutos (llamadas IA y plantillas de WhatsApp de respaldo).
 -- Pégalo en Supabase → SQL Editor → New query → Run. Se puede volver a ejecutar sin problema.
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;

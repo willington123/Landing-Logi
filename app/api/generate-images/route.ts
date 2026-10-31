@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         if (imageBase64.startsWith('data:image/png')) mimeType = 'image/png';
         else if (imageBase64.startsWith('data:image/webp')) mimeType = 'image/webp';
 
-        const promptText = `Eres el director de arte y copywriter de LogiPages AI. Analiza la imagen de este producto físico real y devuelve EXCLUSIVAMENTE un objeto JSON válido (sin formato markdown, sin comillas invertidas, solo las llaves {}) con esta estructura:
+        const promptText = `Eres el director de arte y copywriter de Konnexa AI. Analiza la imagen de este producto físico real y devuelve EXCLUSIVAMENTE un objeto JSON válido (sin formato markdown, sin comillas invertidas, solo las llaves {}) con esta estructura:
 {
   "productName": "Nombre comercial atractivo y específico del producto visible en la imagen",
   "category": "Categoría exacta (Tecnología & Gadgets, Hogar, Cuidado Personal, etc.)",
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
           fallbackUsed: true,
           warning:
             lastVisionErr ||
-            'Google reportó un aviso con el modelo, pero LogiPages construyó automáticamente los 4 creativos de alta conversión.',
+            'Google reportó un aviso con el modelo, pero Konnexa construyó automáticamente los 4 creativos de alta conversión.',
           analysis: smartFallback,
         });
       } catch (visionErr: any) {

@@ -32,17 +32,17 @@ export function sendPasswordReset(p: { email: string; name: string | null; url: 
   const { html, text } = emailLayout({
     title: 'Cambia tu contraseña',
     paragraphs: [
-      `Hola${p.name ? ` ${esc(p.name)}` : ''}, recibimos una solicitud para cambiar la contraseña de tu cuenta en LogiPages.`,
+      `Hola${p.name ? ` ${esc(p.name)}` : ''}, recibimos una solicitud para cambiar la contraseña de tu cuenta en Konnexa.`,
       'El enlace sirve una sola vez y vence en 1 hora. Si no fuiste tú, ignora este correo: tu contraseña sigue igual.',
     ],
     cta: { label: 'Crear nueva contraseña', url: p.url },
   });
-  return sendEmail({ to: p.email, subject: 'Cambia tu contraseña de LogiPages', html, text });
+  return sendEmail({ to: p.email, subject: 'Cambia tu contraseña de Konnexa', html, text });
 }
 
 export function sendWelcome(p: { email: string; name: string; store: string; trialEndsAt: string | null }) {
   const { html, text } = emailLayout({
-    title: `¡Bienvenido a LogiPages, ${esc(p.name)}!`,
+    title: `¡Bienvenido a Konnexa, ${esc(p.name)}!`,
     paragraphs: [
       `Tu tienda <b>${esc(p.store)}</b> ya está lista. Tienes prueba gratis con todo lo del plan Pro${p.trialEndsAt ? ` hasta el <b>${date(p.trialEndsAt)}</b>` : ''}, sin tarjeta.`,
       'Para empezar: <b>1.</b> crea tu primera landing subiendo la foto del producto, <b>2.</b> conecta tu WhatsApp en Integraciones para confirmar pedidos y <b>3.</b> activa el asistente con IA en Mensajes.',
@@ -67,7 +67,7 @@ export function notifyPaymentApproved(orgId: string, p: { planName: string; amou
 
 export function notifyRenewalFailed(orgId: string, p: { planName: string; reason: string | null; lastTry: boolean; periodEnd: string | null }) {
   return toOwners(orgId, (store) => ({
-    subject: 'No pudimos cobrar tu plan de LogiPages',
+    subject: 'No pudimos cobrar tu plan de Konnexa',
     title: 'No pudimos cobrar tu plan',
     paragraphs: [
       `El cobro automático del plan <b>${esc(p.planName)}</b> de ${store} fue rechazado${p.reason ? ` (${esc(p.reason)})` : ''}.`,
@@ -82,7 +82,7 @@ export function notifyRenewalFailed(orgId: string, p: { planName: string; reason
 
 export function notifyTrialEnding(orgId: string, p: { endsAt: string; daysLeft: number }) {
   return toOwners(orgId, (store) => ({
-    subject: p.daysLeft <= 1 ? 'Tu prueba gratis de LogiPages termina mañana' : `Tu prueba gratis termina en ${p.daysLeft} días`,
+    subject: p.daysLeft <= 1 ? 'Tu prueba gratis de Konnexa termina mañana' : `Tu prueba gratis termina en ${p.daysLeft} días`,
     title: 'Tu prueba gratis está por terminar',
     paragraphs: [
       `La prueba de ${store} termina el <b>${date(p.endsAt)}</b>.`,
@@ -103,7 +103,7 @@ export function notifyPlanEnding(orgId: string, p: { planName: string; endsAt: s
 
 export function notifyPlanExpired(orgId: string, p: { graceUntil: string }) {
   return toOwners(orgId, (store) => ({
-    subject: 'Tu plan de LogiPages venció',
+    subject: 'Tu plan de Konnexa venció',
     title: 'Tu plan venció',
     paragraphs: [
       `El panel de ${store} quedó en pausa. Tus landings siguen recibiendo pedidos hasta el <b>${date(p.graceUntil)}</b>; después se pausan.`,

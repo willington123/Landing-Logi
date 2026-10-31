@@ -101,7 +101,7 @@ export default function SettingsPage() {
                     value={storeName}
                     placeholder="Ej. Mi Tienda"
                     onChange={(e) => setStoreName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                   />
                 </div>
 
@@ -112,7 +112,7 @@ export default function SettingsPage() {
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                   >
                     <option value="COP">Peso Colombiano (COP)</option>
                     <option value="MXN">Peso Mexicano (MXN)</option>
@@ -132,7 +132,7 @@ export default function SettingsPage() {
                     value={supportPhone}
                     placeholder="+57 300 000 0000"
                     onChange={(e) => setSupportPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                   />
                 </div>
 
@@ -145,7 +145,7 @@ export default function SettingsPage() {
                     value={supportEmail}
                     placeholder="soporte@mitienda.com"
                     onChange={(e) => setSupportEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                   />
                 </div>
               </div>
@@ -154,7 +154,7 @@ export default function SettingsPage() {
             {/* Default COD Policies */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                <ShieldCheck className="w-4 h-4 text-brand-red" />
+                <ShieldCheck className="w-4 h-4 text-brand-blue" />
                 <h3 className="text-[15px] font-semibold text-slate-900">Políticas por Defecto para Contraentrega</h3>
               </div>
 
@@ -167,7 +167,7 @@ export default function SettingsPage() {
                     type="number"
                     value={defaultGuaranteeDays}
                     onChange={(e) => setDefaultGuaranteeDays(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                   />
                 </div>
 
@@ -195,7 +195,7 @@ export default function SettingsPage() {
                   onChange={(e) => setMetaPixelId(e.target.value.replace(/\D/g, ''))}
                   inputMode="numeric"
                   placeholder="Ej. 123456789012345"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue"
                 />
                 <p className="text-xs text-slate-500 mt-1.5">
                   Se aplica a cada landing nueva (puedes cambiarlo por landing en el editor). Lo encuentras en Meta Events Manager → Orígenes de datos → tu píxel.

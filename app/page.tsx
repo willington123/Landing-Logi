@@ -10,13 +10,13 @@ import SalesPage from '@/components/marketing/SalesPage';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'LogiPages · Landings y pedidos contraentrega con IA',
+  title: 'Konnexa · Landings y pedidos contraentrega con IA',
   description:
     'Crea landings con IA a partir de una foto, confirma pedidos contraentrega por WhatsApp y con llamadas de IA, y vende por chat con un asistente. Prueba 7 días gratis.',
   openGraph: {
-    title: 'LogiPages · Vende contraentrega sin perder pedidos',
+    title: 'Konnexa · Vende contraentrega sin perder pedidos',
     description: 'Landings con IA, confirmación por WhatsApp y llamadas con IA, y un asistente que vende por chat. 7 días gratis, sin tarjeta.',
-    images: ['/brand/logipages-logo.png'],
+    images: ['/brand/konnexa-logo.png'],
     locale: 'es_CO',
     type: 'website',
   },
@@ -32,7 +32,7 @@ export default async function Home() {
     <SalesPage
       plans={plans}
       signupOpen={signupOpen()}
-      contactUrl={wa ? `https://wa.me/${wa}?text=${encodeURIComponent('Hola, quiero probar LogiPages')}` : null}
+      contactUrl={wa ? `https://wa.me/${wa}?text=${encodeURIComponent('Hola, quiero probar Konnexa')}` : null}
     />
   );
 }

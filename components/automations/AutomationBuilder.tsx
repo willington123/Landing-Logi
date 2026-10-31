@@ -88,7 +88,7 @@ const ACTION_LABELS: Record<string, { title: string; desc: string; icon: any; ba
     title: 'Disparar Llamada con Valentina IA',
     desc: 'Llama automáticamente al comprador para validar dirección y confirmar contraentrega',
     icon: PhoneCall,
-    badgeColor: 'bg-red-50 text-brand-red border-red-200',
+    badgeColor: 'bg-red-50 text-brand-blue border-red-200',
   },
   send_whatsapp_template: {
     title: 'Enviar WhatsApp Oficial (Meta Cloud)',
@@ -104,7 +104,7 @@ const ACTION_LABELS: Record<string, { title: string; desc: string; icon: any; ba
   },
   update_order_status: {
     title: 'Actualizar Estado del Pedido',
-    desc: 'Cambia el estado en LogiPages (Confirmado, Reprogramado, Cancelado)',
+    desc: 'Cambia el estado en Konnexa (Confirmado, Reprogramado, Cancelado)',
     icon: RefreshCw,
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
@@ -293,7 +293,7 @@ export default function AutomationBuilder() {
 
       {/* Header Banner */}
       <div className="bg-white rounded-2xl p-6 sm:p-8 relative overflow-hidden border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-orange/10 blur-3xl pointer-events-none" />
+        <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-green/10 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-2xl">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
@@ -371,7 +371,7 @@ export default function AutomationBuilder() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por nombre o acción..."
-              className="w-full text-xs bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red"
+              className="w-full text-xs bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
             />
           </div>
         )}
@@ -389,7 +389,7 @@ export default function AutomationBuilder() {
               </p>
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="mt-4 px-4 py-2 bg-brand-red text-white text-xs font-bold rounded-lg shadow"
+                className="mt-4 px-4 py-2 bg-brand-blue text-white text-xs font-bold rounded-lg shadow"
               >
                 Crear Ahora
               </button>
@@ -474,7 +474,7 @@ export default function AutomationBuilder() {
                           </>
                         ) : (
                           <>
-                            <Play className="w-3.5 h-3.5 text-brand-red fill-current" />
+                            <Play className="w-3.5 h-3.5 text-brand-blue fill-current" />
                             <span>Probar Flujo</span>
                           </>
                         )}
@@ -565,10 +565,10 @@ export default function AutomationBuilder() {
                       {/* Node 3: ACTIONS */}
                       <div className="flex-[1.5] bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-brand-red/10 text-brand-red border border-brand-red/20">
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-brand-blue/10 text-brand-blue border border-brand-blue/20">
                             3. Acciones ({flow.actions.length})
                           </span>
-                          <Zap className="w-4 h-4 text-brand-red fill-brand-red" />
+                          <Zap className="w-4 h-4 text-brand-blue fill-brand-blue" />
                         </div>
                         <div className="space-y-2 mt-1">
                           {flow.actions.map((act, aIdx) => {
@@ -678,7 +678,7 @@ export default function AutomationBuilder() {
                           {log.customerName || 'Cliente Anónimo'}
                         </div>
                         {log.orderNumber && (
-                          <div className="text-[11px] text-brand-red font-semibold">
+                          <div className="text-[11px] text-brand-blue font-semibold">
                             {log.orderNumber}
                           </div>
                         )}
@@ -751,14 +751,14 @@ export default function AutomationBuilder() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Ej: Confirmar Pedido COD + Despacho Inmediato"
-                  className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red"
+                  className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
                 />
                 <input
                   type="text"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="Descripción breve del objetivo de este flujo"
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
                 />
               </div>
 
@@ -781,13 +781,13 @@ export default function AutomationBuilder() {
                         onClick={() => setNewTrigger(key)}
                         className={`p-3.5 rounded-xl border cursor-pointer transition text-left flex items-start gap-3 ${
                           isSelected
-                            ? 'border-brand-red bg-brand-red/5 ring-1 ring-brand-red'
+                            ? 'border-brand-blue bg-brand-blue/5 ring-1 ring-brand-blue'
                             : 'border-slate-200 hover:border-slate-300 bg-white'
                         }`}
                       >
                         <div
                           className={`p-2 rounded-lg ${
-                            isSelected ? 'bg-brand-red text-white' : 'bg-slate-100 text-slate-600'
+                            isSelected ? 'bg-brand-blue text-white' : 'bg-slate-100 text-slate-600'
                           }`}
                         >
                           <Icon className="w-4 h-4" />
@@ -813,7 +813,7 @@ export default function AutomationBuilder() {
                   <select
                     value={newConditionField}
                     onChange={(e) => setNewConditionField(e.target.value)}
-                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-red/20"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   >
                     <option value="paymentMethod">Método de Pago</option>
                     <option value="attempts">Intentos de Llamada</option>
@@ -824,7 +824,7 @@ export default function AutomationBuilder() {
                   <select
                     value={newConditionOp}
                     onChange={(e) => setNewConditionOp(e.target.value as any)}
-                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-red/20"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   >
                     <option value="equals">Es igual a</option>
                     <option value="greater_than">Es mayor que</option>
@@ -836,7 +836,7 @@ export default function AutomationBuilder() {
                     value={newConditionVal}
                     onChange={(e) => setNewConditionVal(e.target.value)}
                     placeholder="Valor (ej: cash_on_delivery)"
-                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-red/20"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
                 </div>
               </div>

@@ -89,7 +89,7 @@ export default function ProductCreativeCard({
                 type="checkbox"
                 checked={creative.includedInLanding}
                 onChange={() => onToggleInclude(creative.id)}
-                className="w-3.5 h-3.5 text-brand-red rounded border-slate-300 focus:ring-brand-red cursor-pointer"
+                className="w-3.5 h-3.5 text-brand-blue rounded border-slate-300 focus:ring-brand-blue cursor-pointer"
               />
               <span>Mostrar en Landing</span>
             </label>
@@ -316,7 +316,7 @@ export default function ProductCreativeCard({
               isMinimal ? 'text-slate-500' : 'text-slate-400'
             }`}>
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Garantía Oficial LogiPages</span>
+              <span>Garantía oficial</span>
             </div>
           )}
 

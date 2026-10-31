@@ -1,6 +1,6 @@
 // WhatsApp message templates shared by the panel and the server.
 
-// The order confirmation template LogiPages uses: {{1}} name, {{2}} product, {{3}} total, {{4}} city,
+// The order confirmation template Konnexa uses: {{1}} name, {{2}} product, {{3}} total, {{4}} city,
 // with the two buttons the webhook understands.
 export const CONFIRM_PRESET = {
   name: 'confirmacion_pedido',

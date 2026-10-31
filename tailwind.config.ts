@@ -14,10 +14,10 @@ const config: Config = {
       },
       colors: {
         brand: {
-          red: "#FF252B",
-          orange: "#FF5A16",
-          navy: "#172C8A",
-          navyDark: "#0d1b54",
+          blue: "#0A6CF0",
+          green: "#10C569",
+          navy: "#0047C2",
+          navyDark: "#011B52",
           light: "#F5F7FA",
           gray: {
             50: "#F9FAFB",
@@ -34,14 +34,14 @@ const config: Config = {
         },
       },
       backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #FF252B 0%, #FF5A16 100%)',
-        'navy-gradient': 'linear-gradient(135deg, #172C8A 0%, #0d1b54 100%)',
-        'glow-gradient': 'radial-gradient(circle at 50% 0%, rgba(255, 37, 43, 0.15) 0%, rgba(23, 44, 138, 0.05) 70%, transparent 100%)',
+        'brand-gradient': 'linear-gradient(120deg, #0047C2 0%, #0A6CF0 55%, #12B886 100%)',
+        'navy-gradient': 'linear-gradient(135deg, #0047C2 0%, #011B52 100%)',
+        'glow-gradient': 'radial-gradient(circle at 50% 0%, rgba(10, 108, 240, 0.14) 0%, rgba(16, 197, 105, 0.05) 70%, transparent 100%)',
       },
       boxShadow: {
-        'glow-red': '0 0 25px -5px rgba(255, 37, 43, 0.4)',
-        'glow-orange': '0 0 25px -5px rgba(255, 90, 22, 0.4)',
-        'glow-navy': '0 0 25px -5px rgba(23, 44, 138, 0.3)',
+        'glow-blue': '0 0 25px -5px rgba(10, 108, 240, 0.45)',
+        'glow-green': '0 0 25px -5px rgba(16, 197, 105, 0.4)',
+        'glow-navy': '0 0 25px -5px rgba(0, 71, 194, 0.3)',
       },
       animation: {
         'pulse-subtle': 'pulseSubtle 2.5s ease-in-out infinite',

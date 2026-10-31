@@ -35,7 +35,7 @@ async function api(url: string, init?: RequestInit) {
 }
 
 const card = 'bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4';
-const input = 'w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[13px] text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-red outline-none';
+const input = 'w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[13px] text-slate-800 focus:bg-white focus:ring-1 focus:ring-brand-blue outline-none';
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
@@ -133,7 +133,7 @@ export default function TeamSettings() {
     }
   };
   const waShare = (inv: Invite) =>
-    `https://wa.me/?text=${encodeURIComponent(`Te invito a nuestro panel de LogiPages como ${ROLE_LABEL[inv.role].toLowerCase()}. Entra aquí para crear tu acceso (vence en 7 días): ${inv.url}`)}`;
+    `https://wa.me/?text=${encodeURIComponent(`Te invito a nuestro panel de Konnexa como ${ROLE_LABEL[inv.role].toLowerCase()}. Entra aquí para crear tu acceso (vence en 7 días): ${inv.url}`)}`;
 
   return (
     <div className="space-y-6">

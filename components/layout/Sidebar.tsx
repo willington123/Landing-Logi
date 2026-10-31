@@ -196,8 +196,8 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
       >
         {/* Logo */}
         <div className="h-16 px-5 flex items-center justify-between">
-          <Link href="/dashboard" aria-label="LogiPages, ir al inicio">
-            <img src="/brand/logipages-logo.png" alt="LogiPages" className="h-[30px] w-auto" />
+          <Link href="/dashboard" aria-label="Konnexa, ir al inicio">
+            <img src="/brand/konnexa-logo.png" alt="Konnexa" className="h-[30px] w-auto" />
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden p-1.5 -mr-1.5 rounded-lg text-slate-400 hover:bg-slate-100" aria-label="Cerrar menú">
             <X className="w-5 h-5" />
@@ -211,7 +211,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               setOpen(false);
               onOpenWizard?.();
             }}
-            className="w-full h-10 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(255,37,43,0.6)] hover:brightness-105 active:scale-[0.98] transition"
+            className="w-full h-10 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(10,108,240,0.6)] hover:brightness-105 active:scale-[0.98] transition"
           >
             <Sparkles className="w-4 h-4" />
             Crear landing con IA
@@ -274,7 +274,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               onClick={() => (account && account.orgs.length > 1 ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
               className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
             >
-              <img src="/brand/logipages-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
+              <img src="/brand/konnexa-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-slate-900 truncate">{account?.org?.name || storeName || 'Mi tienda'}</p>
                 <p className="text-xs text-slate-500 truncate">

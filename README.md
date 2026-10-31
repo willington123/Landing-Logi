@@ -1,8 +1,8 @@
-# LogiPages AI — Plataforma Inteligente de Ventas & Landings de Alta Conversión
+# Konnexa AI — Plataforma Inteligente de Ventas & Landings de Alta Conversión
 
-![LogiPages AI](public/brand/logipages-logo.png)
+![Konnexa AI](public/brand/konnexa-logo.png)
 
-LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropshipping, tiendas con pago contraentrega (Cash On Delivery - COD) y agencias de marketing en Latinoamérica y España.
+Konnexa AI es una plataforma SaaS diseñada para sellers de e-commerce, dropshipping, tiendas con pago contraentrega (Cash On Delivery - COD) y agencias de marketing en Latinoamérica y España.
 
 ---
 
@@ -53,7 +53,7 @@ LogiPages AI es una plataforma SaaS diseñada para sellers de e-commerce, dropsh
 
 - **Framework**: Next.js 14 (App Router)
 - **Lenguaje**: TypeScript
-- **Estilos**: Tailwind CSS con paleta oficial LogiPages (`#FF252B`, `#FF5A16`, `#172C8A`, `#0D1B54`)
+- **Estilos**: Tailwind CSS con paleta oficial Konnexa (`#0A6CF0`, `#10C569`, `#172C8A`, `#0D1B54`)
 - **Iconos**: Lucide React
 - **Micro-interacciones**: Canvas Confetti & animaciones CSS Keyframes
 - **Persistencia**: LocalStorage reactivo (`lib/store.ts`) con sincronización en tiempo real
@@ -158,7 +158,7 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 - Tu tienda (`org_main`) no paga.
 
 ### Página de ventas
-- Quien entra a tu dominio sin sesión ve la página de LogiPages (funciones, precios y preguntas). Quien ya inició sesión va directo al panel.
+- Quien entra a tu dominio sin sesión ve la página de Konnexa (funciones, precios y preguntas). Quien ya inició sesión va directo al panel.
 - Los precios salen de **Admin plataforma → Planes y precios**.
 - Con `SIGNUP_OPEN=true` los botones llevan a crear la tienda; si no, a tu WhatsApp (`PLATFORM_WHATSAPP`) o al inicio de sesión.
 - `/terminos` tiene los Términos del servicio. Pon tu nombre legal en `PLATFORM_COMPANY_NAME` y tu correo en `PLATFORM_SUPPORT_EMAIL`, y haz que un abogado los revise.
@@ -174,7 +174,7 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 ## Correos y recuperar contraseña
 - **¿Olvidaste tu contraseña?** en el inicio de sesión envía un enlace que sirve una vez y vence en 1 hora. Al cambiarla se cierran las otras sesiones.
 - Correos automáticos: bienvenida al crear la tienda, pago recibido, cobro automático rechazado, prueba por terminar (2 días antes), plan sin cobro automático por vencer (3 días antes) y plan vencido. Cada aviso se envía una sola vez.
-- **Activarlo:** crea una cuenta en resend.com, verifica tu dominio (Domains → Add domain, y copias los registros DNS que te da) y agrega en Vercel `RESEND_API_KEY` y `EMAIL_FROM` (ej. `LogiPages <hola@tudominio.com>`).
+- **Activarlo:** crea una cuenta en resend.com, verifica tu dominio (Domains → Add domain, y copias los registros DNS que te da) y agrega en Vercel `RESEND_API_KEY` y `EMAIL_FROM` (ej. `Konnexa <hola@tudominio.com>`).
 - Sin correos configurados: en **Admin plataforma** cada tienda tiene **Enlace para cambiar contraseña** (vence en 24 horas) para enviarlo por WhatsApp.
 
 ## WhatsApp

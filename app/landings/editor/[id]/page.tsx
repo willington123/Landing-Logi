@@ -23,7 +23,7 @@ export default function EditorPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-center p-6">
         <p className="text-sm text-slate-600">No encontramos esta landing en este navegador.</p>
-        <Link href="/landings" className="text-sm font-semibold text-brand-red">Volver a mis landings</Link>
+        <Link href="/landings" className="text-sm font-semibold text-brand-blue">Volver a mis landings</Link>
       </div>
     );
   }

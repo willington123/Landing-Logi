@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { GRACE_DAYS, TRIAL_DAYS } from '@/lib/plans';
 
-export const metadata: Metadata = { title: 'Términos del servicio · LogiPages', robots: { index: true, follow: true } };
+export const metadata: Metadata = { title: 'Términos del servicio · Konnexa', robots: { index: true, follow: true } };
 
-// Terms of service of the LogiPages platform (for the stores that use it). Operator data comes from env.
+// Terms of service of the Konnexa platform (for the stores that use it). Operator data comes from env.
 export default function TermsPage() {
-  const company = process.env.PLATFORM_COMPANY_NAME?.trim() || 'LogiPages';
+  const company = process.env.PLATFORM_COMPANY_NAME?.trim() || 'Konnexa';
   const email = process.env.PLATFORM_SUPPORT_EMAIL?.trim();
   const contact = email ? `al correo ${email}` : 'por los canales de atención publicados en el sitio';
   const h2 = 'text-lg font-semibold text-slate-900 mt-8 mb-2';
@@ -17,13 +17,13 @@ export default function TermsPage() {
     <main className="min-h-screen bg-white">
       <article className="max-w-3xl mx-auto px-5 py-12">
         <Link href="/">
-          <img src="/brand/logipages-logo.png" alt="LogiPages" className="h-8 w-auto mb-10" />
+          <img src="/brand/konnexa-logo.png" alt="Konnexa" className="h-8 w-auto mb-10" />
         </Link>
         <h1 className="text-3xl font-bold text-slate-900">Términos del servicio</h1>
         <p className="text-sm text-slate-500 mt-2">{company} · Última actualización: octubre de 2026</p>
 
         <p className={`${p} mt-6`}>
-          Estos términos regulan el uso de LogiPages, la plataforma de {company} para crear landing pages, recibir y confirmar pedidos contraentrega y atender clientes por
+          Estos términos regulan el uso de Konnexa, la plataforma de {company} para crear landing pages, recibir y confirmar pedidos contraentrega y atender clientes por
           WhatsApp (&quot;el Servicio&quot;). Al crear una cuenta o usar el Servicio aceptas estos términos en nombre propio y de la tienda que registras.
         </p>
 

@@ -362,7 +362,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                     e.preventDefault();
                     handleMainFile(e.dataTransfer.files?.[0]);
                   }}
-                  className="w-full aspect-square rounded-2xl border-2 border-dashed border-slate-300 hover:border-[#FF252B] bg-slate-50 flex items-center justify-center overflow-hidden transition"
+                  className="w-full aspect-square rounded-2xl border-2 border-dashed border-slate-300 hover:border-[#0A6CF0] bg-slate-50 flex items-center justify-center overflow-hidden transition"
                 >
                   {productImage ? (
                     <img src={productImage} alt="Producto" className="w-full h-full object-contain" />
@@ -422,7 +422,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                     type="checkbox"
                     checked={withImages}
                     onChange={(e) => setWithImages(e.target.checked)}
-                    className="mt-0.5 accent-[#FF252B]"
+                    className="mt-0.5 accent-[#0A6CF0]"
                   />
                   <span className="text-xs text-slate-600">
                     <strong className="text-slate-900 block">Generar 5 imágenes publicitarias con IA</strong>
@@ -531,7 +531,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                           name="popular-offer"
                           checked={popularIdx === i}
                           onChange={() => setPopularIdx(i)}
-                          className="justify-self-center w-4 h-4 accent-[#FF252B]"
+                          className="justify-self-center w-4 h-4 accent-[#0A6CF0]"
                           aria-label="Destacar esta oferta"
                         />
                         <button
@@ -633,7 +633,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                 {tasks.map((t) => (
                   <li key={t.key} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
                     {t.state === 'done' && <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
-                    {t.state === 'running' && <Loader2 className="w-5 h-5 text-[#FF252B] animate-spin flex-shrink-0" />}
+                    {t.state === 'running' && <Loader2 className="w-5 h-5 text-[#0A6CF0] animate-spin flex-shrink-0" />}
                     {t.state === 'pending' && <Circle className="w-5 h-5 text-slate-300 flex-shrink-0" />}
                     {t.state === 'error' && <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />}
                     <div className="flex-1 min-w-0">
@@ -717,7 +717,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
             </p>
             <button
               onClick={handleGenerate}
-              className="ml-auto px-6 py-3 rounded-xl bg-brand-gradient text-white text-sm font-black shadow-glow-red flex items-center gap-2 hover:opacity-95"
+              className="ml-auto px-6 py-3 rounded-xl bg-brand-gradient text-white text-sm font-black shadow-glow-blue flex items-center gap-2 hover:opacity-95"
             >
               <Wand2 className="w-4 h-4" /> Generar landing
             </button>

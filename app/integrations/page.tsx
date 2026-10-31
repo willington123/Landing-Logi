@@ -811,7 +811,7 @@ export default function IntegrationsPage() {
                               placeholder={field.placeholder}
                               disabled={item.status === 'coming_soon'}
                               defaultValue={item.status === 'connected' ? '••••••••••••••••' : ''}
-                              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono focus:ring-1 focus:ring-brand-red focus:bg-white"
+                              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono focus:ring-1 focus:ring-brand-blue focus:bg-white"
                             />
                             {field.isSecret && (
                               <button

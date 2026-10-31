@@ -307,7 +307,7 @@ function ClassicLandingRenderer({
   const guaranteeCreative = config.creatives?.find((c) => c.type === 'guarantee' && c.includedInLanding);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-brand-red selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-brand-blue selection:text-white">
       {/* 1. TOP ANNOUNCEMENT BAR (CLEAN & TRUSTWORTHY) */}
       <header className="bg-[#172C8A] text-white py-2 px-4 sticky top-0 z-40 shadow-sm border-b border-blue-900">
         <div className="max-w-5xl mx-auto flex items-center justify-between text-xs font-semibold">
