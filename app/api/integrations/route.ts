@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
         pending: Boolean(ads && !ads.accountId),
         accountId: ads?.accountId || null,
         accountName: ads?.accountName || null,
+        accounts: ads?.accounts || [],
         currency: ads?.currency || null,
         mode: ads?.mode || null,
         expiresAt: ads?.expiresAt || null,

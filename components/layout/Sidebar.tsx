@@ -7,24 +7,7 @@ import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  Sparkles,
-  Layers,
-  ShoppingBag,
-  PhoneCall,
-  MessageSquare,
-  Workflow,
-  BarChart3,
-  Plug,
-  Settings,
-  X,
-  LogOut,
-  CreditCard,
-  ShieldCheck,
-  FileText,
-  ChevronsUpDown,
-  Check, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -219,7 +202,17 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 space-y-5">
+          {account && account.orgs.length > 1 && (
+            <div>
+              <Link
+                href="/tiendas"
+                className={`flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] transition ${pathname?.startsWith('/tiendas') ? 'bg-brand-navy/[0.07] text-brand-navy font-semibold' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <Store className="w-[18px] h-[18px] text-slate-400" /> Mis tiendas <span className="ml-auto text-[11px] text-slate-400">{account.orgs.length}</span>
+              </Link>
+            </div>
+          )}
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em]">
@@ -255,23 +248,23 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               </div>
             </div>
           ))}
+          {account?.platformAdmin && (
+            <div>
+              <Link
+                href="/admin"
+                className={`flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] transition ${pathname?.startsWith('/admin') ? 'bg-brand-navy/[0.07] text-brand-navy font-semibold' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <ShieldCheck className="w-[18px] h-[18px] text-slate-400" /> Admin plataforma
+              </Link>
+            </div>
+          )}
         </nav>
 
-        {account?.platformAdmin && (
-          <div className="px-3 pb-2">
-            <Link
-              href="/admin"
-              className={`flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] transition ${pathname?.startsWith('/admin') ? 'bg-brand-navy/[0.07] text-brand-navy font-semibold' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <ShieldCheck className="w-[18px] h-[18px] text-slate-400" /> Admin plataforma
-            </Link>
-          </div>
-        )}
         {/* Account */}
         <div className="p-3 border-t border-slate-200/80">
           <div className="relative">
             <button
-              onClick={() => (account && account.orgs.length > 1 ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
+              onClick={() => (account && (account.orgs.length > 1 || account.platformAdmin) ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
               className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
             >
               <img src="/brand/konnexa-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
@@ -281,25 +274,14 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                   {account?.user ? account.user.name || account.user.email : storeName ? 'Configuración' : 'Pon el nombre de tu tienda'}
                 </p>
               </div>
-              {account && account.orgs.length > 1 && <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />}
+              {account && (account.orgs.length > 1 || account.platformAdmin) && <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />}
             </button>
             {orgMenu && account && (
-              <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5 z-10">
-                <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tus tiendas</p>
-                {account.orgs.map((o) => (
-                  <button
-                    key={o.id}
-                    onClick={() => (o.id === account.org?.id ? setOrgMenu(false) : switchOrg(o.id))}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-800"
-                  >
-                    <span className="truncate flex-1">{o.name}</span>
-                    {o.id === account.org?.id && <Check className="w-3.5 h-3.5 text-slate-900" />}
-                  </button>
-                ))}
-                <Link href="/settings" className="block mt-1 border-t border-slate-100 px-2 pt-2 pb-1 text-xs font-medium text-slate-600 hover:text-slate-900">
-                  Configuración y equipo
-                </Link>
-              </div>
+              <StoreMenu
+                account={account}
+                onSwitch={switchOrg}
+                onClose={() => setOrgMenu(false)}
+              />
             )}
           </div>
           {authOn && (
@@ -310,5 +292,96 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
         </div>
       </aside>
     </>
+  );
+}
+
+// Store switcher: search when there are many, and "Nueva tienda" for the platform owner.
+function StoreMenu({ account, onSwitch, onClose }: { account: AccountInfo; onSwitch: (id: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [copy, setCopy] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const many = account.orgs.length > 6;
+  const term = q.trim().toLowerCase();
+  const list = account.orgs.filter((o) => !term || o.name.toLowerCase().includes(term));
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const res = await fetch('/api/account/stores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, copySettings: copy }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.success) {
+      setError(d.error || 'No se pudo crear la tienda.');
+      setBusy(false);
+      return;
+    }
+    clearLocalData();
+    window.location.href = '/dashboard';
+  };
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5 z-10">
+      <div className="flex items-center justify-between px-2 py-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tus tiendas ({account.orgs.length})</p>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label="Cerrar">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {many && (
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar tienda…"
+          className="w-full h-8 mb-1 px-2.5 text-[13px] rounded-lg border border-slate-200 outline-none focus:border-brand-navy/40"
+        />
+      )}
+      <div className="max-h-64 overflow-y-auto">
+        {list.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => (o.id === account.org?.id ? onClose() : onSwitch(o.id))}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-800"
+          >
+            <span className="truncate flex-1">{o.name}</span>
+            {o.id === account.org?.id && <Check className="w-3.5 h-3.5 text-slate-900" />}
+          </button>
+        ))}
+        {!list.length && <p className="px-2 py-2 text-xs text-slate-500">Ninguna tienda con ese nombre.</p>}
+      </div>
+      {account.orgs.length > 1 && (
+        <Link href="/tiendas" className="block mt-1 border-t border-slate-100 px-2 pt-2 pb-1 text-xs font-semibold text-brand-navy hover:underline">
+          Ver todas mis tiendas
+        </Link>
+      )}
+      {account.platformAdmin &&
+        (creating ? (
+          <form onSubmit={create} className="mt-1 border-t border-slate-100 p-2 space-y-2">
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nombre de la nueva tienda"
+              className="w-full h-8 px-2.5 text-[13px] rounded-lg border border-slate-200 outline-none focus:border-brand-navy/40"
+            />
+            <label className="flex items-start gap-2 text-[11.5px] text-slate-600">
+              <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} className="mt-0.5" />
+              Copiar respuestas rápidas, etiquetas, respuestas automáticas y asesores de esta tienda
+            </label>
+            {error && <p className="text-[11.5px] text-red-600">{error}</p>}
+            <button disabled={busy || !name.trim()} className="w-full h-8 rounded-lg bg-slate-900 text-white text-[12.5px] font-semibold disabled:opacity-50">
+              {busy ? 'Creando…' : 'Crear tienda'}
+            </button>
+          </form>
+        ) : (
+          <button onClick={() => setCreating(true)} className="w-full mt-1 border-t border-slate-100 px-2 pt-2 pb-1 text-left text-xs font-semibold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Nueva tienda
+          </button>
+        ))}
+      <Link href="/settings" className="block px-2 pt-1.5 pb-1 text-xs font-medium text-slate-500 hover:text-slate-900">
+        Configuración y equipo
+      </Link>
+    </div>
   );
 }
