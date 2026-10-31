@@ -35,6 +35,7 @@ export interface AdRow {
   status: string | null;
   thumb: string | null;
   kind: 'video' | 'image' | 'other' | null;
+  previewLink: string | null; // opens the real ad on Facebook
   spend: number;
   impressions: number;
   clicks: number;
@@ -86,7 +87,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
   const row = (adId: string): AdRow => {
     let r = rows.get(adId);
     if (!r) {
-      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', status: null, thumb: null, kind: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
+      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', status: null, thumb: null, kind: null, previewLink: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
       rows.set(adId, r);
     }
     return r;
@@ -142,6 +143,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
       r.status = c.status || null;
       r.thumb = c.thumb;
       r.kind = c.kind;
+      r.previewLink = c.previewLink;
     }
     if (!r.name) r.name = `Anuncio ${r.adId}`;
   }
