@@ -249,7 +249,8 @@ export function WhatsAppConnection({ info, onChanged }: { info: IntegrationsInfo
         {wa.mode === 'manual' && (
           <div className="space-y-2 pt-2 border-t border-emerald-100">
             <p className="text-[11px] text-slate-600">
-              En tu app de Meta → <strong>WhatsApp → Configuración → Webhook</strong>, pega estos dos datos y suscribe el campo <strong>messages</strong>:
+              En tu app de Meta → <strong>WhatsApp → Configuración → Webhook</strong>, pega estos dos datos y suscribe el campo <strong>messages</strong>. Es la misma
+              URL para todos tus números: si esta app ya la tiene puesta, no cambies nada; cada mensaje llega a la tienda de su número.
             </p>
             <CopyField label="URL de devolución de llamada" value={wa.webhookUrl} />
             {wa.verifyToken && <CopyField label="Token de verificación" value={wa.verifyToken} />}
@@ -277,6 +278,7 @@ export function WhatsAppConnection({ info, onChanged }: { info: IntegrationsInfo
       <p className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
         <Plug className="w-4 h-4" /> Conecta el WhatsApp de tu tienda
       </p>
+      <ReusePortfolio onDone={onChanged} />
       {info.embedded.available && <EmbeddedSignup info={info.embedded} onDone={onChanged} />}
       {info.embedded.available && !showManual ? (
         <button type="button" onClick={() => setShowManual(true)} className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2">
@@ -299,6 +301,95 @@ export function WhatsAppConnection({ info, onChanged }: { info: IntegrationsInfo
           </ol>
           <ManualForm form={form} setForm={setForm} busy={busy} onSubmit={connect} />
         </>
+      )}
+      {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// Connect a number of a portfolio already connected in another of the person's stores (same token and app).
+function ReusePortfolio({ onDone }: { onDone: () => void }) {
+  const [sources, setSources] = useState<{ orgId: string; name: string; displayPhone: string | null }[] | null>(null);
+  const [from, setFrom] = useState('');
+  const [data, setData] = useState<{ wabas: { id: string; name: string | null; numbers: { id: string; display: string; name: string | null; quality: string | null; usedBy: string | null }[] }[]; note: string | null } | null>(null);
+  const [pick, setPick] = useState<{ wabaId: string; phoneNumberId: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    call('/api/integrations/whatsapp/numbers', 'GET')
+      .then((d) => setSources(d.sources))
+      .catch(() => setSources([]));
+  }, []);
+  const choose = async (id: string) => {
+    setFrom(id);
+    setData(null);
+    setPick(null);
+    setMsg(null);
+    if (!id) return;
+    try {
+      setData(await call(`/api/integrations/whatsapp/numbers?from=${encodeURIComponent(id)}`, 'GET'));
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    }
+  };
+  const connect = async () => {
+    if (!pick) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const d = await call('/api/integrations/whatsapp/reuse', 'POST', { from, ...pick });
+      setMsg({ ok: true, text: `Conectado: ${d.displayPhone || 'número'}${d.verifiedName ? ` (${d.verifiedName})` : ''}.` });
+      onDone();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!sources?.length) return null;
+  return (
+    <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+      <p className="text-[12.5px] font-semibold text-slate-900">Usar un número del mismo portafolio que otra de tus tiendas</p>
+      <p className="text-[11px] text-slate-500">Usa la conexión (token y app de Meta) que ya tiene otra tienda, y elige el número de esta. No tienes que pegar nada.</p>
+      <select className={input} value={from} onChange={(e) => choose(e.target.value)}>
+        <option value="">Elige la tienda con la conexión del portafolio…</option>
+        {sources.map((x) => (
+          <option key={x.orgId} value={x.orgId}>
+            {x.name}
+            {x.displayPhone ? ` (${x.displayPhone})` : ''}
+          </option>
+        ))}
+      </select>
+      {from && !data && !msg && <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}
+      {data && (
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200">
+          {data.wabas.map((w) => (
+            <div key={w.id}>
+              <p className="sticky top-0 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100">
+                {w.name || 'Cuenta de WhatsApp'} <span className="font-mono normal-case text-slate-400">{w.id}</span>
+              </p>
+              {w.numbers.map((n) => (
+                <label key={n.id} className={`flex items-center gap-2 px-3 py-2 text-[13px] border-b border-slate-100 last:border-0 ${n.usedBy ? 'opacity-60' : 'cursor-pointer hover:bg-slate-50'}`}>
+                  <input type="radio" name="wa-number" disabled={Boolean(n.usedBy)} checked={pick?.phoneNumberId === n.id} onChange={() => setPick({ wabaId: w.id, phoneNumberId: n.id })} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">
+                      {n.display} {n.name && <span className="text-slate-500">· {n.name}</span>}
+                    </span>
+                    {n.usedBy && <span className="block text-[11px] text-amber-700">Ya está en la tienda “{n.usedBy}”</span>}
+                  </span>
+                  {n.quality && <span className="text-[10px] text-slate-400">{n.quality === 'GREEN' ? 'calidad alta' : n.quality === 'YELLOW' ? 'calidad media' : n.quality === 'RED' ? 'calidad baja' : n.quality}</span>}
+                </label>
+              ))}
+              {!w.numbers.length && <p className="px-3 py-2 text-xs text-slate-500">Sin números.</p>}
+            </div>
+          ))}
+        </div>
+      )}
+      {data?.note && <p className="text-[11px] text-slate-500">{data.note}</p>}
+      {data && (
+        <button type="button" disabled={busy || !pick} onClick={connect} className={primary}>
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Conectar este número
+        </button>
       )}
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
     </div>

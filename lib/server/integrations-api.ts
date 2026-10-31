@@ -1,6 +1,8 @@
 // Shared bits for the /api/integrations routes.
 import Anthropic from '@anthropic-ai/sdk';
-import { currentOrgId, currentRole } from '@/lib/server/tenant';
+import { currentOrgId, currentRole, sessionUserId } from '@/lib/server/tenant';
+import { orgForWhatsAppNumber } from '@/lib/server/integrations';
+import { rawDb } from '@/lib/server/supabase';
 import { GRAPH_VERSION } from '@/lib/server/whatsapp';
 
 export class Forbidden extends Error {
@@ -56,5 +58,16 @@ export async function checkAnthropic(apiKey: string) {
     if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new Error('Anthropic no aceptó la clave. Revísala en console.anthropic.com → API Keys.');
     if (e instanceof Anthropic.APIError) throw new Error(`Anthropic respondió con un error (${e.status}). Inténtalo de nuevo.`);
     throw new Error('No se pudo contactar a Anthropic. Inténtalo de nuevo.');
+  }
+}
+
+// A WhatsApp number can only belong to one store (its messages must land in one place).
+export async function assertNumberFree(phoneNumberId: string) {
+  const me = await currentOrgId();
+  const owner = await orgForWhatsAppNumber(phoneNumberId);
+  if (owner && owner !== me) {
+    const { data } = await rawDb().from('organizations').select('name').eq('id', owner).maybeSingle();
+    const { data: mine } = await rawDb().from('memberships').select('org_id').eq('org_id', owner).eq('user_id', sessionUserId() || '').maybeSingle();
+    throw Object.assign(new Error(mine && data?.name ? `Este número ya está conectado en tu tienda “${data.name}”. Desconéctalo allá primero.` : 'Este número ya está conectado en otra tienda.'), { userFacing: true });
   }
 }

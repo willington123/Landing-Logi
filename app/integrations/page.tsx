@@ -631,6 +631,8 @@ export default function IntegrationsPage() {
   useEffect(() => reload(), [reload]);
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => setIsNew(new URLSearchParams(window.location.search).has('nueva')), []);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
@@ -709,6 +711,23 @@ export default function IntegrationsPage() {
               </button>
             </div>
           </div>
+
+          {isNew && (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900">
+              <p className="font-semibold">Tienda creada. Conecta lo que le pertenece a esta tienda:</p>
+              <ol className="mt-1 list-decimal pl-5 space-y-0.5 text-[13px]">
+                <li>
+                  <b>WhatsApp:</b> su número. Si es del mismo portafolio que otra de tus tiendas, usa “Usar un número del mismo portafolio”.
+                </li>
+                <li>
+                  <b>Meta Ads:</b> sus cuentas publicitarias (solo las de este producto).
+                </li>
+                <li>
+                  Luego, en <b>Automatizaciones</b>, la información del negocio para el asistente, y crea sus landings.
+                </li>
+              </ol>
+            </div>
+          )}
 
           {integ && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

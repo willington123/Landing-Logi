@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { parseWebhook, verifySignature } from '@/lib/server/whatsapp';
 import { noteWebhook } from '@/lib/server/wa-store';
-import { waConfig } from '@/lib/server/integrations';
+import { waConfig, waSecretsForNumber } from '@/lib/server/integrations';
+import { byNumber, processForOrg } from '@/lib/server/wa-webhook';
 import { runWithOrg } from '@/lib/server/tenant';
-import { processForOrg } from '@/lib/server/wa-webhook';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -38,12 +38,15 @@ export async function POST(req: NextRequest, { params }: { params: { orgId: stri
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
   const { messages, statuses } = parseWebhook(body);
-  // Only notices for this store's own number.
-  const mine = (id?: string) => !id || id === cfg.phoneNumberId;
-  await processForOrg(
-    params.orgId,
-    messages.filter((m) => mine(m.phoneNumberId)),
-    statuses.filter((s) => mine(s.phoneNumberId)),
-  );
+  // A Meta app has one webhook URL: notices for other numbers of the same app go to the store that owns them
+  // (only if that store uses this same app secret).
+  for (const [phoneNumberId, group] of Array.from(byNumber(messages, statuses))) {
+    if (!phoneNumberId || phoneNumberId === cfg.phoneNumberId) {
+      await processForOrg(params.orgId, group.messages, group.statuses);
+      continue;
+    }
+    const owner = await waSecretsForNumber(phoneNumberId);
+    if (owner && owner.appSecret && owner.appSecret === cfg.appSecret) await processForOrg(owner.orgId, group.messages, group.statuses);
+  }
   return NextResponse.json({ ok: true });
 }

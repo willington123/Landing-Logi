@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { seal, updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { phoneNumberInfo } from '@/lib/server/whatsapp';
 import { randomToken } from '@/lib/server/secrets';
-import { Forbidden, checkAnthropic, checkVapi, graphGet, requireManager } from '@/lib/server/integrations-api';
+import { Forbidden, assertNumberFree, checkAnthropic, checkVapi, graphGet, graphPost, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -42,11 +42,14 @@ export async function PUT(req: NextRequest, { params }: { params: { kind: string
       if (!token || !phoneNumberId) throw userError('Pega el token y el identificador del número.');
       if (!wabaId) throw userError('Pega el identificador de la cuenta de WhatsApp Business (WABA ID).');
       if (!appSecret) throw userError('Pega la clave secreta de tu app de Meta (Configuración de la app → Básica).');
+      await assertNumberFree(phoneNumberId);
       const info = await phoneNumberInfo({ token, phoneNumberId });
       if (!info.ok) throw userError(`Meta no aceptó el token o el número: ${info.error}`);
       await graphGet(`${wabaId}/phone_numbers?limit=1`, token).catch((e) => {
         throw userError(`Meta no aceptó el WABA ID con este token: ${e.message}`);
       });
+      // So Meta sends this WhatsApp account's messages to the app (harmless if it already does).
+      await graphPost(`${wabaId}/subscribed_apps`, token, {}).catch(() => {});
       const saved = await updateIntegrations((s) => ({
         ...s,
         whatsapp: {

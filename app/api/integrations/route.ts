@@ -50,11 +50,12 @@ export async function GET(req: NextRequest) {
             token: mask(wa.token),
             appSecretSet: Boolean(wa.appSecret),
             // What to paste in the store's own Meta app (manual mode).
-            webhookUrl: manual ? `${base}/api/whatsapp/webhook/${orgId}` : `${base}/api/whatsapp/webhook`,
+            // One URL for every number (each notice goes to the store of its number).
+            webhookUrl: `${base}/api/whatsapp/webhook`,
             verifyToken: manual && manager ? wa.verifyToken : null,
             health,
           }
-        : { connected: false, webhookUrl: `${base}/api/whatsapp/webhook/${orgId}` },
+        : { connected: false, webhookUrl: `${base}/api/whatsapp/webhook` },
       vapi: vapi
         ? { connected: true, source: vapi.source, phoneNumberId: vapi.phoneNumberId, apiKey: mask(vapi.apiKey), webhookSecretSet: Boolean(vapi.webhookSecret) }
         : { connected: false },

@@ -139,7 +139,8 @@ En **Configuración → Equipo** creas un enlace de invitación (Equipo, Adminis
 ### Conexiones de cada tienda (Integraciones)
 Cada tienda conecta sus propias cuentas en **Integraciones**; las claves se comprueban con el proveedor y se guardan **cifradas** (`INTEGRATIONS_SECRET`, o `AUTH_SECRET` si falta).
 - **WhatsApp:**
-  - **Con su propia app de Meta:** pega token permanente, identificador del número, WABA ID y clave secreta de la app. El panel le da **su URL de webhook** (`/api/whatsapp/webhook/<tienda>`) y su token de verificación.
+  - **Con su propia app de Meta:** pega token permanente, identificador del número, WABA ID y clave secreta de la app. La URL del webhook es **una sola para todos los números**: `/api/whatsapp/webhook` (cada mensaje llega a la tienda dueña de su número, validado con la clave de su app). La URL antigua `/api/whatsapp/webhook/<tienda>` sigue funcionando y también reparte los otros números de la misma app.
+  - **Un número por tienda:** un número no puede estar en dos tiendas. Para un portafolio con varios números, en la tienda nueva usa **"Usar un número del mismo portafolio que otra de tus tiendas"**: reutiliza el token y la app de esa tienda y muestra todas las cuentas de WhatsApp y números del portafolio.
   - **"Conectar con Facebook"** (Embedded Signup): aparece cuando defines `META_APP_ID`, `META_APP_SECRET`, `META_ES_CONFIG_ID` y `META_VERIFY_TOKEN` (requiere que Meta te apruebe como Tech Provider). En Meta, la URL del webhook de la app de la plataforma es `/api/whatsapp/webhook`.
 - **Plantillas:** se crean, se revisan y se eligen desde el panel (la de confirmación de pedidos con un clic).
 - **Vapi**, **Claude (Anthropic)** y **Meta: API de conversiones**: cada tienda con su clave.
