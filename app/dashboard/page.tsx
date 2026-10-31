@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 import { CallButton, useVapiReady } from '@/components/voice/CallButton';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
@@ -82,6 +83,8 @@ export default function DashboardPage() {
         <Header onOpenWizard={() => setIsWizardOpen(true)} title="Inicio" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+          <OnboardingChecklist onCreateLanding={() => setIsWizardOpen(true)} />
+
           {/* Welcome */}
           <section className={`${card} relative overflow-hidden p-6 sm:p-8`}>
             <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-green/10 blur-3xl pointer-events-none" />
