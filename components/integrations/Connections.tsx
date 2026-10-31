@@ -2,6 +2,7 @@
 
 // Integrations: each store connects its own WhatsApp, Vapi, Meta Conversions API and Claude keys.
 import React, { useEffect, useState } from 'react';
+import { fetchAccount } from '@/lib/account-client';
 import { AlertCircle, Check, CheckCircle2, Copy, ExternalLink, Loader2, Plug, Unplug } from 'lucide-react';
 
 export interface IntegrationsInfo {
@@ -490,7 +491,9 @@ const ADS_NOTICE: Record<string, { ok: boolean; text: string }> = {
 // Meta Ads (read-only): spend and creatives for the "Creativos" page. A store can read several ad accounts.
 export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo; onChanged: () => void }) {
   const st = info.metaAds;
-  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string; active: boolean }[] | null>(null);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string; active: boolean; business: { id: string; name: string } | null; usedBy: string | null }[] | null>(null);
+  const [owner, setOwner] = useState(false); // platform owner: can create one store per account
+  const [made, setMade] = useState<{ created: { name: string }[]; skipped: { accountId: string; reason: string }[] } | null>(null);
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [q, setQ] = useState('');
@@ -503,6 +506,9 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('ads');
     if (p && ADS_NOTICE[p]) setMsg(ADS_NOTICE[p]);
+    fetchAccount()
+      .then((r) => setOwner(Boolean(r?.data?.platformAdmin)))
+      .catch(() => {});
   }, []);
   const openPicker = () => {
     setPicking(true);
@@ -535,7 +541,33 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
   };
   const days = st.expiresAt ? Math.ceil((new Date(st.expiresAt).getTime() - Date.now()) / 86400000) : null;
   const term = q.trim().toLowerCase();
-  const shown = (accounts || []).filter((a) => !term || a.name.toLowerCase().includes(term) || a.id.includes(term));
+  const shown = (accounts || []).filter((a) => !term || a.name.toLowerCase().includes(term) || a.id.includes(term) || (a.business?.name || '').toLowerCase().includes(term));
+  // Grouped by portfolio (Business Manager), portfolios in alphabetical order.
+  const groups = Object.entries(
+    shown.reduce<Record<string, typeof shown>>((g, a) => {
+      const k = a.business?.name || 'Sin portafolio';
+      (g[k] ||= []).push(a);
+      return g;
+    }, {}),
+  ).sort(([a], [b]) => a.localeCompare(b));
+  const eligible = selected.filter((id) => !accounts?.find((a) => a.id === id)?.usedBy && !st.accounts.some((a) => a.id === id));
+  const createStores = async () => {
+    const ids = eligible;
+    if (!ids.length) return setMsg({ ok: false, text: 'Marca cuentas que no estén ya en una tienda.' });
+    if (!window.confirm(`Se crearán ${ids.length} tiendas, una por cada cuenta marcada, con su cuenta publicitaria ya conectada. ¿Continuar?`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const d = await call('/api/account/stores/from-ads', 'POST', { accountIds: ids, copySettings: true });
+      setMade(d);
+      setAccounts(null);
+      setPicking(false);
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
   const toggle = (id: string) => setSelected((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
 
   return (
@@ -593,22 +625,44 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
             <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
           ) : accounts.length ? (
             <>
-              {accounts.length > 8 && <input className={input} placeholder="Buscar por nombre o id…" value={q} onChange={(e) => setQ(e.target.value)} />}
-              <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
-                {shown.map((a) => (
-                  <label key={a.id} className="flex items-center gap-2 px-3 py-2 text-[13px] cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggle(a.id)} />
-                    <span className="flex-1 min-w-0 truncate">
-                      {a.name} <span className="font-mono text-[11px] text-slate-400">act_{a.id}</span>
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      {a.currency}
-                      {a.active ? '' : ' · inactiva'}
-                    </span>
-                  </label>
+              {accounts.length > 8 && <input className={input} placeholder="Buscar por cuenta, portafolio o id…" value={q} onChange={(e) => setQ(e.target.value)} />}
+              <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+                {groups.map(([biz, list]) => (
+                  <div key={biz}>
+                    <div className="sticky top-0 z-[1] flex items-center justify-between bg-slate-50 px-3 py-1.5 border-b border-slate-100">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate">{biz}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ids = list.filter((a) => !a.usedBy).map((a) => a.id);
+                          const all = ids.every((id) => selected.includes(id));
+                          setSelected((x) => (all ? x.filter((id) => !ids.includes(id)) : Array.from(new Set([...x, ...ids]))));
+                        }}
+                        className="text-[11px] font-semibold text-brand-navy hover:underline shrink-0"
+                      >
+                        Marcar todas
+                      </button>
+                    </div>
+                    {list.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 px-3 py-2 text-[13px] cursor-pointer hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                        <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggle(a.id)} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate">
+                            {a.name} <span className="font-mono text-[11px] text-slate-400">act_{a.id}</span>
+                          </span>
+                          {a.usedBy && <span className="block text-[11px] text-amber-700">Ya está en la tienda “{a.usedBy}”</span>}
+                        </span>
+                        <span className="text-[11px] text-slate-400 shrink-0">
+                          {a.currency}
+                          {a.active ? '' : ' · inactiva'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 ))}
                 {!shown.length && <p className="px-3 py-2 text-xs text-slate-500">Ninguna cuenta con ese nombre.</p>}
               </div>
+              <p className="text-[11px] text-slate-500">{selected.length} marcadas</p>
               <div className="flex items-center gap-2">
                 <button disabled={busy || !selected.length} onClick={() => save({ accountIds: selected })} className={primary}>
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Usar {selected.length || ''} {selected.length === 1 ? 'cuenta' : 'cuentas'}
@@ -619,6 +673,17 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
                   </button>
                 )}
               </div>
+              {owner && (
+                <div className="rounded-lg bg-sky-50 p-3 text-[12px] text-sky-900 space-y-2">
+                  <p>
+                    ¿Cada cuenta es un producto distinto? Crea <b>una tienda por cada cuenta marcada</b>: se llaman como la cuenta, quedan sin costo y con su cuenta publicitaria ya
+                    conectada. Luego conectas el WhatsApp y el asistente de cada una.
+                  </p>
+                  <button type="button" disabled={busy || !eligible.length} onClick={createStores} className="h-8 px-3 rounded-lg bg-sky-700 text-white text-[12px] font-semibold disabled:opacity-50">
+                    {busy ? 'Creando…' : `Crear una tienda por cada cuenta marcada (${eligible.length})`}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <p className="text-xs text-red-600">Tu usuario de Facebook no tiene cuentas publicitarias. Pide acceso en el Business Manager y vuelve a conectar.</p>
@@ -653,6 +718,22 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
               {manual ? 'Usar el botón de Facebook' : 'Prefiero pegar un token'}
             </button>
           )}
+        </div>
+      )}
+      {made && (
+        <div className="rounded-lg bg-emerald-50 p-3 text-[12px] text-emerald-900 space-y-1">
+          <p>
+            Se {made.created.length === 1 ? 'creó 1 tienda' : `crearon ${made.created.length} tiendas`}
+            {made.created.length ? `: ${made.created.slice(0, 5).map((c) => c.name).join(', ')}${made.created.length > 5 ? '…' : ''}` : ''}.
+          </p>
+          {made.skipped.map((x) => (
+            <p key={x.accountId} className="text-amber-800">
+              act_{x.accountId}: {x.reason}
+            </p>
+          ))}
+          <a href="/tiendas" className="font-semibold underline">
+            Ver Mis tiendas
+          </a>
         </div>
       )}
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
