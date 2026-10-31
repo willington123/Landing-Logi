@@ -229,3 +229,20 @@ export async function adsConfig(orgId?: string | null): Promise<AdsConfig | null
   const accounts: AdAccountRef[] = s.accounts?.length ? s.accounts : s.accountId ? [{ id: s.accountId, name: s.accountName || null, currency: s.currency || null }] : [];
   return { token, accountId: accounts[0]?.id || null, accounts, accountName: accounts[0]?.name || null, currency: accounts[0]?.currency || null, mode: s.mode, expiresAt: s.expiresAt || null };
 }
+
+// ---------- stores sharing a Meta app (one webhook URL per app) ----------
+
+// App secret and verify token of the store that owns a WhatsApp number (manual connections only).
+export async function waSecretsForNumber(phoneNumberId: string): Promise<{ orgId: string; appSecret: string | null } | null> {
+  const org = await orgForWhatsAppNumber(phoneNumberId);
+  if (!org) return null;
+  const s = (await stored(org)).whatsapp;
+  return { orgId: org, appSecret: s?.appSecret ? decrypt(s.appSecret) : null };
+}
+
+// Is this verify token one of a store's? (Meta checks the shared URL with it when that store's app is set up.)
+export async function isStoreVerifyToken(token: string): Promise<boolean> {
+  if (!token || token.length < 8) return false;
+  const { data } = await rawDb().from('settings').select('org_id').eq('id', 'integrations').eq('data->whatsapp->>verifyToken', token).limit(1);
+  return Boolean(data?.length);
+}

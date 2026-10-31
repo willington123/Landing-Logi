@@ -318,7 +318,7 @@ function StoreMenu({ account, onSwitch, onClose }: { account: AccountInfo; onSwi
       return;
     }
     clearLocalData();
-    window.location.href = '/dashboard';
+    window.location.href = '/integrations?nueva=1';
   };
   return (
     <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5 z-10">
