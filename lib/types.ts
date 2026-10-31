@@ -219,6 +219,10 @@ export interface OrderItem {
   source?: 'landing' | 'whatsapp_bot'; // where the order was taken (landing form by default)
   utmSource?: string;
   utmCampaign?: string;
+  utmContent?: string;
+  adId?: string; // Meta ad that brought the order (landing link ?ad_id= / utm_content, or a click-to-WhatsApp chat)
+  adHeadline?: string | null;
+  adChannel?: 'landing' | 'whatsapp';
   callTaskId?: string;
   createdAt: string;
   confirmedAt?: string;

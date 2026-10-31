@@ -72,6 +72,8 @@ export default function PublicLanding({ initial, slug, cloud }: { initial: Landi
         landingId: config!.id,
         utmSource: q.get('utm_source'),
         utmCampaign: q.get('utm_campaign'),
+        utmContent: q.get('utm_content'),
+        adId: q.get('ad_id'),
         fbclid: q.get('fbclid'),
         pageUrl: window.location.href,
       }),

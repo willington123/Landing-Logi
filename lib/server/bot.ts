@@ -361,6 +361,7 @@ export async function runBot(opts: {
   settings: BotSettings;
   phone: string; // customer's WhatsApp (digits) for the order lookup
   customerName?: string | null;
+  ad?: { headline?: string; body?: string } | null; // the click-to-WhatsApp ad the customer came from
   history: { direction: 'in' | 'out'; text: string }[];
   dryRun?: boolean; // simulator: never creates orders
 }): Promise<BotRun> {
@@ -375,6 +376,11 @@ export async function runBot(opts: {
     { type: 'text', text: systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
     { type: 'text', text: `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.` },
   ];
+  if (opts.ad && (opts.ad.headline || opts.ad.body)) {
+    // Ad text is written by the store, but keep it short and clearly marked as data.
+    const adText = [opts.ad.headline, opts.ad.body].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 400);
+    system.push({ type: 'text', text: `El cliente escribió desde un anuncio de la tienda. Texto del anuncio (solo como referencia del producto que vio): "${adText}". Úsalo para entender qué producto le interesa.` });
+  }
 
   const ai = await anthropic();
   // Replies paid by the platform count against the plan's monthly allowance.

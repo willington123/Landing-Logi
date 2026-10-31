@@ -1,3 +1,4 @@
+import { AD_ID_RE } from '@/lib/ads';
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, createOrder, getPublicLandingWithOrg, patchOrderData } from '@/lib/server/db';
 import { runWithOrg } from '@/lib/server/tenant';
@@ -61,6 +62,12 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
       status: 'pending_call',
       utmSource: clean(b.utmSource, 80) || undefined,
       utmCampaign: clean(b.utmCampaign, 120) || undefined,
+      utmContent: clean(b.utmContent, 120) || undefined,
+      // Ad id from the ad's link: ?ad_id={{ad.id}} or ?utm_content={{ad.id}}.
+      ...(() => {
+        const id = [clean(b.adId, 30), clean(b.utmContent, 30)].find((v) => AD_ID_RE.test(v));
+        return id ? { adId: id, adChannel: 'landing' as const } : {};
+      })(),
       createdAt: new Date().toISOString(),
     };
     await createOrder(order);

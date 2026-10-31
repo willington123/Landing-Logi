@@ -51,6 +51,8 @@ const COLUMNS: (SheetColumn & { value: (o: OrderItem & { whatsapp?: { ok?: boole
   { header: 'Origen', width: 16, value: (o) => (o.source === 'whatsapp_bot' ? 'Asistente WhatsApp' : 'Landing') },
   { header: 'UTM source', width: 14, value: (o) => o.utmSource },
   { header: 'UTM campaign', width: 18, value: (o) => o.utmCampaign },
+  { header: 'Anuncio (id)', width: 20, value: (o) => o.adId },
+  { header: 'Anuncio', width: 28, value: (o) => o.adHeadline || undefined },
 ];
 
 export function orderRows(orders: OrderItem[]): Cell[][] {
