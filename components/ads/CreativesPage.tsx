@@ -3,7 +3,7 @@
 // Creativos: which ads sell (confirmed cash-on-delivery sales) and which spend without selling.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Flame, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, Trophy } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Flame, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, Trophy } from 'lucide-react';
 
 type Range = 'today' | '7d' | '30d' | 'month';
 type Flag = 'winner' | 'waste' | 'cancels';
@@ -36,6 +36,7 @@ interface Report {
   totals: { spend: number; orders: number; confirmed: number; cancelled: number; revenue: number; chats: number; cpa: number | null; roas: number | null };
   unattributed: number;
   wasteMin: number;
+  creativesError?: string | null;
 }
 
 const RANGES: { id: Range; label: string }[] = [
@@ -55,6 +56,29 @@ const FLAG: Record<Flag, { label: string; cls: string; Icon: typeof Trophy }> = 
   waste: { label: 'Gasta sin vender', cls: 'bg-red-50 text-red-700 border-red-200', Icon: Flame },
   cancels: { label: 'Se cancela mucho', cls: 'bg-amber-50 text-amber-800 border-amber-200', Icon: AlertTriangle },
 };
+
+const URL_PARAMS = 'utm_source=facebook&utm_campaign={{campaign.name}}&utm_content={{ad.id}}';
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          window.prompt('Copia este texto:', text);
+        }
+        setDone(true);
+        setTimeout(() => setDone(false), 2000);
+      }}
+      className="shrink-0 h-8 px-3 rounded-lg bg-sky-700 text-white text-[12px] font-semibold inline-flex items-center gap-1.5"
+    >
+      {done ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {done ? 'Copiado' : 'Copiar texto'}
+    </button>
+  );
+}
 
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
 
@@ -151,15 +175,29 @@ export default function CreativesPage() {
         </div>
       )}
 
+      {rep?.creativesError && (
+        <div className="rounded-xl bg-amber-50 text-amber-900 text-[13px] px-4 py-3 flex gap-2">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>No pudimos traer las imágenes de los anuncios desde Meta: {rep.creativesError}</p>
+        </div>
+      )}
+
       {rep && (rep.unattributed > 0 || !rep.sameCurrency) && (
         <div className="rounded-xl bg-sky-50 text-sky-900 text-[13px] px-4 py-3 flex gap-2">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="space-y-1">
             {rep.unattributed > 0 && (
-              <p>
-                {rep.unattributed === 1 ? '1 pedido de este periodo no dice' : `${rep.unattributed} pedidos de este periodo no dicen`} de qué anuncio vino. En tus anuncios, en <b>Parámetros de URL</b>, pon:{' '}
-                <code className="bg-white/70 rounded px-1">utm_source=facebook&amp;utm_campaign={'{{campaign.name}}'}&amp;utm_content={'{{ad.id}}'}</code>
-              </p>
+              <div className="space-y-2">
+                <p>
+                  {rep.unattributed === 1 ? '1 pedido de este periodo no dice' : `${rep.unattributed} pedidos de este periodo no dicen`} de qué anuncio vino. Para que cada pedido
+                  quede ligado a su anuncio: en el Administrador de anuncios, pestaña <b>Anuncios</b>, selecciónalos todos → <b>Editar</b> → <b>Seguimiento → Parámetros de URL</b> y
+                  pega este texto (una sola vez para todos):
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <code className="bg-white/80 rounded-lg px-2 py-1.5 text-[12px] break-all">{URL_PARAMS}</code>
+                  <CopyButton text={URL_PARAMS} />
+                </div>
+              </div>
             )}
             {!rep.sameCurrency && <p>Tu cuenta publicitaria cobra en {rep.currency} y tus ventas están en COP, así que no calculamos el ROAS.</p>}
           </div>

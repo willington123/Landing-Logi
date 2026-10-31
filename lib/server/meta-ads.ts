@@ -173,24 +173,62 @@ export interface AdCreative {
   kind: 'video' | 'image' | 'other';
 }
 
-// Thumbnails and status for a list of ads (50 per request).
-export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<Record<string, AdCreative>> {
+// Thumbnails and status for a list of ads. Tries the account's /ads edge (bigger thumbnails), then a plain
+// multi-id read. Failures are not cached and are reported so the page can say why images are missing.
+const CREATIVE_FIELDS = 'id,name,effective_status,creative.thumbnail_width(256).thumbnail_height(256){thumbnail_url,image_url,object_type,video_id}';
+const CREATIVE_FIELDS_PLAIN = 'id,name,effective_status,creative{thumbnail_url,image_url,object_type,video_id}';
+
+function toCreative(a: any): AdCreative {
+  const c = a?.creative || {};
+  return {
+    name: String(a?.name || ''),
+    status: String(a?.effective_status || ''),
+    thumb: c.thumbnail_url || c.image_url || null,
+    kind: c.video_id || c.object_type === 'VIDEO' ? 'video' : c.image_url || c.object_type === 'PHOTO' ? 'image' : 'other',
+  };
+}
+
+export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ creatives: Record<string, AdCreative>; error: string | null }> {
   const out: Record<string, AdCreative> = {};
   const todo = Array.from(new Set(ids.filter((id) => /^\d{6,25}$/.test(id))));
+  let error: string | null = null;
   for (let i = 0; i < todo.length; i += 50) {
     const chunk = todo.slice(i, i + 50);
-    const d = await cached(`cr:${chunk.join(',')}`, 60 * 60000, () =>
-      graph('', cfg.token, { ids: chunk.join(','), fields: 'name,effective_status,creative{thumbnail_url,image_url,object_type,video_id}' }).catch(() => ({})),
-    );
-    for (const [id, a] of Object.entries(d as Record<string, any>)) {
-      const c = a?.creative || {};
-      out[id] = {
-        name: String(a?.name || ''),
-        status: String(a?.effective_status || ''),
-        thumb: c.thumbnail_url || c.image_url || null,
-        kind: c.video_id || c.object_type === 'VIDEO' ? 'video' : c.image_url || c.object_type === 'PHOTO' ? 'image' : 'other',
-      };
+    const key = `cr:${cfg.accountId}:${chunk.join(',')}`;
+    const hit = cache.get(key);
+    if (hit && hit.until > Date.now()) {
+      Object.assign(out, hit.data as Record<string, AdCreative>);
+      continue;
     }
+    const got: Record<string, AdCreative> = {};
+    const attempts: (() => Promise<void>)[] = [
+      async () => {
+        const d = await graph(`act_${cfg.accountId}/ads`, cfg.token, {
+          fields: CREATIVE_FIELDS,
+          filtering: JSON.stringify([{ field: 'ad.id', operator: 'IN', value: chunk }]),
+          limit: '100',
+        });
+        for (const a of d.data || []) got[String(a.id)] = toCreative(a);
+      },
+      async () => {
+        const d = await graph('', cfg.token, { ids: chunk.join(','), fields: CREATIVE_FIELDS_PLAIN });
+        for (const [id, a] of Object.entries(d as Record<string, any>)) got[id] = toCreative(a);
+      },
+    ];
+    for (const run of attempts) {
+      try {
+        await run();
+        if (Object.keys(got).length) break;
+      } catch (e: any) {
+        error = e?.message || String(e);
+        console.error('Meta Ads creatives', cfg.accountId, error);
+      }
+    }
+    if (Object.keys(got).length) {
+      error = null;
+      cache.set(key, { data: got, until: Date.now() + 60 * 60000 });
+    }
+    Object.assign(out, got);
   }
-  return out;
+  return { creatives: out, error };
 }
