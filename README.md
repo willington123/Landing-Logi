@@ -127,6 +127,11 @@ Cada persona entra con **su correo y contraseña**, y cada tienda (cuenta) tiene
 ### Equipo e invitaciones
 En **Configuración → Equipo** creas un enlace de invitación (Equipo, Administrador o Dueño) y lo envías por WhatsApp. Vence en 7 días y sirve una vez. Si quitas a alguien, pierde el acceso en segundos. Cambiar la contraseña cierra las otras sesiones abiertas.
 
+### Muchos negocios (tus propias tiendas)
+- Con tu correo en `PLATFORM_ADMIN_EMAILS`, en el menú de tiendas (abajo a la izquierda) aparece **Nueva tienda**: queda **sin costo**, con el asistente IA de la plataforma sin límite mensual, y puede copiar respuestas rápidas, etiquetas, respuestas automáticas y asesores de la tienda actual.
+- Cada tienda tiene su WhatsApp, su asistente (información del negocio y sus landings) y una o **varias cuentas publicitarias** (Integraciones → Meta Ads → Cambiar cuentas).
+- **Mis tiendas** muestra todas tus tiendas en una tabla: pedidos, confirmados, ventas, gasto en anuncios, ROAS y qué tiene conectado cada una. Clic en una fila para entrar.
+
 ### Nuevas tiendas
 - Con `SIGNUP_OPEN=true` cualquiera puede crear su tienda en `/registro` (por defecto está cerrado).
 - Una misma persona puede estar en varias tiendas y cambiar entre ellas desde el menú (abajo a la izquierda).

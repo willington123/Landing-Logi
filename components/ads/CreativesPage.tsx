@@ -9,6 +9,9 @@ type Range = 'today' | '7d' | '30d' | 'month';
 type Flag = 'winner' | 'waste' | 'cancels';
 interface Row {
   adId: string;
+  accountId: string | null;
+  accountName: string | null;
+  currency: string | null;
   name: string;
   campaign: string;
   status: string | null;
@@ -32,6 +35,7 @@ interface Report {
   until: string;
   currency: string | null;
   sameCurrency: boolean;
+  accounts?: { id: string; name: string | null; currency: string | null; error: string | null }[];
   rows: Row[];
   totals: { spend: number; orders: number; confirmed: number; cancelled: number; revenue: number; chats: number; cpa: number | null; roas: number | null };
   unattributed: number;
@@ -103,17 +107,24 @@ export default function CreativesPage() {
     load(range);
   }, [range, load]);
 
-  const money = (n: number) => {
-    const cur = state.report?.currency || 'COP';
-    return cur === 'COP' ? `$${Math.round(n).toLocaleString('es-CO')}` : `${n.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${cur}`;
-  };
+  const money = (n: number, cur?: string | null) =>
+    !cur || cur.toUpperCase() === 'COP' ? `$${Math.round(n).toLocaleString('es-CO')}` : `${n.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${cur}`;
   const cop = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
-  const rows = useMemo(() => (state.report?.rows || []).filter((r) => filter === 'all' || r.flags.includes(filter)), [state.report, filter]);
+  const [acct, setAcct] = useState('');
+  const accounts = state.report?.accounts || [];
+  const byAccount = useMemo(() => (state.report?.rows || []).filter((r) => !acct || r.accountId === acct), [state.report, acct]);
+  const rows = useMemo(() => byAccount.filter((r) => filter === 'all' || r.flags.includes(filter)), [byAccount, filter]);
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: state.report?.rows.length || 0, winner: 0, waste: 0, cancels: 0 };
-    for (const r of state.report?.rows || []) r.flags.forEach((f) => c[f]++);
+    const c: Record<string, number> = { all: byAccount.length, winner: 0, waste: 0, cancels: 0 };
+    for (const r of byAccount) r.flags.forEach((f) => c[f]++);
     return c;
-  }, [state.report]);
+  }, [byAccount]);
+  // Totals of what is on screen (COP accounts only; other currencies can't be added to COP sales).
+  const view = useMemo(() => {
+    const cops = byAccount.filter((r) => !r.currency || r.currency.toUpperCase() === 'COP');
+    const t = cops.reduce((a, r) => ({ spend: a.spend + r.spend, orders: a.orders + r.orders, confirmed: a.confirmed + r.confirmed, revenue: a.revenue + r.revenue, chats: a.chats + r.chats }), { spend: 0, orders: 0, confirmed: 0, revenue: 0, chats: 0 });
+    return { ...t, cpa: t.confirmed && t.spend ? t.spend / t.confirmed : null, roas: t.spend ? t.revenue / t.spend : null };
+  }, [byAccount]);
 
   if (!state.loading && (state.connected === false || state.expired)) {
     return (
@@ -132,7 +143,7 @@ export default function CreativesPage() {
   }
 
   const rep = state.report;
-  const t = rep?.totals;
+  const t = rep ? view : null;
   return (
     <div className="space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
@@ -183,7 +194,7 @@ export default function CreativesPage() {
         </div>
       )}
 
-      {rep && (rep.unattributed > 0 || !rep.sameCurrency) && (
+      {rep && (rep.unattributed > 0 || !rep.sameCurrency || accounts.some((a) => a.error)) && (
         <div className="rounded-xl bg-sky-50 text-sky-900 text-[13px] px-4 py-3 flex gap-2">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="space-y-1">
@@ -200,8 +211,35 @@ export default function CreativesPage() {
                 </div>
               </div>
             )}
-            {!rep.sameCurrency && <p>Tu cuenta publicitaria cobra en {rep.currency} y tus ventas están en COP, así que no calculamos el ROAS.</p>}
+            {!rep.sameCurrency && (
+              <p>
+                {accounts.filter((a) => a.currency && a.currency !== 'COP').map((a) => a.name || a.id).join(', ') || 'Una cuenta'} cobra en otra moneda: su gasto se muestra en esa
+                moneda, pero no se suma a los totales ni tiene ROAS (tus ventas están en COP).
+              </p>
+            )}
+            {accounts.filter((a) => a.error).map((a) => (
+              <p key={a.id} className="text-red-700">
+                No pudimos leer la cuenta {a.name || a.id}: {a.error}
+              </p>
+            ))}
           </div>
+        </div>
+      )}
+
+      {accounts.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-slate-500 mr-1">Cuenta:</span>
+          {[{ id: '', name: 'Todas', currency: null, error: null }, ...accounts].map((a) => (
+            <button
+              key={a.id || 'all'}
+              onClick={() => setAcct(a.id)}
+              className={`h-8 px-3 rounded-full text-[12.5px] font-medium border transition ${acct === a.id ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+              title={a.id ? `act_${a.id}` : undefined}
+            >
+              {a.name || `act_${a.id}`}
+              {a.currency && a.currency !== 'COP' && <span className="opacity-60"> · {a.currency}</span>}
+            </button>
+          ))}
         </div>
       )}
 
@@ -248,7 +286,7 @@ export default function CreativesPage() {
                       <td className="px-4 py-3">
                         <AdCell r={r} onOpen={setOpenAd} />
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums font-medium">{money(r.spend)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums font-medium">{money(r.spend, r.currency)}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{r.clicks.toLocaleString('es-CO')}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{Math.max(r.chats, r.metaChats).toLocaleString('es-CO')}</td>
                       <td className="px-3 py-3 text-right tabular-nums">
@@ -257,7 +295,7 @@ export default function CreativesPage() {
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums font-semibold text-slate-900">{r.confirmed}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{cop(r.revenue)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{r.cpa === null ? '—' : money(r.cpa)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{r.cpa === null ? '—' : money(r.cpa, r.currency)}</td>
                       <td className={`px-4 py-3 text-right tabular-nums font-semibold ${r.roas === null ? 'text-slate-400' : r.roas >= 2 ? 'text-emerald-700' : r.roas < 1 ? 'text-red-600' : 'text-slate-900'}`}>
                         {r.roas === null ? '—' : `${r.roas.toFixed(2)}x`}
                       </td>
@@ -273,12 +311,12 @@ export default function CreativesPage() {
                   <AdCell r={r} onOpen={setOpenAd} />
                   <div className="grid grid-cols-3 gap-2 text-center">
                     {[
-                      ['Gasto', money(r.spend)],
+                      ['Gasto', money(r.spend, r.currency)],
                       ['Confirmados', String(r.confirmed)],
                       ['ROAS', r.roas === null ? '—' : `${r.roas.toFixed(2)}x`],
                       ['Pedidos', String(r.orders)],
                       ['Ventas', cop(r.revenue)],
-                      ['Costo/venta', r.cpa === null ? '—' : money(r.cpa)],
+                      ['Costo/venta', r.cpa === null ? '—' : money(r.cpa, r.currency)],
                     ].map(([k, v]) => (
                       <div key={k} className="rounded-lg bg-slate-50 py-1.5">
                         <p className="text-[10px] text-slate-500">{k}</p>
@@ -346,6 +384,7 @@ function AdCell({ r, onOpen }: { r: Row; onOpen: (r: Row) => void }) {
         </button>
         <p className="text-[11px] text-slate-500 truncate max-w-[280px]">
           {r.campaign || `id ${r.adId}`}
+          {r.accountName && <span className="ml-1 text-slate-400">· {r.accountName}</span>}
           {st && <span className={`ml-1 ${st.cls}`}>· {st.label}</span>}
         </p>
         {r.flags.length > 0 && (
@@ -371,7 +410,7 @@ const FORMATS = [
   { id: 'INSTAGRAM_STORY', label: 'Historias / Reels', h: 720 },
 ] as const;
 
-function AdPreview({ r, money, onClose }: { r: Row; money: (n: number) => string; onClose: () => void }) {
+function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: string | null) => string; onClose: () => void }) {
   const [format, setFormat] = useState<(typeof FORMATS)[number]['id']>('MOBILE_FEED_STANDARD');
   const [mode, setMode] = useState<'preview' | 'video'>('preview');
   const [data, setData] = useState<{ src: string | null; video: string | null } | null>(null);
@@ -446,13 +485,13 @@ function AdPreview({ r, money, onClose }: { r: Row; money: (n: number) => string
           </div>
           <div className="space-y-2">
             {[
-              ['Gasto', money(r.spend)],
+              ['Gasto', money(r.spend, r.currency)],
               ['Clics', r.clicks.toLocaleString('es-CO')],
               ['Chats', Math.max(r.chats, r.metaChats).toLocaleString('es-CO')],
               ['Pedidos', `${r.orders}${r.cancelled ? ` (${r.cancelled} cancelados)` : ''}`],
               ['Confirmados', String(r.confirmed)],
               ['Ventas confirmadas', `$${Math.round(r.revenue).toLocaleString('es-CO')}`],
-              ['Costo por venta', r.cpa === null ? '—' : money(r.cpa)],
+              ['Costo por venta', r.cpa === null ? '—' : money(r.cpa, r.currency)],
               ['ROAS real', r.roas === null ? '—' : `${r.roas.toFixed(2)}x`],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-[13px]">

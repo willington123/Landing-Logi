@@ -131,7 +131,7 @@ const action = (actions: any[] | undefined, ...types: string[]) => (actions || [
 
 export async function adInsights(cfg: AdsConfig, since: string, until: string): Promise<AdInsight[]> {
   if (!cfg.accountId) return [];
-  return cached(`ins:${cfg.accountId}:${since}:${until}`, 10 * 60000, async () => {
+  return cached(`ins:${cfg.accountId}:${cfg.token.slice(-12)}:${since}:${until}`, 10 * 60000, async () => {
     const out: AdInsight[] = [];
     let d = await graph(`act_${cfg.accountId}/insights`, cfg.token, {
       level: 'ad',
@@ -211,14 +211,16 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
         for (const a of d.data || []) got[String(a.id)] = toCreative(a);
       },
       async () => {
-        const d = await graph('', cfg.token, { ids: chunk.join(','), fields: CREATIVE_FIELDS_PLAIN });
+        const missing = chunk.filter((id) => !got[id]);
+        if (!missing.length) return;
+        const d = await graph('', cfg.token, { ids: missing.join(','), fields: CREATIVE_FIELDS_PLAIN });
         for (const [id, a] of Object.entries(d as Record<string, any>)) got[id] = toCreative(a);
       },
     ];
     for (const run of attempts) {
       try {
         await run();
-        if (Object.keys(got).length) break;
+        if (chunk.every((id) => got[id])) break; // ads of other accounts are filled by the next attempt
       } catch (e: any) {
         error = e?.message || String(e);
         console.error('Meta Ads creatives', cfg.accountId, error);
@@ -241,10 +243,10 @@ export type PreviewFormat = (typeof PREVIEW_FORMATS)[number];
 // Meta returns an <iframe> snippet; only its src (a facebook.com preview page) is passed to the browser.
 export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFormat): Promise<{ src: string | null; video: string | null }> {
   if (!cfg.accountId || !/^\d{6,25}$/.test(adId)) throw new AdsError('Anuncio no válido.');
-  return cached(`pv:${cfg.accountId}:${adId}:${format}`, 30 * 60000, async () => {
+  return cached(`pv:${cfg.accounts.map((a) => a.id).join(',')}:${adId}:${format}`, 30 * 60000, async () => {
     // The ad must belong to the store's connected account.
     const ad = await graph(adId, cfg.token, { fields: 'account_id,creative{video_id}' });
-    if (String(ad.account_id || '') !== cfg.accountId) throw new AdsError('Este anuncio no es de tu cuenta publicitaria.');
+    if (!cfg.accounts.some((a) => a.id === String(ad.account_id || ''))) throw new AdsError('Este anuncio no es de tus cuentas publicitarias.');
     let src: string | null = null;
     try {
       const d = await graph(`${adId}/previews`, cfg.token, { ad_format: format });
@@ -262,5 +264,13 @@ export async function adPreview(cfg: AdsConfig, adId: string, format: PreviewFor
       if (v?.source && /^https:\/\//.test(v.source)) video = String(v.source);
     }
     return { src, video };
+  });
+}
+
+// Total spend of one ad account in a date range (for the "Mis tiendas" overview).
+export async function accountSpend(cfg: AdsConfig, accountId: string, since: string, until: string): Promise<number> {
+  return cached(`sp:${accountId}:${cfg.token.slice(-12)}:${since}:${until}`, 10 * 60000, async () => {
+    const d = await graph(`act_${accountId}/insights`, cfg.token, { fields: 'spend', time_range: JSON.stringify({ since, until }) });
+    return num(d?.data?.[0]?.spend);
   });
 }

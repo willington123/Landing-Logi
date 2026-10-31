@@ -29,6 +29,7 @@ export interface IntegrationsInfo {
     pending: boolean;
     accountId: string | null;
     accountName: string | null;
+    accounts: { id: string; name: string | null; currency: string | null }[];
     currency: string | null;
     mode: 'oauth' | 'manual' | null;
     expiresAt: string | null;
@@ -86,7 +87,7 @@ function SourceBadge({ source, left }: { source?: 'env' | 'store' | 'plan'; left
   if (source === 'plan')
     return (
       <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">
-        Incluida en tu plan{typeof left === 'number' ? ` · ${left.toLocaleString('es-CO')} respuestas este mes` : ''}
+        Incluida en tu plan{typeof left === 'number' ? (left >= 100_000_000 ? ' · sin límite' : ` · ${left.toLocaleString('es-CO')} respuestas este mes`) : ''}
       </span>
     );
   return (
@@ -486,35 +487,45 @@ const ADS_NOTICE: Record<string, { ok: boolean; text: string }> = {
   not_available: { ok: false, text: 'El botón de Facebook aún no está activo en la plataforma. Usa un token.' },
 };
 
-// Meta Ads (read-only): spend and creatives for the "Creativos" page.
+// Meta Ads (read-only): spend and creatives for the "Creativos" page. A store can read several ad accounts.
 export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo; onChanged: () => void }) {
   const st = info.metaAds;
   const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string; active: boolean }[] | null>(null);
-  const [accountId, setAccountId] = useState('');
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [q, setQ] = useState('');
+  const [ids, setIds] = useState('');
   const [token, setToken] = useState('');
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('ads');
-    if (q && ADS_NOTICE[q]) setMsg(ADS_NOTICE[q]);
+    const p = new URLSearchParams(window.location.search).get('ads');
+    if (p && ADS_NOTICE[p]) setMsg(ADS_NOTICE[p]);
   }, []);
-  useEffect(() => {
-    if (!st.pending || !info.canManage) return;
+  const openPicker = () => {
+    setPicking(true);
+    setSelected(st.accounts.map((a) => a.id));
+    if (accounts) return;
     call('/api/integrations/meta-ads/accounts', 'GET')
       .then((d) => setAccounts(d.accounts))
       .catch((e) => setMsg({ ok: false, text: e.message }));
+  };
+  useEffect(() => {
+    if (st.pending && info.canManage) openPicker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [st.pending, info.canManage]);
 
-  const save = async (body: Record<string, string>) => {
+  const save = async (body: Record<string, unknown>) => {
     setBusy(true);
     setMsg(null);
     try {
       const d = await call('/api/integrations/meta-ads', 'PUT', body);
-      setMsg({ ok: true, text: `Conectada: ${d.account.name}.` });
+      setMsg({ ok: true, text: d.accounts.length > 1 ? `Conectadas ${d.accounts.length} cuentas.` : `Conectada: ${d.account.name}.` });
       setToken('');
       setManual(false);
+      setPicking(false);
       onChanged();
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -523,6 +534,9 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
     }
   };
   const days = st.expiresAt ? Math.ceil((new Date(st.expiresAt).getTime() - Date.now()) / 86400000) : null;
+  const term = q.trim().toLowerCase();
+  const shown = (accounts || []).filter((a) => !term || a.name.toLowerCase().includes(term) || a.id.includes(term));
+  const toggle = (id: string) => setSelected((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
@@ -542,18 +556,25 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
         )}
       </div>
 
-      {st.connected && (
-        <div className="text-xs text-slate-600 space-y-1">
-          <p>
-            Cuenta: <b>{st.accountName}</b> <span className="font-mono text-slate-400">act_{st.accountId}</span> {st.currency && <span className="text-slate-400">· {st.currency}</span>}
-          </p>
+      {st.connected && !picking && (
+        <div className="text-xs text-slate-600 space-y-1.5">
+          <ul className="space-y-1">
+            {st.accounts.map((a) => (
+              <li key={a.id}>
+                <b>{a.name || 'Cuenta'}</b> <span className="font-mono text-slate-400">act_{a.id}</span> {a.currency && <span className="text-slate-400">· {a.currency}</span>}
+              </li>
+            ))}
+          </ul>
           {days !== null && (
             <p className={days <= 7 ? 'text-amber-700' : 'text-slate-500'}>
               {days > 0 ? `La conexión con Facebook vence en ${days} días: vuelve a conectar antes.` : 'La conexión con Facebook venció: vuelve a conectar.'}
             </p>
           )}
           {info.canManage && (
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-3 pt-1 flex-wrap">
+              <button type="button" onClick={openPicker} className="font-semibold text-brand-navy hover:underline">
+                Cambiar cuentas
+              </button>
               {st.oauthAvailable && (
                 <a href="/api/integrations/meta-ads/oauth" className="font-semibold text-brand-navy hover:underline">
                   Volver a conectar
@@ -565,25 +586,40 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
         </div>
       )}
 
-      {info.canManage && st.pending && (
+      {info.canManage && picking && (
         <div className="space-y-2">
-          <p className="text-xs text-slate-600">Elige la cuenta publicitaria de esta tienda:</p>
+          <p className="text-xs text-slate-600">Marca las cuentas publicitarias de esta tienda (puedes elegir varias):</p>
           {!accounts ? (
             <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
           ) : accounts.length ? (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <select className={input} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                <option value="">Selecciona…</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.currency}){a.active ? '' : ' · inactiva'}
-                  </option>
+            <>
+              {accounts.length > 8 && <input className={input} placeholder="Buscar por nombre o id…" value={q} onChange={(e) => setQ(e.target.value)} />}
+              <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                {shown.map((a) => (
+                  <label key={a.id} className="flex items-center gap-2 px-3 py-2 text-[13px] cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggle(a.id)} />
+                    <span className="flex-1 min-w-0 truncate">
+                      {a.name} <span className="font-mono text-[11px] text-slate-400">act_{a.id}</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {a.currency}
+                      {a.active ? '' : ' · inactiva'}
+                    </span>
+                  </label>
                 ))}
-              </select>
-              <button disabled={busy || !accountId} onClick={() => save({ accountId })} className={primary}>
-                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Usar esta
-              </button>
-            </div>
+                {!shown.length && <p className="px-3 py-2 text-xs text-slate-500">Ninguna cuenta con ese nombre.</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button disabled={busy || !selected.length} onClick={() => save({ accountIds: selected })} className={primary}>
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Usar {selected.length || ''} {selected.length === 1 ? 'cuenta' : 'cuentas'}
+                </button>
+                {st.connected && (
+                  <button type="button" onClick={() => setPicking(false)} className="text-xs font-medium text-slate-500 hover:text-slate-800">
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </>
           ) : (
             <p className="text-xs text-red-600">Tu usuario de Facebook no tiene cuentas publicitarias. Pide acceso en el Business Manager y vuelve a conectar.</p>
           )}
@@ -601,13 +637,13 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                save({ accountId, token });
+                save({ accountIds: ids.split(/[\s,;]+/).filter(Boolean), token });
               }}
               className="flex flex-col gap-2"
             >
-              <input className={input} placeholder="Id de la cuenta publicitaria (ej. 917278074559623)" value={accountId} onChange={(e) => setAccountId(e.target.value)} />
+              <input className={input} placeholder="Id de las cuentas publicitarias (separa varias con coma)" value={ids} onChange={(e) => setIds(e.target.value)} />
               <input className={input} type="password" autoComplete="off" placeholder="Token de acceso con permiso ads_read" value={token} onChange={(e) => setToken(e.target.value)} />
-              <button disabled={busy || !accountId || !token} className={primary}>
+              <button disabled={busy || !ids.trim() || !token} className={primary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Conectar
               </button>
             </form>

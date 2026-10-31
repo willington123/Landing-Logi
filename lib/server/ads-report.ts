@@ -27,6 +27,9 @@ export type AdFlag = 'winner' | 'waste' | 'cancels';
 
 export interface AdRow {
   adId: string;
+  accountId: string | null;
+  accountName: string | null;
+  currency: string | null; // of the ad account (null = ad only seen in orders/chats)
   name: string;
   campaign: string;
   status: string | null;
@@ -51,7 +54,8 @@ export interface AdsReport {
   since: string;
   until: string;
   currency: string | null;
-  sameCurrency: boolean; // ROAS only makes sense if the ad account bills in COP
+  sameCurrency: boolean; // every connected account bills in COP (otherwise totals only count COP accounts)
+  accounts: { id: string; name: string | null; currency: string | null; error: string | null }[];
   rows: AdRow[];
   totals: { spend: number; orders: number; confirmed: number; cancelled: number; revenue: number; chats: number; cpa: number | null; roas: number | null };
   unattributed: number; // orders in the range without an ad id (links without utm_content={{ad.id}})
@@ -61,8 +65,17 @@ export interface AdsReport {
 
 export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<AdsReport> {
   const { since, until, fromIso, toIso } = rangeDates(range);
-  const [insights, ordersRes, chatAds] = await Promise.all([
-    adInsights(cfg, since, until),
+  const perAccount = await Promise.all(
+    cfg.accounts.map(async (a) => {
+      try {
+        return { account: a, rows: await adInsights({ ...cfg, accountId: a.id }, since, until), error: null as string | null };
+      } catch (e: any) {
+        if (e?.expired) throw e;
+        return { account: a, rows: [], error: String(e?.message || e) };
+      }
+    }),
+  );
+  const [ordersRes, chatAds] = await Promise.all([
     (await db()).from('orders').select('data, status').gte('created_at', fromIso).lte('created_at', toIso).limit(10000),
     getConversationAds().catch(() => ({}) as Record<string, { id: string; at: string }>),
   ]);
@@ -73,19 +86,24 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
   const row = (adId: string): AdRow => {
     let r = rows.get(adId);
     if (!r) {
-      r = { adId, name: '', campaign: '', status: null, thumb: null, kind: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
+      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', status: null, thumb: null, kind: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
       rows.set(adId, r);
     }
     return r;
   };
-  for (const i of insights) {
-    const r = row(i.adId);
-    r.name = i.adName;
-    r.campaign = i.campaignName;
-    r.spend += i.spend;
-    r.impressions += i.impressions;
-    r.clicks += i.clicks;
-    r.metaChats += i.metaChats;
+  for (const { account, rows: insights } of perAccount) {
+    for (const i of insights) {
+      const r = row(i.adId);
+      r.accountId = account.id;
+      r.accountName = account.name;
+      r.currency = account.currency;
+      r.name = i.adName;
+      r.campaign = i.campaignName;
+      r.spend += i.spend;
+      r.impressions += i.impressions;
+      r.clicks += i.clicks;
+      r.metaChats += i.metaChats;
+    }
   }
   let unattributed = 0;
   for (const o of orders) {
@@ -106,7 +124,17 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
     if (a?.id && a.at >= fromIso && a.at <= toIso) row(a.id).chats++;
   }
 
-  const { creatives, error: creativesError } = await adCreatives(cfg, Array.from(rows.keys())).catch((e) => ({ creatives: {} as Awaited<ReturnType<typeof adCreatives>>['creatives'], error: String(e?.message || e) }));
+  const creatives: Awaited<ReturnType<typeof adCreatives>>['creatives'] = {};
+  let creativesError: string | null = null;
+  const all = Array.from(rows.values());
+  for (const a of cfg.accounts.length ? cfg.accounts : [{ id: cfg.accountId || '', name: null, currency: null }]) {
+    // Ads only seen in orders or chats are looked up with the first account (the fallback reads them by id).
+    const ids = all.filter((r) => r.accountId === a.id || (!r.accountId && a.id === cfg.accounts[0]?.id)).map((r) => r.adId);
+    if (!ids.length) continue;
+    const got = await adCreatives({ ...cfg, accountId: a.id }, ids).catch((e) => ({ creatives: {}, error: String(e?.message || e) }));
+    Object.assign(creatives, got.creatives);
+    creativesError = creativesError || got.error;
+  }
   for (const r of Array.from(rows.values())) {
     const c = creatives[r.adId];
     if (c) {
@@ -118,20 +146,22 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
     if (!r.name) r.name = `Anuncio ${r.adId}`;
   }
 
-  const sameCurrency = !cfg.currency || cfg.currency.toUpperCase() === 'COP';
+  const isCop = (c: string | null) => !c || c.toUpperCase() === 'COP';
+  const sameCurrency = cfg.accounts.every((a) => isCop(a.currency));
   const list = Array.from(rows.values());
-  const t = list.reduce(
+  const t = list.filter((r) => isCop(r.currency)).reduce(
     (a, r) => ({ spend: a.spend + r.spend, orders: a.orders + r.orders, confirmed: a.confirmed + r.confirmed, cancelled: a.cancelled + r.cancelled, revenue: a.revenue + r.revenue, chats: a.chats + r.chats }),
     { spend: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, chats: 0 },
   );
-  const totals = { ...t, cpa: t.confirmed ? t.spend / t.confirmed : null, roas: sameCurrency && t.spend ? t.revenue / t.spend : null };
+  const totals = { ...t, cpa: t.confirmed && t.spend ? t.spend / t.confirmed : null, roas: t.spend ? t.revenue / t.spend : null };
 
   // "Gastó sin vender": already spent what a confirmed sale usually costs in this account (or 30.000 COP / 10 USD) with no sale.
-  const wasteMin = Math.max(totals.cpa || 0, sameCurrency ? 30000 : 10);
+  const wasteMin = Math.max(totals.cpa || 0, 30000);
   for (const r of list) {
     r.cpa = r.confirmed && r.spend > 0 ? r.spend / r.confirmed : null;
-    r.roas = sameCurrency && r.spend > 0 ? r.revenue / r.spend : null;
-    if (r.confirmed === 0 && r.spend >= wasteMin) r.flags.push('waste');
+    r.roas = isCop(r.currency) && r.spend > 0 ? r.revenue / r.spend : null;
+    // Thresholds are in COP; for other currencies use a small fixed amount (10 USD/EUR…).
+    if (r.confirmed === 0 && r.spend >= (isCop(r.currency) ? wasteMin : 10)) r.flags.push('waste');
     if (r.orders >= 3 && r.cancelled / r.orders >= 0.4) r.flags.push('cancels');
   }
   // Winners: the 3 ads with most confirmed sales that also beat the account's ROAS (or, without spend data, sell the most).
@@ -142,5 +172,5 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
     .forEach((r) => r.flags.push('winner'));
 
   list.sort((a, b) => b.spend - a.spend || b.revenue - a.revenue);
-  return { range, since, until, currency: cfg.currency, sameCurrency, rows: list, totals, unattributed, wasteMin, creativesError: rows.size && !Object.keys(creatives).length ? creativesError : null };
+  return { range, since, until, currency: cfg.currency, sameCurrency, accounts: perAccount.map((p) => ({ ...p.account, error: p.error })), rows: list, totals, unattributed, wasteMin, creativesError: rows.size && !Object.keys(creatives).length ? creativesError : null };
 }

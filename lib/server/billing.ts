@@ -157,9 +157,13 @@ export async function addAiReply(orgId: string) {
 export async function aiRepliesLeft(orgId: string): Promise<number> {
   const s = await getSubscription(orgId).catch(() => null);
   if (!s || s.panelLocked) return 0;
-  const included = s.effective === 'exempt' ? 0 : s.effective === 'trialing' ? TRIAL_AI_REPLIES : s.planInfo.aiReplies;
+  // Stores without charge (the platform owner's own businesses) use the platform's Claude key without a monthly cap.
+  if (s.effective === 'exempt') return UNLIMITED_AI;
+  const included = s.effective === 'trialing' ? TRIAL_AI_REPLIES : s.planInfo.aiReplies;
   return Math.max(0, included - (await aiUsed(orgId)));
 }
+
+export const UNLIMITED_AI = 1_000_000_000;
 
 export class LimitError extends Error {
   status = 402;

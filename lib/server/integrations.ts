@@ -47,7 +47,16 @@ export interface StoredIntegrations {
   capi?: { token: string; testCode?: string | null; connectedAt: string };
   anthropic?: { apiKey: string; connectedAt: string };
   // Meta Ads (read-only): spend and creatives of the store's ad account. accountId null = signed in, account not chosen yet.
-  metaAds?: { token: string; accountId: string | null; accountName?: string | null; currency?: string | null; mode: 'oauth' | 'manual'; expiresAt?: string | null; connectedAt: string };
+  metaAds?: {
+    token: string;
+    accountId: string | null; // first account (kept for older saves)
+    accountName?: string | null;
+    currency?: string | null;
+    accounts?: AdAccountRef[]; // every ad account this store reads
+    mode: 'oauth' | 'manual';
+    expiresAt?: string | null;
+    connectedAt: string;
+  };
 }
 
 // ---------- reading (cached a few seconds per store) ----------
@@ -194,9 +203,16 @@ export async function orgsWithConnections(): Promise<string[]> {
   return Array.from(out);
 }
 
+export interface AdAccountRef {
+  id: string;
+  name: string | null;
+  currency: string | null;
+}
+
 export interface AdsConfig {
   token: string;
   accountId: string | null;
+  accounts: AdAccountRef[];
   accountName: string | null;
   currency: string | null;
   mode: 'oauth' | 'manual';
@@ -210,5 +226,6 @@ export async function adsConfig(orgId?: string | null): Promise<AdsConfig | null
   if (!s) return null;
   const token = decrypt(s.token);
   if (!token) return null;
-  return { token, accountId: s.accountId, accountName: s.accountName || null, currency: s.currency || null, mode: s.mode, expiresAt: s.expiresAt || null };
+  const accounts: AdAccountRef[] = s.accounts?.length ? s.accounts : s.accountId ? [{ id: s.accountId, name: s.accountName || null, currency: s.currency || null }] : [];
+  return { token, accountId: accounts[0]?.id || null, accounts, accountName: accounts[0]?.name || null, currency: accounts[0]?.currency || null, mode: s.mode, expiresAt: s.expiresAt || null };
 }
