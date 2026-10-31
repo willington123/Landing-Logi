@@ -178,7 +178,8 @@ export async function adInsights(cfg: AdsConfig, since: string, until: string): 
 export interface AdCreative {
   name: string;
   status: string; // ACTIVE, PAUSED, ...
-  thumb: string | null; // good-resolution image (video cover for videos)
+  thumb: string | null; // best image (video cover for videos)
+  thumbs: string[]; // every image we know, best first: the page falls back to the next one if one does not load
   kind: 'video' | 'image' | 'other';
   previewLink: string | null; // Meta's shareable preview (opens the real ad on Facebook)
 }
@@ -230,15 +231,16 @@ async function imagesByHash(cfg: AdsConfig, accountId: string, hashes: string[])
   return out;
 }
 
-// Biggest thumbnail of each video.
-async function videoPictures(cfg: AdsConfig, ids: string[]): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
+// Thumbnails of each video, biggest first.
+async function videoPictures(cfg: AdsConfig, ids: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
   for (let i = 0; i < ids.length; i += 50) {
     const d = await graph('', cfg.token, { ids: ids.slice(i, i + 50).join(','), fields: 'picture,thumbnails{uri,width,height,is_preferred}' }).catch(() => null);
     for (const [id, v] of Object.entries((d || {}) as Record<string, any>)) {
       const thumbs: any[] = v?.thumbnails?.data || [];
-      const best = thumbs.find((t) => t?.is_preferred && t.uri) || thumbs.filter((t) => t?.uri).sort((a, b) => (b.width || 0) - (a.width || 0))[0];
-      if (best?.uri || v?.picture) out[id] = String(best?.uri || v.picture);
+      const sorted = thumbs.filter((t) => t?.uri).sort((a, b) => Number(Boolean(b.is_preferred)) - Number(Boolean(a.is_preferred)) || (b.width || 0) - (a.width || 0));
+      const list = [...sorted.map((t) => String(t.uri)), ...(v?.picture ? [String(v.picture)] : [])];
+      if (list.length) out[id] = list;
     }
   }
   return out;
@@ -250,7 +252,7 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
   let error: string | null = null;
   for (let i = 0; i < todo.length; i += 50) {
     const chunk = todo.slice(i, i + 50);
-    const key = `cr2:${cfg.accountId}:${chunk.join(',')}`;
+    const key = `cr3:${cfg.accountId}:${chunk.join(',')}`;
     const hit = cache.get(key);
     if (hit && hit.until > Date.now()) {
       Object.assign(out, hit.data as Record<string, AdCreative>);
@@ -284,15 +286,19 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
     }
     const list = Object.values(raw);
     const [byHash, byVideo] = await Promise.all([
-      cfg.accountId ? imagesByHash(cfg, cfg.accountId, Array.from(new Set(list.filter((r) => !r.direct && r.hash).map((r) => r.hash!)))) : Promise.resolve({} as Record<string, string>),
-      videoPictures(cfg, Array.from(new Set(list.filter((r) => r.videoId).map((r) => r.videoId!)))),
+      cfg.accountId ? imagesByHash(cfg, cfg.accountId, Array.from(new Set(list.filter((r) => r.hash).map((r) => r.hash!)))) : Promise.resolve({} as Record<string, string>),
+      videoPictures(cfg, Array.from(new Set(list.filter((r) => r.videoId).map((r) => r.videoId!)))).catch(() => ({}) as Record<string, string[]>),
     ]);
     const got: Record<string, AdCreative> = {};
     for (const [id, r] of Object.entries(raw)) {
+      const thumbs = Array.from(
+        new Set([...((r.videoId && byVideo[r.videoId]) || []), r.direct, r.hash ? byHash[r.hash] : null, r.small].filter((u): u is string => typeof u === 'string' && /^https:\/\//.test(u))),
+      );
       got[id] = {
         name: r.name,
         status: r.status,
-        thumb: (r.videoId && byVideo[r.videoId]) || r.direct || (r.hash && byHash[r.hash]) || r.small || null,
+        thumb: thumbs[0] || null,
+        thumbs,
         kind: r.kind,
         previewLink: r.previewLink,
       };
