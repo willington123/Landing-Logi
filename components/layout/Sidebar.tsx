@@ -222,7 +222,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active =
-                    pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+                    pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href + '/'));
                   return (
                     <Link
                       key={item.href}
