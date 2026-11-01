@@ -156,11 +156,15 @@ function EmbeddedSignup({ info, onDone }: { info: IntegrationsInfo['embedded']; 
     setBusy(true);
     setError(null);
     let session: { phoneNumberId?: string; wabaId?: string } = {};
+    let fbError: string | null = null;
     const onMessage = (ev: MessageEvent) => {
       if (!/facebook\.com$/.test(new URL(ev.origin).hostname)) return;
       try {
         const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data.data?.phone_number_id) session = { phoneNumberId: data.data.phone_number_id, wabaId: data.data.waba_id };
+        if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
+        const d = data.data || {};
+        if (d.waba_id || d.phone_number_id) session = { phoneNumberId: d.phone_number_id || session.phoneNumberId, wabaId: d.waba_id || session.wabaId };
+        if (data.event === 'ERROR' && d.error_message) fbError = `Facebook: ${d.error_message}`;
       } catch {
         // other messages from Facebook
       }
@@ -176,9 +180,10 @@ function EmbeddedSignup({ info, onDone }: { info: IntegrationsInfo['embedded']; 
           extras: { setup: {}, sessionInfoVersion: '3' },
         }),
       );
-      if (!code) throw new Error('Se canceló la conexión con Facebook.');
-      await new Promise((r) => setTimeout(r, 800)); // the session message can arrive right after the login callback
-      if (!session.phoneNumberId || !session.wabaId) throw new Error('Facebook no devolvió el número elegido. Vuelve a intentarlo y termina todos los pasos.');
+      if (!code) throw new Error(fbError || 'Se canceló la conexión con Facebook.');
+      // The session message (account and number) can arrive a bit after the login callback.
+      for (let i = 0; i < 20 && !session.phoneNumberId; i++) await new Promise((r) => setTimeout(r, 250));
+      // Without it, the server finds the account and number from what was shared in the popup.
       await call('/api/integrations/whatsapp/embedded', 'POST', { code, ...session });
       onDone();
     } catch (e: any) {
