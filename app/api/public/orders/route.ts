@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, createOrder, getPublicLandingWithOrg, patchOrderData } from '@/lib/server/db';
 import { runWithOrg } from '@/lib/server/tenant';
 import { capiEnabled, sendCapiPurchase } from '@/lib/server/meta-capi';
+import { submitEvent, type CapiClient } from '@/lib/server/conversions';
 import { confirmTemplateEnabled } from '@/lib/server/whatsapp';
 import { sendOrderConfirmation } from '@/lib/server/wa-actions';
 import { getWaSettings } from '@/lib/server/wa-store';
@@ -72,11 +73,22 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
     };
     await createOrder(order);
 
-    // Meta Conversions API: same event_id (order.id) as the browser pixel's Purchase.
+    // Meta Conversions API: same event_id (order.id) as the browser pixel's event.
+    // "Lead" now and "Purchase" when the order is confirmed (or "Purchase" now if the store chose so).
+    let pixelEvent: 'Purchase' | 'Lead' = 'Purchase';
     if (landing.metaPixelId && (await capiEnabled())) {
+      pixelEvent = await submitEvent();
       const fbclid = clean(b.fbclid, 500);
       const fbc = req.cookies.get('_fbc')?.value || (fbclid ? `fb.1.${Date.now()}.${fbclid}` : undefined);
+      const client: CapiClient = {
+        ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || undefined,
+        userAgent: req.headers.get('user-agent') || undefined,
+        fbp: req.cookies.get('_fbp')?.value,
+        fbc,
+        url: clean(b.pageUrl, 500) || req.headers.get('referer') || undefined,
+      };
       const capi = await sendCapiPurchase({
+        eventName: pixelEvent,
         pixelId: landing.metaPixelId,
         eventId: order.id,
         eventSourceUrl: clean(b.pageUrl, 500) || req.headers.get('referer') || undefined,
@@ -86,15 +98,10 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
         contentName: landing.productName,
         numItems: order.units,
         customer: { name, phone, city, region: order.department, country: landing.country },
-        client: {
-          ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || undefined,
-          userAgent: req.headers.get('user-agent') || undefined,
-          fbp: req.cookies.get('_fbp')?.value,
-          fbc,
-        },
+        client,
         externalId: phone.replace(/\D/g, ''),
       });
-      await patchOrderData(order.id, { capi: { ok: capi.ok, error: capi.error, at: new Date().toISOString() } }).catch(() => {});
+      await patchOrderData(order.id, { capi: { ok: capi.ok, error: capi.error, event: pixelEvent, at: new Date().toISOString() }, capiClient: client }).catch(() => {});
     }
 
     // WhatsApp order confirmation (template with "Confirmar pedido" / "Cancelar"). Never blocks the order.
@@ -115,7 +122,7 @@ async function placeOrder(req: NextRequest, b: any, landing: LandingPageConfig) 
     // AI confirmation call (Vapi): now, or scheduled by call hours / delay. Never blocks the order.
     await onNewOrder(order, req.nextUrl.origin);
 
-    return NextResponse.json({ success: true, order });
+    return NextResponse.json({ success: true, order, pixelEvent });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }

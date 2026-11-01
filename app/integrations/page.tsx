@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { KeyConnection, MetaAdsConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
+import { KeyConnection, ConversionsCard, MetaAdsConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -753,6 +753,7 @@ export default function IntegrationsPage() {
                 extra={{ placeholder: 'Código de prueba (opcional)', field: 'testCode' }}
               />
               <MetaAdsConnection info={integ} onChanged={reload} />
+              <ConversionsCard info={integ} />
             </div>
           )}
 

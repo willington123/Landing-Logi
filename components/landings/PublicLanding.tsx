@@ -80,7 +80,7 @@ export default function PublicLanding({ initial, slug, cloud }: { initial: Landi
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) throw new Error(data.error || 'No pudimos registrar tu pedido. Inténtalo de nuevo.');
-    return data.order;
+    return { ...data.order, pixelEvent: data.pixelEvent };
   };
 
   if (loading) return <div className="min-h-screen bg-white" />;
