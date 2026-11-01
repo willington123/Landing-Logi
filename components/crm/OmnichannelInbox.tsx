@@ -762,6 +762,11 @@ export default function OmnichannelInbox() {
                     >
                       {m.type === 'template' && <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Plantilla</p>}
                       {m.type === 'auto' && <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5">Respuesta automática</p>}
+                      {m.type === 'followup' && (
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 mb-0.5 inline-flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Seguimiento automático · IA
+                        </p>
+                      )}
                       {m.type === 'bot' && (
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5 inline-flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> {botInfo?.name || 'Asistente'} · IA

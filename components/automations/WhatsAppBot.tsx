@@ -3,7 +3,7 @@
 // AI assistant for WhatsApp (Claude): settings and a simulator to try it before turning it on.
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, Search, Send, Sparkles, UserRound } from 'lucide-react';
-import { DEFAULT_BOT, type BotSettings } from '@/lib/bot';
+import { DEFAULT_BOT, FOLLOW_UP_HOURS, type BotSettings } from '@/lib/bot';
 import { isCloud } from '@/lib/cloud';
 
 interface SimMsg {
@@ -32,6 +32,7 @@ export default function WhatsAppBot() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [fuStats, setFuStats] = useState<{ sent: number; recovered: number; revenue: number } | null>(null);
 
   // simulator
   const [sim, setSim] = useState<SimMsg[]>([]);
@@ -52,6 +53,7 @@ export default function WhatsAppBot() {
           if (!d.success) return setLoadError(d.error);
           setCfg(d.settings);
           setConfigured(d.configured);
+          setFuStats(d.followUpStats || null);
         })
         .catch((e) => setLoadError(String(e?.message || e)));
     });
@@ -199,6 +201,47 @@ export default function WhatsAppBot() {
                 </span>
               </span>
             </label>
+            <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-2.5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Toggle on={cfg.followUp.enabled} onChange={(v) => set({ followUp: { ...cfg.followUp, enabled: v } })} label="Seguimiento a quien no compró" />
+                <span>
+                  <span className="block text-[13px] font-semibold text-slate-900">Seguimiento a quien no compró</span>
+                  <span className="block text-[11px] text-slate-600">
+                    Si el cliente deja de responder sin hacer el pedido, el asistente le escribe una sola vez, retomando la conversación (sin presionar). Va dentro de las 24 h gratis de
+                    WhatsApp, entre 8 a. m. y 8 p. m. No escribe si el cliente dijo que no, ya compró o una persona está atendiendo el chat.
+                  </span>
+                </span>
+              </label>
+              {cfg.followUp.enabled && (
+                <div className="grid sm:grid-cols-2 gap-3 pl-14">
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-600">Escribirle después de</span>
+                    <select
+                      value={cfg.followUp.afterHours}
+                      onChange={(e) => set({ followUp: { ...cfg.followUp, afterHours: Number(e.target.value) } })}
+                      className="mt-1 w-full h-9 text-[13px] border border-slate-200 rounded-lg px-2 bg-white"
+                    >
+                      {FOLLOW_UP_HOURS.map((h) => (
+                        <option key={h} value={h}>
+                          {h} {h === 1 ? 'hora' : 'horas'} sin respuesta
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-[12px] text-slate-700 sm:mt-5">
+                    <input type="checkbox" className="accent-[#0A6CF0]" checked={cfg.followUp.onlyAds} onChange={(e) => set({ followUp: { ...cfg.followUp, onlyAds: e.target.checked } })} />
+                    Solo chats que llegaron desde un anuncio
+                  </label>
+                </div>
+              )}
+              {fuStats && fuStats.sent > 0 && (
+                <p className="text-[12px] text-slate-700 pl-14">
+                  Últimos 30 días: <strong>{fuStats.sent}</strong> {fuStats.sent === 1 ? 'seguimiento' : 'seguimientos'}, <strong>{fuStats.recovered}</strong> {fuStats.recovered === 1 ? 'compró' : 'compraron'} después
+                  {fuStats.revenue > 0 && <> (${fuStats.revenue.toLocaleString('es-CO')})</>}.
+                </p>
+              )}
+              <p className="text-[11px] text-slate-500 pl-14">Necesita la revisión automática cada 5 minutos (Llamadas IA → Tareas programadas). Cada seguimiento cuenta como una respuesta de IA.</p>
+            </div>
             {cfg.mode === 'away' && <p className="text-[11px] text-slate-500">Usa el horario del “Mensaje fuera de horario” de abajo. En horario de atención responden las personas.</p>}
             <label className="block">
               <span className="text-xs font-medium text-slate-600">Información del negocio</span>

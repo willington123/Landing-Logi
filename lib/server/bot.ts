@@ -9,7 +9,7 @@ import { anthropicKey } from '@/lib/server/integrations';
 import { addAiReply } from '@/lib/server/billing';
 import { requestOrgSync } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
-import { DEFAULT_BOT, type BotChatState, type BotSettings } from '@/lib/bot';
+import { DEFAULT_BOT, cleanFollowUp, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 
 // Claude Opus 5.5 by default; ANTHROPIC_MODEL can name another model.
@@ -45,7 +45,8 @@ async function writeSetting(id: string, data: unknown) {
 }
 
 export async function getBotSettings(): Promise<BotSettings> {
-  return { ...DEFAULT_BOT, ...((await readSetting<Partial<BotSettings>>('wa_bot')) || {}) };
+  const s = (await readSetting<Partial<BotSettings>>('wa_bot')) || {};
+  return { ...DEFAULT_BOT, ...s, followUp: cleanFollowUp(s.followUp) };
 }
 export const saveBotSettings = (s: BotSettings) => writeSetting('wa_bot', s);
 
@@ -459,6 +460,55 @@ export async function runBot(opts: {
   // Too many steps: hand over rather than leave the customer without an answer.
   run.handoff = run.handoff || { motivo: 'El asistente no logró terminar la respuesta.', tipo: 'otro' };
   return run;
+}
+
+// Follow-up for a customer who stopped answering without ordering. Returns null when it's better not to write
+// (they said no, already bought, asked not to be contacted, or the chat ended naturally).
+export async function writeFollowUp(opts: {
+  settings: BotSettings;
+  phone: string;
+  customerName?: string | null;
+  ad?: { headline?: string; body?: string } | null;
+  history: { direction: 'in' | 'out'; text: string }[];
+  hours: number;
+}): Promise<string | null> {
+  const knowledge = await storeKnowledge();
+  const lines = opts.history
+    .filter((h) => h.text.trim())
+    .slice(-20)
+    .map((h) => `${h.direction === 'in' ? 'Cliente' : 'Tienda'}: ${h.text.trim().slice(0, 600)}`)
+    .join('\n');
+  if (!lines) return null;
+  const adText = opts.ad ? [opts.ad.headline, opts.ad.body].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 300) : '';
+  const ai = await anthropic();
+  const response = await ai.client.beta.messages.create({
+    model: MODEL,
+    max_tokens: 2000,
+    output_config: { effort: 'low' },
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    system: [
+      { type: 'text', text: systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
+      {
+        type: 'text',
+        text: `TAREA ESPECIAL: seguimiento. El cliente "${opts.customerName || 'sin nombre'}" dejó de responder hace unas ${opts.hours} horas y no hizo el pedido.${adText ? ` Llegó desde un anuncio: "${adText}".` : ''}
+Escribe UN solo mensaje de WhatsApp corto (máximo 3 líneas), cálido y natural, que retome justo donde quedó la conversación: resuelve la duda que haya quedado pendiente o pregúntale con amabilidad si le ayudas a terminar su pedido. Recuerda, si encaja, que paga al recibir.
+Reglas: nada de presión, urgencia, descuentos, regalos ni stock limitado que no estén en la información. No digas que eres un recordatorio automático. No repitas textualmente mensajes anteriores.
+Responde exactamente SKIP (sin nada más) si: el cliente dijo que no le interesa, que lo pensará y él escribe, ya compró, pidió no ser contactado, se quejó o está molesto, o la conversación terminó de forma natural sin interés de compra.`,
+      },
+    ],
+    messages: [{ role: 'user', content: `Conversación hasta ahora:\n${lines}\n\nEscribe el mensaje de seguimiento (o SKIP).` }],
+  });
+  const org = requestOrgSync();
+  if (ai.source === 'plan' && org) await addAiReply(org).catch(() => {});
+  if (response.stop_reason === 'refusal') return null;
+  const text = response.content
+    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
+    .trim();
+  if (!text || /^skip\b/i.test(text)) return null;
+  return text.slice(0, 1000);
 }
 
 // History of a stored conversation for runBot.

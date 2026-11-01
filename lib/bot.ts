@@ -8,7 +8,16 @@ export interface BotSettings {
   businessInfo: string; // shipping, payment, guarantee, returns, hours… written by the owner
   maxRepliesPerDay: number; // per customer; after that the chat goes to a person
   takeOrders: boolean; // close the sale in the chat (creates the order) instead of sending the customer to the landing
+  followUp: FollowUpSettings; // one message to customers who stopped answering without ordering
 }
+
+export interface FollowUpSettings {
+  enabled: boolean;
+  afterHours: number; // hours of silence before the message (inside WhatsApp's free 24 h window)
+  onlyAds: boolean; // only chats that came from a WhatsApp ad
+}
+export const FOLLOW_UP_HOURS = [1, 2, 3, 4, 6, 12, 20];
+export const DEFAULT_FOLLOW_UP: FollowUpSettings = { enabled: false, afterHours: 3, onlyAds: true };
 
 export const DEFAULT_BOT: BotSettings = {
   enabled: false,
@@ -24,7 +33,17 @@ export const DEFAULT_BOT: BotSettings = {
   ].join('\n'),
   maxRepliesPerDay: 30,
   takeOrders: true,
+  followUp: DEFAULT_FOLLOW_UP,
 };
+
+export function cleanFollowUp(f: any): FollowUpSettings {
+  const h = Number(f?.afterHours);
+  return {
+    enabled: Boolean(f?.enabled),
+    afterHours: FOLLOW_UP_HOURS.includes(h) ? h : DEFAULT_FOLLOW_UP.afterHours,
+    onlyAds: f?.onlyAds === undefined ? DEFAULT_FOLLOW_UP.onlyAds : Boolean(f.onlyAds),
+  };
+}
 
 export function cleanBot(input: any): BotSettings | string {
   const name = String(input?.name ?? '').trim().slice(0, 40);
@@ -40,6 +59,7 @@ export function cleanBot(input: any): BotSettings | string {
     businessInfo,
     maxRepliesPerDay: Number.isFinite(max) ? Math.min(100, Math.max(5, max)) : DEFAULT_BOT.maxRepliesPerDay,
     takeOrders: input?.takeOrders === undefined ? DEFAULT_BOT.takeOrders : Boolean(input.takeOrders),
+    followUp: cleanFollowUp(input?.followUp),
   };
 }
 
