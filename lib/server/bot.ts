@@ -1,5 +1,6 @@
 // WhatsApp AI assistant built on Claude: answers customers with the store's information,
 // looks up their orders and hands the chat to a person when needed.
+import { reportSale } from '@/lib/server/conversions';
 import Anthropic from '@anthropic-ai/sdk';
 import { createOrder, db, getSettings } from '@/lib/server/db';
 import { linkConversationOrder, listMessages, samePhone, type WaMessage } from '@/lib/server/wa-store';
@@ -317,6 +318,8 @@ async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; lan
   };
   await createOrder(order);
   await linkConversationOrder(ctx.phone, order.id).catch(() => {});
+  // The customer confirmed in the chat: if they came from a WhatsApp ad, Meta learns about the sale.
+  await reportSale(order).catch((e) => console.error('Conversions API', e));
   return { ok: true, pedido: order.orderNumber, ...summary };
 }
 

@@ -6,7 +6,7 @@ import { capiConfig } from '@/lib/server/integrations';
 
 export { normalizePhone };
 
-const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
+export const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
 
 export async function capiEnabled(): Promise<boolean> {
   return Boolean(await capiConfig());
@@ -21,6 +21,7 @@ const norm = (v?: string) =>
     .trim();
 
 export interface CapiPurchase {
+  eventName?: 'Purchase' | 'Lead'; // Purchase by default
   pixelId: string;
   eventId: string;
   eventSourceUrl?: string;
@@ -60,7 +61,7 @@ export async function sendCapiPurchase(p: CapiPurchase): Promise<{ ok: boolean; 
   const body: Record<string, unknown> = {
     data: [
       {
-        event_name: 'Purchase',
+        event_name: p.eventName || 'Purchase',
         event_time: Math.floor(Date.now() / 1000),
         event_id: p.eventId,
         action_source: 'website',

@@ -165,6 +165,12 @@ export async function getPublicLanding(slugOrId: string): Promise<LandingPageCon
 }
 
 // Counts a visit on a public landing (stored inside the landing JSON).
+// One landing of the current store (for the Conversions API after an order changes status).
+export async function getLandingById(id: string): Promise<LandingPageConfig | null> {
+  const { data } = await (await db()).from('landings').select('data').eq('id', safeKey(id)).maybeSingle();
+  return (data?.data as LandingPageConfig) || null;
+}
+
 export async function incrementLandingViews(slugOrId: string) {
   const found = await getPublicLandingWithOrg(slugOrId);
   if (!found) return;
@@ -216,6 +222,8 @@ export async function updateOrderStatus(id: string, status: OrderItem['status'])
   const data = { ...(row.data as OrderItem), status, ...(status === 'confirmed_by_voice' ? { confirmedAt: new Date().toISOString() } : {}) };
   const { error } = await (await db()).from('orders').update({ status, data }).eq('id', id);
   if (error) throw new Error(error.message);
+  // A confirmed/delivered order is a real sale: tell Meta (never blocks the status change).
+  await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
 }
 
 // Corrects the delivery address. The first address is kept as previousAddress.

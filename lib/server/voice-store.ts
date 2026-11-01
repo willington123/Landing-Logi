@@ -74,6 +74,7 @@ export async function setOrderCallState(id: string, status: OrderStatus, opts: {
   if (opts.nextCallAt !== undefined) update.next_call_at = opts.nextCallAt;
   const { error } = await (await db()).from('orders').update(update).eq('id', id);
   if (error) throw new Error(error.message);
+  await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
 }
 
 export async function scheduleOrderCall(id: string, at: string) {

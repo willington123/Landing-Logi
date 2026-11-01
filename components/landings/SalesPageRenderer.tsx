@@ -277,8 +277,9 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
       return;
     }
     if (!previewMode) {
+      // The server says which event this store counts at the form ("Lead" when the Purchase is sent on confirmation).
       trackPixel(
-        'Purchase',
+        (saved as any)?.pixelEvent === 'Lead' ? 'Lead' : 'Purchase',
         {
           content_name: config.productName,
           content_ids: [config.id],

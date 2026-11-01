@@ -831,3 +831,97 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
     </div>
   );
 }
+
+// When Meta learns about a sale: the form, the confirmation or the delivery. Plus WhatsApp-ad sales.
+type SaleEvent = 'submit' | 'confirmed' | 'delivered';
+interface ConvLog { at: string; orderNumber: string; channel: 'landing' | 'whatsapp'; value: number; ok: boolean; error?: string }
+
+export function ConversionsCard({ info }: { info: IntegrationsInfo }) {
+  const [settings, setSettings] = useState<{ saleEvent: SaleEvent; whatsapp: boolean } | null>(null);
+  const [log, setLog] = useState<ConvLog[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    fetch('/api/conversions')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setSettings(d.settings);
+          setLog(d.log || []);
+        }
+      })
+      .catch(() => {});
+  }, []);
+  const save = async (patch: Partial<{ saleEvent: SaleEvent; whatsapp: boolean }>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const d = await call('/api/conversions', 'PUT', patch);
+      setSettings(d.settings);
+      setMsg({ ok: true, text: 'Guardado.' });
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!settings) return null;
+  const options: [SaleEvent, string, string][] = [
+    ['confirmed', 'Cuando se confirma (recomendado)', 'El formulario cuenta como "Lead" y la compra se avisa cuando el cliente confirma por WhatsApp, llamada o a mano.'],
+    ['delivered', 'Cuando se entrega', 'Lo más exacto, pero llega días después y Meta aprende más lento.'],
+    ['submit', 'Al llenar el formulario', 'Como antes: cuenta también los pedidos que luego se cancelan.'],
+  ];
+  const wa = info.whatsapp;
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3 md:col-span-2">
+      <div>
+        <h3 className="text-[15px] font-semibold text-slate-900">Ventas reales a Meta</h3>
+        <p className="text-xs text-slate-500">Meta optimiza tus anuncios con las compras que le avisas. Avisarle solo las ventas confirmadas hace que busque compradores reales, no curiosos.</p>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-2">
+        {options.map(([id, title, text]) => (
+          <button
+            key={id}
+            type="button"
+            disabled={busy || !info.canManage}
+            onClick={() => save({ saleEvent: id })}
+            className={`text-left p-3 rounded-xl border text-xs disabled:cursor-default ${settings.saleEvent === id ? 'border-[#0A6CF0] bg-[#0A6CF0]/5 ring-2 ring-[#0A6CF0]/15' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+          >
+            <strong className="text-slate-900 block mb-0.5">{title}</strong>
+            <span className="text-slate-600">{text}</span>
+          </button>
+        ))}
+      </div>
+      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs">
+        <input type="checkbox" className="mt-0.5 accent-[#0A6CF0]" checked={settings.whatsapp} disabled={busy || !info.canManage} onChange={(e) => save({ whatsapp: e.target.checked })} />
+        <span className="text-slate-600">
+          <strong className="text-slate-900 block">Avisar también las ventas por WhatsApp</strong>
+          Cuando el bot cierra un pedido de alguien que llegó desde un anuncio a WhatsApp, Meta recibe la compra con el clic de ese anuncio. Usa la conexión de WhatsApp (el token necesita el permiso whatsapp_business_manage_events).
+          {wa.connected && !wa.wabaId && <span className="block mt-1 text-amber-700">Falta el ID de la cuenta de WhatsApp Business en la conexión de WhatsApp.</span>}
+        </span>
+      </label>
+      {!info.capi.connected && (
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Para las ventas de tus landings conecta la API de conversiones (tarjeta de arriba) y pon tu píxel en cada landing. Sin eso, el píxel del navegador sigue avisando "Purchase" al llenar el formulario.
+        </p>
+      )}
+      {log.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-slate-500 mb-1">Últimas ventas avisadas</p>
+          <ul className="divide-y divide-slate-100 text-xs">
+            {log.slice(0, 6).map((l, i) => (
+              <li key={i} className="py-1.5 flex flex-wrap items-center gap-2">
+                {l.ok ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                <span className="font-medium text-slate-800">{l.orderNumber}</span>
+                <span className="text-slate-500">{l.channel === 'whatsapp' ? 'WhatsApp' : 'Landing'} · ${(l.value || 0).toLocaleString('es-CO')}</span>
+                <span className="text-slate-400 ml-auto shrink-0">{new Date(l.at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                {!l.ok && l.error && <span className="basis-full text-[11px] text-red-600 pl-5">{l.error}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
+    </div>
+  );
+}
