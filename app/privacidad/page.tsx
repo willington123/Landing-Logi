@@ -1,33 +1,16 @@
 import type { Metadata } from 'next';
-import { cloudEnabled, getSettings } from '@/lib/server/db';
+import Link from 'next/link';
+import { operatorLine, platformOperator } from '@/lib/platform';
 
-export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Política de privacidad · Konnexa', robots: { index: true, follow: true } };
 
-interface StoreInfo {
-  storeName?: string;
-  supportEmail?: string;
-  supportPhone?: string;
-}
-
-async function storeInfo(): Promise<StoreInfo> {
-  if (!cloudEnabled()) return {};
-  try {
-    return (await getSettings<StoreInfo>()) || {};
-  } catch {
-    return {};
-  }
-}
-
-export async function generateMetadata(): Promise<Metadata> {
-  const s = await storeInfo();
-  return { title: `Política de privacidad${s.storeName ? ` · ${s.storeName}` : ''}`, robots: { index: true, follow: true } };
-}
-
-// Public privacy policy (required by Meta to publish the WhatsApp app). Uses the store data from Configuración.
-export default async function PrivacyPage() {
-  const s = await storeInfo();
-  const store = s.storeName?.trim() || 'nuestra tienda';
-  const contact = [s.supportEmail?.trim() && `el correo ${s.supportEmail.trim()}`, s.supportPhone?.trim() && `el WhatsApp ${s.supportPhone.trim()}`].filter(Boolean).join(' o ') || 'nuestros canales de atención';
+// Privacy policy of the Konnexa platform. It is the policy linked in the Meta app (WhatsApp, Facebook Login, ads),
+// so it explains which Meta data we use and why. Operator data comes from env (lib/platform.ts).
+export default function PrivacyPage() {
+  const op = platformOperator();
+  const company = op.name || 'Konnexa';
+  const opLine = operatorLine(op);
+  const channels = [op.email && `el correo ${op.email}`, op.whatsapp && `el WhatsApp +${op.whatsapp}`].filter(Boolean).join(' o ') || 'los canales de atención publicados en konnexa.lat';
   const h2 = 'text-lg font-semibold text-slate-900 mt-8 mb-2';
   const p = 'text-[15px] leading-relaxed text-slate-700';
   const li = 'text-[15px] leading-relaxed text-slate-700';
@@ -35,64 +18,125 @@ export default async function PrivacyPage() {
   return (
     <main className="min-h-screen bg-white">
       <article className="max-w-3xl mx-auto px-5 py-12">
+        <Link href="/">
+          <img src="/brand/konnexa-logo.png" alt="Konnexa" className="h-8 w-auto mb-10" />
+        </Link>
         <h1 className="text-3xl font-bold text-slate-900">Política de privacidad</h1>
-        <p className="text-sm text-slate-500 mt-2">{store} · Última actualización: octubre de 2026</p>
+        <p className="text-sm text-slate-500 mt-2">Konnexa · Última actualización: noviembre de 2026</p>
 
         <p className={`${p} mt-6`}>
-          En {store} respetamos tus datos personales. Esta política explica qué datos recogemos cuando haces un pedido en nuestras páginas, para qué los usamos y cómo
-          puedes consultarlos, corregirlos o pedir que los eliminemos, de acuerdo con la Ley 1581 de 2012 de Colombia y demás normas aplicables.
+          Konnexa es una plataforma para que tiendas en línea creen páginas de venta, reciban pedidos contraentrega, atiendan a sus clientes por WhatsApp y midan sus
+          anuncios. {opLine ? `Konnexa es operada por ${opLine} ("${company}", "nosotros").` : `En esta política, "nosotros" es el operador de Konnexa.`} Esta política
+          explica qué datos tratamos, para qué, con quién los compartimos y cómo puedes ejercer tus derechos, de acuerdo con la Ley 1581 de 2012 de Colombia y sus
+          decretos reglamentarios.
         </p>
 
-        <h2 className={h2}>Qué datos recogemos</h2>
+        <h2 className={h2}>1. Quién es responsable de cada dato</h2>
         <ul className="list-disc pl-6 space-y-1">
-          <li className={li}>Los datos que escribes al hacer un pedido: nombre, número de celular, departamento, ciudad, dirección, barrio e indicaciones de entrega.</li>
-          <li className={li}>Los detalles del pedido: producto, cantidad, valor y fecha.</li>
-          <li className={li}>Los mensajes que intercambias con nosotros por WhatsApp.</li>
-          <li className={li}>Si confirmamos tu pedido por teléfono, la llamada puede grabarse y transcribirse para verificar tu confirmación.</li>
-          <li className={li}>Datos técnicos de tu visita (como el navegador o la campaña publicitaria de la que llegaste), que usamos para medir nuestros anuncios.</li>
+          <li className={li}>
+            <strong>Datos de las tiendas y sus usuarios</strong> (quienes crean una cuenta en Konnexa): {company} es responsable de su tratamiento.
+          </li>
+          <li className={li}>
+            <strong>Datos de los clientes de cada tienda</strong> (quienes hacen un pedido o escriben por WhatsApp a una tienda): la tienda es la responsable y {company}{' '}
+            actúa como encargado, tratándolos solo para prestarle el servicio a esa tienda y según sus instrucciones. Cada tienda solo ve sus propios datos.
+          </li>
         </ul>
 
-        <h2 className={h2}>Para qué los usamos</h2>
+        <h2 className={h2}>2. Qué datos tratamos</h2>
         <ul className="list-disc pl-6 space-y-1">
-          <li className={li}>Procesar, confirmar y entregar tu pedido con pago contraentrega.</li>
-          <li className={li}>Comunicarnos contigo por WhatsApp o llamada sobre tu pedido (confirmación, envío y entrega).</li>
-          <li className={li}>Atender tus preguntas, cambios, garantías y reclamos.</li>
-          <li className={li}>Medir y mejorar nuestros anuncios.</li>
+          <li className={li}>De los usuarios de las tiendas: nombre, correo, contraseña (guardada cifrada), rol en la tienda y datos de facturación del plan.</li>
+          <li className={li}>
+            De los clientes de las tiendas: nombre, celular, dirección de entrega, detalles del pedido, mensajes de WhatsApp intercambiados con la tienda y, si la tienda
+            confirma por teléfono, la grabación y transcripción de la llamada.
+          </li>
+          <li className={li}>Datos técnicos de visitas a las páginas de venta (navegador, dirección IP, anuncio o campaña de origen) para medir los anuncios de la tienda.</li>
+          <li className={li}>Las claves y tokens de acceso que cada tienda conecta (WhatsApp, Meta, Claude, llamadas), guardados cifrados.</li>
         </ul>
-        <p className={`${p} mt-2`}>No vendemos tus datos personales.</p>
 
-        <h2 className={h2}>Con quién los compartimos</h2>
-        <p className={p}>Solo con quienes nos ayudan a cumplir tu pedido o a operar la tienda, y únicamente con los datos necesarios:</p>
+        <h2 className={h2}>3. Datos de Meta (WhatsApp, Facebook e Instagram)</h2>
+        <p className={p}>Cuando una tienda conecta sus cuentas de Meta a Konnexa, usamos los permisos que ella autoriza únicamente para lo siguiente:</p>
         <ul className="list-disc pl-6 space-y-1 mt-2">
-          <li className={li}>Empresas de transporte y mensajería, para entregar tu pedido.</li>
-          <li className={li}>Meta Platforms (WhatsApp y herramientas de medición de anuncios de Facebook e Instagram).</li>
-          <li className={li}>Proveedores de tecnología que alojan nuestra página y nuestra base de datos, y servicios de llamadas automatizadas cuando confirmamos pedidos por teléfono.</li>
+          <li className={li}>
+            <strong>WhatsApp Business</strong> (whatsapp_business_messaging y whatsapp_business_management): enviar y recibir los mensajes de la tienda con sus clientes,
+            mostrar esas conversaciones en el panel de la tienda, gestionar sus plantillas de mensajes y conocer el estado y la calidad de su número.
+          </li>
+          <li className={li}>
+            <strong>Eventos de WhatsApp</strong> (whatsapp_business_manage_events): avisarle a Meta, en nombre de la tienda, cuando una conversación que llegó desde un
+            anuncio terminó en una venta confirmada, para que sus anuncios se optimicen.
+          </li>
+          <li className={li}>
+            <strong>Anuncios</strong> (ads_read): leer el gasto, los resultados y las imágenes de los anuncios de la tienda para mostrarle cuáles venden y cuáles no. Es
+            solo lectura: Konnexa no crea, cambia ni pausa anuncios.
+          </li>
+          <li className={li}>
+            <strong>API de conversiones</strong>: enviar a Meta, con el píxel de la tienda, los pedidos y ventas confirmadas de sus páginas. El nombre, el teléfono y la
+            ciudad se envían cifrados (hash).
+          </li>
+        </ul>
+        <p className={`${p} mt-2`}>
+          No vendemos datos de Meta ni de ninguna otra fuente, no los usamos para publicidad propia ni para crear perfiles, y no los compartimos con otras tiendas. Cada
+          tienda solo accede a los datos de sus propias cuentas.
+        </p>
+
+        <h2 className={h2}>4. Para qué usamos los datos</h2>
+        <ul className="list-disc pl-6 space-y-1">
+          <li className={li}>Prestar el servicio: páginas de venta, pedidos, mensajes, asistente con inteligencia artificial, llamadas de confirmación y reportes.</li>
+          <li className={li}>Crear y administrar las cuentas, cobrar los planes y enviar avisos del servicio (bienvenida, pagos, recuperación de contraseña).</li>
+          <li className={li}>Dar soporte, prevenir fraudes y abusos, y cumplir obligaciones legales.</li>
+        </ul>
+
+        <h2 className={h2}>5. Con quién los compartimos</h2>
+        <p className={p}>Solo con proveedores que nos ayudan a prestar el servicio, con los datos necesarios y bajo obligaciones de confidencialidad:</p>
+        <ul className="list-disc pl-6 space-y-1 mt-2">
+          <li className={li}>Alojamiento y base de datos: Vercel y Supabase.</li>
+          <li className={li}>Meta Platforms (WhatsApp Business, API de conversiones y anuncios), según lo descrito arriba.</li>
+          <li className={li}>
+            Inteligencia artificial: Anthropic (Claude) para el asistente de WhatsApp y la redacción de páginas, y Google (Gemini) para las imágenes. Solo les enviamos lo
+            necesario para cada respuesta o imagen.
+          </li>
+          <li className={li}>Pagos de los planes: Wompi. Correos: Resend. Llamadas de confirmación, cuando la tienda las activa: Vapi y su operador telefónico.</li>
           <li className={li}>Autoridades, cuando la ley lo exija.</li>
         </ul>
+        <p className={`${p} mt-2`}>Algunos de estos proveedores procesan los datos fuera de Colombia, con medidas de seguridad adecuadas.</p>
 
-        <h2 className={h2}>Cuánto tiempo los guardamos</h2>
+        <h2 className={h2}>6. Seguridad</h2>
         <p className={p}>
-          Guardamos los datos del pedido mientras sean necesarios para entregarlo, atender garantías y cumplir obligaciones legales y contables. Después los eliminamos o
-          los anonimizamos.
+          Las conexiones usan HTTPS, las contraseñas se guardan cifradas y los tokens de acceso de las tiendas se guardan cifrados. Cada tienda está separada de las
+          demás y el acceso del equipo de cada tienda depende de su rol.
         </p>
 
-        <h2 className={h2}>Tus derechos</h2>
+        <h2 className={h2}>7. Cuánto tiempo los guardamos</h2>
         <p className={p}>
-          Puedes conocer, actualizar y corregir tus datos, pedir prueba de tu autorización, saber cómo los hemos usado, revocar tu autorización y pedir que los
-          eliminemos, salvo cuando debamos conservarlos por ley.
+          Mientras la tienda tenga su cuenta activa y luego el tiempo necesario para cumplir obligaciones legales y contables. Cuando una tienda desconecta una cuenta de
+          Meta, dejamos de usar su token de inmediato y lo borramos.
         </p>
 
-        <h2 id="eliminar-datos" className={h2}>Cómo pedir que eliminemos tus datos</h2>
+        <h2 className={h2}>8. Tus derechos</h2>
         <p className={p}>
-          Escríbenos a {contact} con el asunto &quot;Eliminar mis datos&quot;, indicando tu nombre y el número de celular que usaste en el pedido. Confirmaremos tu
-          solicitud y eliminaremos tus datos (incluidas las conversaciones de WhatsApp asociadas) en un plazo máximo de 15 días hábiles, salvo los que debamos conservar
-          por obligación legal.
+          Puedes conocer, actualizar y corregir tus datos, pedir prueba de tu autorización, saber cómo los hemos usado, presentar quejas ante la Superintendencia de
+          Industria y Comercio, revocar tu autorización y pedir que los eliminemos, salvo cuando debamos conservarlos por ley. Si eres cliente de una tienda, también
+          puedes dirigirte directamente a esa tienda.
         </p>
 
-        <h2 className={h2}>Contacto</h2>
-        <p className={p}>
-          Para cualquier consulta sobre tus datos personales, comunícate con {store} a través de {contact}.
+        <h2 id="eliminar-datos" className={h2}>9. Cómo pedir que eliminemos tus datos</h2>
+        <ul className="list-disc pl-6 space-y-1">
+          <li className={li}>
+            <strong>Tiendas:</strong> desde Integraciones puedes desconectar en cualquier momento WhatsApp, Meta Ads y las demás cuentas. Para eliminar tu tienda y todos
+            sus datos, escríbenos a {channels} desde el correo de la cuenta, con el asunto &quot;Eliminar mi tienda&quot;.
+          </li>
+          <li className={li}>
+            <strong>Clientes de una tienda:</strong> escríbenos a {channels} con el asunto &quot;Eliminar mis datos&quot;, indicando tu nombre, tu número de celular y la
+            tienda a la que le compraste o escribiste.
+          </li>
+        </ul>
+        <p className={`${p} mt-2`}>
+          Confirmaremos la solicitud y eliminaremos los datos (incluidas las conversaciones de WhatsApp asociadas) en un plazo máximo de 15 días hábiles, salvo los que
+          debamos conservar por obligación legal.
         </p>
+
+        <h2 className={h2}>10. Contacto</h2>
+        <p className={p}>Para cualquier consulta sobre datos personales, escríbenos a {channels}.</p>
+        {opLine && <p className={`${p} mt-2`}>Responsable: {opLine}.</p>}
       </article>
     </main>
   );
