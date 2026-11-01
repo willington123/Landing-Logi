@@ -20,6 +20,16 @@ Style: photorealistic, premium e-commerce ad, sharp focus on the product, natura
 Do NOT add any text, captions, prices, watermarks or extra logos.`;
 }
 
+// "design" mode: Claude already wrote the full art direction; this asks for a finished graphic section.
+function buildDesignPrompt(prompt: string, artDirection: string | undefined, extraRefs: number) {
+  return `Design ONE finished, high-impact vertical section of a mobile e-commerce landing page (a single graphic panel, edge to edge, no phone frame, no browser UI).
+The FIRST reference image is the real product: show it IDENTICAL (shape, colors, label, logo). Never redesign it or invent another package.${
+    extraRefs ? `\nThe next ${extraRefs} reference image(s) are REAL customer screenshots: place them inside the design as framed cards, unaltered and legible.` : ''
+  }
+${artDirection ? `Art direction for the whole page: ${artDirection}\n` : ''}Section: ${prompt}
+Typography must be bold, perfectly legible and spelled EXACTLY as quoted (Spanish, with accents). Render only the quoted texts; no other text, no watermarks, no fake logos, no fake ratings, no fake customer faces.`;
+}
+
 // Data URLs over ~1.5 MB are slow to send; fall back to the small reference copy.
 function pickReference(full: string, small?: string) {
   return full.length < 1_500_000 || !small ? full : small;
@@ -29,7 +39,9 @@ function pickReference(full: string, small?: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const scene = String(body.prompt || '').slice(0, 1500);
+    const design = body.mode === 'design';
+    const scene = String(body.prompt || '').slice(0, design ? 3000 : 1500);
+    const extraRefs: string[] = design && Array.isArray(body.extraImages) ? body.extraImages.filter((x: unknown) => typeof x === 'string').slice(0, 4) : [];
     if (!body.imageBase64 || !scene) {
       return NextResponse.json({ success: false, error: 'Faltan la foto o la descripción de la escena.' }, { status: 400 });
     }
@@ -59,13 +71,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const designText = design ? buildDesignPrompt(scene, String(body.artDirection || '').slice(0, 1500) || undefined, extraRefs.length) : '';
     const run: Record<Provider, () => Promise<string>> = {
       gemini: () =>
-        generateImage(geminiKey, [imagePart(body.imageBase64), { text: buildPrompt(scene, body.palette, 'the reference image') }], aspect),
+        design
+          ? generateImage(geminiKey, [imagePart(body.imageBase64), ...extraRefs.map((x) => imagePart(x)), { text: designText }], aspect, { preferPro: true })
+          : generateImage(geminiKey, [imagePart(body.imageBase64), { text: buildPrompt(scene, body.palette, 'the reference image') }], aspect),
       replicate: () =>
-        generateImageReplicate(buildPrompt(scene, body.palette, 'the reference image'), [pickReference(body.imageBase64, body.referenceImage)], aspect),
+        generateImageReplicate(design ? designText : buildPrompt(scene, body.palette, 'the reference image'), [pickReference(body.imageBase64, body.referenceImage)], aspect),
       // Cloudflare needs a reference smaller than 512x512; the browser sends one in referenceImage.
-      cloudflare: () => generateImageCloudflare(buildPrompt(scene, body.palette, 'image 0'), body.referenceImage, aspect),
+      cloudflare: () => generateImageCloudflare(design ? designText : buildPrompt(scene, body.palette, 'image 0'), body.referenceImage, aspect),
     };
 
     const failures: { provider: Provider; err: unknown }[] = [];

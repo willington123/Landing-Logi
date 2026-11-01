@@ -341,6 +341,9 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
     { id: 'guarantee', title: 'Garantía', icon: ShieldCheck, body: config.guaranteeText },
   ].filter((a) => a.body);
 
+  // "Secciones de imagen": designed graphics replace the template's middle sections.
+  const graphics = (config.imageSections || []).filter((x) => x.image);
+  const graphicMode = graphics.length > 0;
   const firstBlock = s.benefitBlocks[0];
   const restBlocks = s.benefitBlocks.slice(1);
   const leftBenefits = config.benefits.slice(0, 2);
@@ -371,8 +374,29 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
         </div>
       </header>
 
+      {/* ============ DESIGNED IMAGE SECTIONS ============ */}
+      {graphicMode && (
+        <section style={{ background: d.light }}>
+          <div className="max-w-[640px] mx-auto">
+            {graphics.map((g, i) => (
+              <React.Fragment key={g.id}>
+                <img src={g.image} alt={g.alt} className="block w-full h-auto" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
+                {i % 2 === 0 && i < graphics.length - 1 && g.kind !== 'cta' && (
+                  <div className="px-4 py-5 bg-white">
+                    <CTA full withPrice />
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+            <div className="px-4 py-5 bg-white">
+              <CTA full withPrice />
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ============ PRODUCT HERO / BUY BOX ============ */}
-      <section className="bg-white">
+      <section className="bg-white" id="pedido">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 grid md:grid-cols-2 gap-8 lg:gap-14">
           {/* Gallery */}
           <div className="md:sticky md:top-6 self-start">
@@ -564,6 +588,8 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
         </div>
       </section>
 
+      {!graphicMode && (
+        <>
       {/* ============ PROMISE + STEPS (timeline) ============ */}
       {s.howItWorks.length > 0 && (
         <section className="py-16 sm:py-24" style={{ background: d.light }}>
@@ -773,6 +799,9 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
             </div>
           </div>
         </section>
+      )}
+
+        </>
       )}
 
       {/* ============ REVIEWS (only real ones added by the seller) ============ */}

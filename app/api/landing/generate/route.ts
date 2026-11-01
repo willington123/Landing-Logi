@@ -68,6 +68,68 @@ const SCHEMA = {
 };
 (SCHEMA as any).required = Object.keys(SCHEMA.properties);
 
+const SECTION_KINDS = ['hero', 'offer', 'problem', 'benefits', 'features', 'how_to', 'comparison', 'testimonials', 'guarantee', 'shipping', 'cta'];
+// "Secciones de imagen": the same page data plus an art concept and the designed sections Nano Banana will draw.
+const SECTIONS_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    ...SCHEMA.properties,
+    concept: { type: 'OBJECT', properties: { name: S, artDirection: S }, required: ['name', 'artDirection'] },
+    sections: {
+      type: 'ARRAY',
+      minItems: 6,
+      maxItems: 8,
+      items: {
+        type: 'OBJECT',
+        properties: {
+          kind: { type: 'STRING', enum: SECTION_KINDS },
+          alt: S,
+          prompt: S,
+          aspect: { type: 'STRING', enum: ['3:4', '1:1', '9:16', '4:3'] },
+          useReviewImages: { type: 'BOOLEAN' },
+        },
+        required: ['kind', 'alt', 'prompt', 'aspect', 'useReviewImages'],
+      },
+    },
+  },
+};
+(SECTIONS_SCHEMA as any).required = Object.keys(SECTIONS_SCHEMA.properties);
+
+function sectionsBrief(b: any): string {
+  const reviews = String(b.reviews || '').trim();
+  const reviewImages = Number(b.reviewImagesCount) || 0;
+  return `
+
+=== MODO "SECCIONES DE IMAGEN" (además de los campos anteriores) ===
+Eres también el DIRECTOR DE ARTE. La landing se mostrará como una columna de 6 a 8 piezas gráficas verticales (estilo landing de e-commerce latinoamericano de alto impacto: tipografía enorme y gruesa, insignias, cintas de precio, íconos en círculos, fondos con textura o degradados, el producto protagonista con luz y sombras reales, hojas/ingredientes/elementos flotando cuando tenga sentido). Nano Banana Pro dibujará cada pieza a partir de tu instrucción y de la foto real del producto.
+
+concept:
+- name: nombre corto del concepto visual (ej. "Bosque nocturno con neón lima").
+- artDirection: en INGLÉS, la dirección de arte común a TODAS las secciones: paleta exacta en HEX (usa los colores de design), tipografías (describe estilo: condensada, redondeada, serif elegante, script…), tratamiento de fondos, estilo de íconos, luz, mood. Debe ser ÚNICA para este producto: inventa un concepto que nazca del producto, su público y sus colores. Nunca un estilo genérico ni el mismo de siempre: varía composición, fondos y tipografía de verdad.
+
+sections (6 a 8, en orden de venta; el formulario de pedido con precios va DESPUÉS en la página, en texto real):
+- Empieza con "hero" (promesa + producto protagonista) y termina con "cta".
+- Elige el resto según el producto entre: offer, problem, benefits, features, how_to, comparison, guarantee, shipping${reviews ? ', testimonials' : ''}. No repitas tipos salvo benefits/features.
+- aspect: "3:4" casi siempre (móvil); "1:1" para secciones cortas; "9:16" solo para el hero si quieres algo muy alto.
+- alt: en español, lo que dice la sección en una frase.
+- prompt: en INGLÉS, instrucción completa para Nano Banana: composición (qué va arriba, al centro, abajo), dónde está el producto (idéntico a la foto de referencia), elementos gráficos, fondo, y TODOS los textos en ESPAÑOL que deben aparecer, cada uno entre comillas dobles y escritos EXACTAMENTE como deben salir (con tildes). Máximo 25 palabras de texto visible por sección, frases cortas. Repite en cada prompt la paleta y la tipografía del concepto para que todas las piezas se vean de la misma marca. Pide "no other text, no watermarks, no fake logos".
+- Precios: solo los de las ofertas del vendedor, escritos exactamente (formato $129.900). Si no hay descuento real, no muestres "precio antes".
+- useReviewImages: true solo en la sección testimonials cuando haya capturas del vendedor; en las demás, false.
+
+HONESTIDAD (obligatorio, también dentro de las imágenes):
+- Nada de testimonios, nombres de clientes, caras de "clientes", calificaciones ni cantidades de clientes inventadas.${
+    reviews
+      ? `
+- Hay reseñas REALES del vendedor; si haces la sección testimonials usa SOLO estas, con su texto y nombre tal cual (puedes acortar sin cambiar el sentido), con avatares de iniciales, no caras:
+${reviews.slice(0, 2000)}`
+      : `
+- El vendedor no dio reseñas: NO hagas sección testimonials.`
+  }${reviewImages ? `
+- El vendedor subió ${reviewImages} captura(s) reales de clientes: en testimonials pide colocarlas como tarjetas o fotos enmarcadas, sin alterarlas.` : ''}
+- Nada de "antes/después", cuerpos transformados ni resultados garantizados. Personas solo como modelos usando el producto, sin prometer resultados.
+- Nada de promesas médicas, de adelgazar ni de curar. Nada de "stock limitado" o "últimas unidades" inventados.`;
+}
+
 // Lists keep the exact number of items the page layout expects (structured outputs can't enforce counts).
 function fitCounts(value: any, schema: any): any {
   if (!schema || value == null) return value;
@@ -81,6 +143,17 @@ function fitCounts(value: any, schema: any): any {
     return out;
   }
   return value;
+}
+
+// Enforced here too: no testimonials section unless the seller gave real reviews; review images only there.
+function cleanSections(copy: any, b: any) {
+  if (!Array.isArray(copy?.sections)) return copy;
+  const hasReviews = Boolean(String(b.reviews || '').trim()) || Number(b.reviewImagesCount) > 0;
+  const sections = copy.sections
+    .filter((x: any) => x && SECTION_KINDS.includes(x.kind) && typeof x.prompt === 'string' && x.prompt.trim())
+    .filter((x: any) => hasReviews || x.kind !== 'testimonials')
+    .map((x: any) => ({ ...x, useReviewImages: x.kind === 'testimonials' && Number(b.reviewImagesCount) > 0 }));
+  return { ...copy, sections };
 }
 
 function offersText(b: any): string {
@@ -154,14 +227,16 @@ export async function POST(req: NextRequest) {
     if (!body.imageBase64) {
       return NextResponse.json({ success: false, error: 'Sube una foto del producto.' }, { status: 400 });
     }
-    const prompt = buildPrompt(body);
+    const sectionsMode = body.mode === 'sections';
+    const schema = sectionsMode ? SECTIONS_SCHEMA : SCHEMA;
+    const prompt = buildPrompt(body) + (sectionsMode ? sectionsBrief(body) : '');
 
     // 1) Claude writes the page (copy, design and image prompts) when the store has it.
     const orgId = cloudEnabled() ? await currentOrgId().catch(() => null) : null;
     if (body.writer !== 'gemini') {
       try {
-        const { copy, model } = await writeLandingWithClaude({ orgId, prompt, images: [body.imageBase64, ...(body.extraImages || []).slice(0, 2)], schema: SCHEMA });
-        return NextResponse.json({ success: true, copy: fitCounts(copy, SCHEMA), writer: 'claude', model });
+        const { copy, model } = await writeLandingWithClaude({ orgId, prompt, images: [body.imageBase64, ...(body.extraImages || []).slice(0, 2)], schema });
+        return NextResponse.json({ success: true, copy: cleanSections(fitCounts(copy, schema), body), writer: 'claude', model });
       } catch (e) {
         claudeNote = e instanceof ClaudeLandingError ? e.message : String((e as Error)?.message || e);
         console.error('Landing con Claude', claudeNote);
@@ -179,8 +254,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const copy = await generateJSON<GeneratedCopy>(apiKey, parts, SCHEMA);
-    return NextResponse.json({ success: true, copy, writer: 'gemini', claudeNote });
+    const copy = await generateJSON<GeneratedCopy>(apiKey, parts, schema);
+    return NextResponse.json({ success: true, copy: cleanSections(copy, body), writer: 'gemini', claudeNote });
   } catch (err) {
     const status = err instanceof GeminiError ? err.status : 500;
     const raw = err instanceof Error ? err.message : 'Error interno';

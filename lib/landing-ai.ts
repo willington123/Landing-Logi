@@ -1,4 +1,4 @@
-import { LandingPageConfig, ProductCombo, SalesPageContent, LandingDesign } from './types';
+import { LandingPageConfig, ProductCombo, SalesPageContent, LandingDesign, ImageSection } from './types';
 
 // Icons the AI may pick; the renderer maps each name to a lucide-react icon.
 export const ICON_NAMES = [
@@ -42,6 +42,9 @@ export interface GeneratedCopy {
   design: { primary: string; accent: string; dark: string; light: string; vibe: string };
   heroImagePrompt: string;
   solutionImagePrompt: string;
+  // "Secciones de imagen" mode: Claude's art concept and one prompt per graphic section.
+  concept?: { name: string; artDirection: string };
+  sections?: Omit<ImageSection, 'id' | 'image'>[];
 }
 
 export interface OfferInput {
@@ -70,6 +73,7 @@ export interface GeneratedImages {
   hero?: string;
   solution?: string;
   benefits: (string | undefined)[];
+  sections?: (string | undefined)[]; // same order as copy.sections
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -173,8 +177,12 @@ export function buildSalesLanding(
   const regularPrice = entry?.regularPrice || promoPrice;
   const discount = Math.max(0, Math.round(((regularPrice - promoPrice) / (regularPrice || 1)) * 100));
 
+  const imageSections: ImageSection[] = (copy.sections || [])
+    .map((x, i) => ({ id: `s-${i}-${t}`, kind: x.kind, alt: x.alt || '', prompt: x.prompt, aspect: x.aspect, useReviewImages: x.useReviewImages || undefined, image: images.sections?.[i] })); // failed ones stay so the editor can retry them
+
   return {
     id: `lp-${slug}`,
+    ...(imageSections.some((x) => x.image) ? { imageSections, artConcept: copy.concept } : {}),
     layout: 'sales-v2',
     country: input.country,
     design,

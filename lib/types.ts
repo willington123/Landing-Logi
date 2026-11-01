@@ -145,6 +145,18 @@ export interface OfferCountdown {
   text: string;
 }
 
+export type ImageSectionKind = 'hero' | 'offer' | 'problem' | 'benefits' | 'features' | 'how_to' | 'comparison' | 'testimonials' | 'guarantee' | 'shipping' | 'cta';
+
+export interface ImageSection {
+  id: string;
+  kind: ImageSectionKind;
+  alt: string; // what the section says (accessibility and SEO)
+  prompt: string; // Claude's art direction for Nano Banana (kept to regenerate it)
+  aspect: '3:4' | '1:1' | '9:16' | '4:3';
+  image?: string;
+  useReviewImages?: boolean;
+}
+
 export interface LandingPageConfig {
   id: string;
   layout?: 'classic' | 'sales-v2';
@@ -195,6 +207,10 @@ export interface LandingPageConfig {
   viewsCount: number;
   ordersCount: number;
   creatives?: LandingCreative[];
+  // "Secciones de imagen": each section is a designed graphic (Claude art-directs, Nano Banana draws it),
+  // shown one after another above the offers and order form.
+  imageSections?: ImageSection[];
+  artConcept?: { name: string; artDirection: string };
   createdAt: string;
   updatedAt: string;
 }
