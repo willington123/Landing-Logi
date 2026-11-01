@@ -111,6 +111,11 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const [guaranteeDays, setGuaranteeDays] = useState('30');
   const [tone, setTone] = useState(TONES[0].id);
   const [withImages, setWithImages] = useState(true);
+  // "sections" = the page is a column of designed graphics (Claude art-directs, Nano Banana draws).
+  const [style, setStyle] = useState<'sections' | 'web'>('sections');
+  const [reviewsText, setReviewsText] = useState('');
+  const [reviewShots, setReviewShots] = useState<string[]>([]);
+  const reviewInput = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState('');
   const [serverKey, setServerKey] = useState(false);
   const [claudeWrites, setClaudeWrites] = useState(false);
@@ -158,6 +163,16 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
     setExtraImages((prev) => [...prev, ...list].slice(0, 3));
   };
 
+  const handleReviewShots = async (files: FileList | null) => {
+    if (!files) return;
+    const list = await Promise.all(
+      Array.from(files)
+        .slice(0, 4)
+        .map(async (f) => compressImage(await fileToDataUrl(f), 900, 0.8))
+    );
+    setReviewShots((prev) => [...prev, ...list].slice(0, 4));
+  };
+
   const handleGenerate = async () => {
     setError(null);
     if (!productImage) return setError('Sube la foto principal del producto.');
@@ -173,7 +188,8 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
     if (apiKey.trim()) logiStore.saveGeminiApiKey(apiKey);
 
     const baseTasks: Task[] = [{ key: 'copy', label: claudeWrites ? 'Claude está analizando la foto y escribiendo la página' : 'Analizando la foto y escribiendo la página', state: 'running' }];
-    if (withImages) {
+    const sectionsMode = style === 'sections';
+    if (!sectionsMode && withImages) {
       baseTasks.push(
         { key: 'hero', label: 'Imagen principal (banner)', state: 'pending' },
         { key: 'solution', label: 'Escena de uso con persona', state: 'pending' },
@@ -207,6 +223,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         shippingType,
         guaranteeDays: Number(guaranteeDays) || 30,
         tone,
+        ...(sectionsMode ? { mode: 'sections', reviews: reviewsText.trim().slice(0, 2000), reviewImagesCount: reviewShots.length } : {}),
       });
       copy = data.copy;
       updateTask('copy', { state: 'done', label: `${data.writer === 'claude' ? 'Claude escribió la página' : 'Textos listos'}: “${copy.headline.replace(/\*\*/g, '')}”` });
@@ -218,7 +235,45 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
 
     // 2. Scene images (optional, failures are not fatal)
     const images: GeneratedImages = { benefits: [] };
-    if (withImages) {
+    if (sectionsMode && copy.sections?.length) {
+      // 2b. One designed graphic per section, all with the same art direction.
+      const sections = copy.sections;
+      images.sections = [];
+      const kindLabel: Record<string, string> = { hero: 'Portada', offer: 'Oferta', problem: 'Problema', benefits: 'Beneficios', features: 'Características', how_to: 'Cómo se usa', comparison: 'Comparación', testimonials: 'Opiniones reales', guarantee: 'Garantía', shipping: 'Envío y pago', cta: 'Llamado final' };
+      setTasks((prev) => [...prev, ...sections.map((x, i) => ({ key: `s${i}`, label: `Sección ${i + 1}: ${kindLabel[x.kind] || x.kind}`, state: 'pending' as const }))]);
+      const referenceImage = await compressImage(productImage, 500, 0.85);
+      let noImageQuota = false;
+      await runPool(
+        sections.map((x, i) => async () => {
+          const key = `s${i}`;
+          if (noImageQuota) return updateTask(key, { state: 'error', error: 'tu plan de Gemini no incluye imágenes' });
+          updateTask(key, { state: 'running' });
+          try {
+            const data = await postJSON('/api/landing/image', {
+              ...common,
+              mode: 'design',
+              imageBase64: productImage,
+              referenceImage,
+              prompt: x.prompt,
+              artDirection: copy.concept?.artDirection,
+              aspectRatio: x.aspect,
+              extraImages: x.useReviewImages ? reviewShots : undefined,
+            });
+            const small = await compressImage(data.image, 1080, 0.82);
+            images.sections![i] = small;
+            updateTask(key, { state: 'done', preview: small });
+          } catch (e: any) {
+            if (e.code === 'no_image_quota') {
+              noImageQuota = true;
+              setImageNotice(e.message);
+            }
+            updateTask(key, { state: 'error', error: e.code === 'no_image_quota' ? 'tu plan de Gemini no incluye imágenes' : e.message });
+          }
+        }),
+        2
+      );
+      if (!images.sections.some(Boolean)) setImageNotice((n) => n || 'No se pudo dibujar ninguna sección; la página se armó con el diseño web.');
+    } else if (!sectionsMode && withImages) {
       const palette = `${copy.design.primary}, ${copy.design.accent}, ${copy.design.dark}`;
       // Cloudflare's FLUX.2 needs a reference under 512x512.
       const referenceImage = await compressImage(productImage, 500, 0.85);
@@ -421,18 +476,79 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                   />
                 </div>
 
-                <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={withImages}
-                    onChange={(e) => setWithImages(e.target.checked)}
-                    className="mt-0.5 accent-[#0A6CF0]"
-                  />
-                  <span className="text-xs text-slate-600">
-                    <strong className="text-slate-900 block">Generar 5 imágenes publicitarias con IA</strong>
-                    Escenas con tu producto real: banner, persona usándolo y una por beneficio. Usa Gemini, Replicate (nano-banana) o Cloudflare (gratis), según lo que configures.
-                  </span>
-                </label>
+<div>
+                  <span className={label}>Estilo de la página</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      ['sections', 'Secciones de imagen', 'Piezas gráficas únicas con textos grandes, insignias y precios. Claude las diseña y Nano Banana Pro las dibuja.'],
+                      ['web', 'Página web', 'El diseño de siempre: textos editables y 5 fotos publicitarias.'],
+                    ] as const).map(([id, title, text]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setStyle(id)}
+                        className={`text-left p-3 rounded-xl border text-xs ${style === id ? 'border-[#0A6CF0] bg-[#0A6CF0]/5 ring-2 ring-[#0A6CF0]/15' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                      >
+                        <strong className="text-slate-900 block mb-0.5">{title}</strong>
+                        <span className="text-slate-600">{text}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {style === 'web' && (
+                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={withImages}
+                      onChange={(e) => setWithImages(e.target.checked)}
+                      className="mt-0.5 accent-[#0A6CF0]"
+                    />
+                    <span className="text-xs text-slate-600">
+                      <strong className="text-slate-900 block">Generar 5 imágenes publicitarias con IA</strong>
+                      Escenas con tu producto real: banner, persona usándolo y una por beneficio. Usa Gemini, Replicate (nano-banana) o Cloudflare (gratis), según lo que configures.
+                    </span>
+                  </label>
+                )}
+
+                {style === 'sections' && (
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                    <span className="block text-xs font-bold text-slate-700">Opiniones reales de clientes (opcional)</span>
+                    <textarea
+                      className={`${input} min-h-[72px]`}
+                      value={reviewsText}
+                      onChange={(e) => setReviewsText(e.target.value)}
+                      placeholder={'Una por línea, tal cual te la escribieron:\nMaría G., Medellín: "Me llegó en 2 días, me encantó"'}
+                    />
+                    <div className="flex gap-2 items-center">
+                      {reviewShots.map((img, i) => (
+                        <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 group">
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setReviewShots((p) => p.filter((_, j) => j !== i))}
+                            className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                            aria-label="Quitar captura"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      {reviewShots.length < 4 && (
+                        <button
+                          type="button"
+                          onClick={() => reviewInput.current?.click()}
+                          className="h-12 px-3 rounded-lg border-2 border-dashed border-slate-300 hover:border-slate-400 text-[11px] text-slate-500 flex items-center gap-1"
+                        >
+                          <ImagePlus className="w-4 h-4" /> Capturas de chats o reseñas
+                        </button>
+                      )}
+                      <input ref={reviewInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleReviewShots(e.target.files)} />
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Solo se usan opiniones que tú pongas. Si no pones ninguna, la página no lleva sección de testimonios: Konnexa no inventa clientes, caras ni resultados.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Data */}

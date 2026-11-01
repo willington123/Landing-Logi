@@ -125,9 +125,13 @@ export async function generateJSON<T>(
 export async function generateImage(
   apiKey: string,
   parts: GeminiPart[],
-  aspectRatio: '1:1' | '16:9' | '4:3' | '3:4' | '9:16' = '1:1'
+  aspectRatio: '1:1' | '16:9' | '4:3' | '3:4' | '9:16' = '1:1',
+  opts: { preferPro?: boolean } = {}
 ): Promise<string> {
-  return withFallback(IMAGE_MODELS, async (model) => {
+  // Designed sections carry real text: Nano Banana Pro writes it best, so it goes first there.
+  const pro = process.env.GEMINI_DESIGN_IMAGE_MODEL || 'gemini-3-pro-image';
+  const models = opts.preferPro ? [pro, ...IMAGE_MODELS.filter((m) => m !== pro)] : IMAGE_MODELS;
+  return withFallback(models, async (model) => {
     const contents = [{ role: 'user', parts }];
     let data;
     try {

@@ -30,7 +30,7 @@ import {
   Search as SearchIcon,
 } from 'lucide-react';
 import { logiStore } from '@/lib/store';
-import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem } from '@/lib/types';
+import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem, ImageSection } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
@@ -324,6 +324,33 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
     [config.mainImage, d.primary, d.accent, d.dark]
   );
 
+  // Designed image sections: same art direction as when the page was created.
+  const generateDesign = useCallback(
+    async (prompt: string, aspect: string) => {
+      const ref = await compressImage(config.mainImage, 1024, 0.85);
+      const small = await compressImage(config.mainImage, 500, 0.85);
+      const res = await fetch('/api/landing/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'design',
+          imageBase64: ref,
+          referenceImage: small,
+          prompt,
+          aspectRatio: aspect,
+          artDirection: config.artConcept?.artDirection,
+          geminiApiKey: logiStore.getGeminiApiKey() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+      return compressImage(data.image, 1080, 0.82);
+    },
+    [config.mainImage, config.artConcept?.artDirection]
+  );
+  const updateSection = (id: string, patch: Partial<ImageSection>) =>
+    setConfig((c) => ({ ...c, imageSections: (c.imageSections || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.origin + config.publishedUrl);
     setCopied(true);
@@ -599,6 +626,30 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                   ))}
                   <ImageSlot label="Añadir a la galería" onChange={(v) => v && update({ galleryImages: [...(config.galleryImages || []), v] })} aspect="1:1" aiPrompt="the product on a clean surface, soft natural light, premium e-commerce photo" generate={generateImage} />
                 </Group>
+                {(config.imageSections || []).length > 0 && (
+                  <Group title={`Secciones de imagen${config.artConcept?.name ? ` · ${config.artConcept.name}` : ''}`} defaultOpen>
+                    <p className="text-[11px] text-slate-500">La página muestra estas piezas en orden. Puedes cambiar la instrucción y volver a dibujar una, subir la tuya o quitarla.</p>
+                    {(config.imageSections || []).map((x, i, arr) => (
+                      <div key={x.id} className="space-y-1">
+                        <ImageSlot
+                          label={`${i + 1}. ${x.alt || x.kind}`}
+                          src={x.image}
+                          onChange={(v) => updateSection(x.id, { image: v })}
+                          aspect={x.aspect}
+                          aiPrompt={x.prompt}
+                          generate={x.useReviewImages ? undefined : generateDesign}
+                        />
+                        <div className="flex justify-end">
+                          <RowTools
+                            onUp={i ? () => update({ imageSections: move(arr, i, -1) }) : undefined}
+                            onDown={i < arr.length - 1 ? () => update({ imageSections: move(arr, i, 1) }) : undefined}
+                            onRemove={() => update({ imageSections: arr.filter((_, j) => j !== i) })}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </Group>
+                )}
                 <Group title="Imágenes de las secciones" defaultOpen>
                   <ImageSlot label="Sección de pasos" src={s.solutionImage} onChange={(v) => updateSales({ solutionImage: v })} aspect="4:3" aiPrompt="a person using the product in an everyday moment, warm realistic lifestyle photo" generate={generateImage} />
                   <ImageSlot label="Tarjeta de problema" src={s.painImage} onChange={(v) => updateSales({ painImage: v })} aspect="3:4" aiPrompt="close-up of the product in use, natural light" generate={generateImage} />
