@@ -23,6 +23,7 @@ export interface SalesPageProps {
   plans: Plan[];
   signupOpen: boolean;
   contactUrl: string | null; // WhatsApp link when sign-up is closed
+  operator?: string | null; // "Fundación Trébol · NIT … · dirección" (who operates Konnexa)
 }
 
 const FEATURES = [
@@ -133,7 +134,7 @@ function HeroMock() {
   );
 }
 
-export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPageProps) {
+export default function SalesPage({ plans, signupOpen, contactUrl, operator }: SalesPageProps) {
   const year = new Date().getFullYear();
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -301,7 +302,9 @@ export default function SalesPage({ plans, signupOpen, contactUrl }: SalesPagePr
       <footer className="border-t border-slate-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
           <Logo />
-          <p className="sm:ml-4">© {year} Konnexa</p>
+          <p className="sm:ml-4 text-center sm:text-left">
+            © {year} Konnexa{operator && <span className="block text-xs text-slate-400">Una marca de {operator}</span>}
+          </p>
           <nav className="sm:ml-auto flex gap-5">
             <Link href="/terminos" className="hover:text-slate-800">Términos</Link>
             <Link href="/privacidad" className="hover:text-slate-800">Privacidad</Link>

@@ -173,7 +173,7 @@ Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. 
 - Quien entra a tu dominio sin sesión ve la página de Konnexa (funciones, precios y preguntas). Quien ya inició sesión va directo al panel.
 - Los precios salen de **Admin plataforma → Planes y precios**.
 - Con `SIGNUP_OPEN=true` los botones llevan a crear la tienda; si no, a tu WhatsApp (`PLATFORM_WHATSAPP`) o al inicio de sesión.
-- `/terminos` tiene los Términos del servicio. Pon tu nombre legal en `PLATFORM_COMPANY_NAME` y tu correo en `PLATFORM_SUPPORT_EMAIL`, y haz que un abogado los revise.
+- `/terminos` (Términos del servicio) y `/privacidad` (política de privacidad de la plataforma, la que va en la app de Meta) muestran quién opera Konnexa. Pon en Vercel los datos **idénticos** a los del portafolio verificado en Meta: `PLATFORM_COMPANY_NAME` (nombre legal), `PLATFORM_COMPANY_ID` (ej. `NIT 900126576-7`), `PLATFORM_COMPANY_ADDRESS` y `PLATFORM_SUPPORT_EMAIL`. Salen también al pie de la página de ventas. Haz que un abogado revise los textos.
 
 ### Activarlo (una sola vez)
 1. **Supabase → SQL Editor:** ejecuta `supabase/migrations/005_billing.sql` **antes** de publicar. Tu tienda queda sin costo y las otras tiendas que ya existan empiezan 7 días de prueba.

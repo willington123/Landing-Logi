@@ -1,13 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { GRACE_DAYS, TRIAL_DAYS } from '@/lib/plans';
+import { operatorLine, platformOperator } from '@/lib/platform';
 
 export const metadata: Metadata = { title: 'Términos del servicio · Konnexa', robots: { index: true, follow: true } };
 
 // Terms of service of the Konnexa platform (for the stores that use it). Operator data comes from env.
 export default function TermsPage() {
-  const company = process.env.PLATFORM_COMPANY_NAME?.trim() || 'Konnexa';
-  const email = process.env.PLATFORM_SUPPORT_EMAIL?.trim();
+  const op = platformOperator();
+  const company = op.name || 'Konnexa';
+  const email = op.email;
+  const opLine = operatorLine(op);
   const contact = email ? `al correo ${email}` : 'por los canales de atención publicados en el sitio';
   const h2 = 'text-lg font-semibold text-slate-900 mt-8 mb-2';
   const p = 'text-[15px] leading-relaxed text-slate-700';
@@ -100,6 +103,7 @@ export default function TermsPage() {
 
         <h2 className={h2}>Contacto</h2>
         <p className={p}>Para cualquier duda sobre estos términos, escríbenos {contact}.</p>
+        {opLine && <p className={`${p} mt-2`}>Konnexa es operada por {opLine}.</p>}
       </article>
     </main>
   );

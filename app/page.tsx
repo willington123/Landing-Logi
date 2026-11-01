@@ -6,6 +6,7 @@ import { getPlans } from '@/lib/server/billing';
 import { signupOpen } from '@/lib/server/accounts';
 import { DEFAULT_PLANS } from '@/lib/plans';
 import SalesPage from '@/components/marketing/SalesPage';
+import { operatorLine } from '@/lib/platform';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ export default async function Home() {
       plans={plans}
       signupOpen={signupOpen()}
       contactUrl={wa ? `https://wa.me/${wa}?text=${encodeURIComponent('Hola, quiero probar Konnexa')}` : null}
+      operator={operatorLine()}
     />
   );
 }
