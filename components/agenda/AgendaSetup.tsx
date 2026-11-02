@@ -3,7 +3,7 @@
 // Agenda setup: services, professionals (weekly hours and days off) and reminder settings.
 import React, { useState } from 'react';
 import { CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react';
-import { DAY_NAMES, newStaffSchedule, type AgendaService, type AgendaSettings, type AgendaStaff } from '@/lib/agenda';
+import { DAY_NAMES, newStaffSchedule, slugify, type AgendaService, type AgendaSettings, type AgendaStaff } from '@/lib/agenda';
 import { TIMEZONES } from '@/lib/crm';
 
 export const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
@@ -30,7 +30,7 @@ export function ServicesEditor({ agenda, onChange }: { agenda: AgendaSettings; o
     <div className="space-y-3">
       <p className="text-xs text-slate-500">Lo que ofreces, con su duración y precio. El asistente solo ofrece estos servicios y estos precios.</p>
       {agenda.services.map((s, i) => (
-        <div key={s.id} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-[1fr_110px_130px_auto] gap-2 items-start">
+        <div key={s.id} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-[1fr_100px_120px_120px_auto] gap-2 items-start">
           <div className="space-y-1.5">
             <input className={input} placeholder="Nombre (ej. Corte + barba)" value={s.name} onChange={(e) => set(i, { name: e.target.value })} />
             <input className={input} placeholder="Descripción corta (opcional)" value={s.description || ''} onChange={(e) => set(i, { description: e.target.value })} />
@@ -42,6 +42,10 @@ export function ServicesEditor({ agenda, onChange }: { agenda: AgendaSettings; o
           <label className="block">
             <span className="text-[11px] text-slate-500">Precio (0 = a consultar)</span>
             <input className={input} type="number" min={0} step={1000} value={s.price} onChange={(e) => set(i, { price: Number(e.target.value) })} />
+          </label>
+          <label className="block" title="Para el mensaje 'vuelve pronto': cuántos días después de la cita suele volver el cliente. 0 = no enviar.">
+            <span className="text-[11px] text-slate-500">Vuelve cada (días)</span>
+            <input className={input} type="number" min={0} max={365} value={s.returnAfterDays || 0} onChange={(e) => set(i, { returnAfterDays: Number(e.target.value) })} />
           </label>
           <div className="flex sm:flex-col gap-1.5 sm:pt-4">
             <label className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -240,6 +244,34 @@ export function SettingsEditor({ agenda, onChange }: { agenda: AgendaSettings; o
           ))}
         </select>
       </label>
+      <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
+        <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
+          <input type="checkbox" className="accent-[#0A6CF0]" checked={agenda.bookingEnabled} onChange={(e) => set({ bookingEnabled: e.target.checked })} /> Página de reservas
+        </label>
+        <p className="text-[11px] text-slate-600">Un enlace para tu Instagram, tu perfil de WhatsApp o tus anuncios: el cliente elige servicio, profesional, día y hora, y agenda sin escribir.</p>
+        <div className="flex items-center gap-1 text-[13px]">
+          <span className="text-slate-500 whitespace-nowrap">{typeof window !== 'undefined' ? window.location.host : 'konnexa.lat'}/citas/</span>
+          <input className={input} placeholder="barberia-el-parche" value={agenda.bookingSlug} onChange={(e) => set({ bookingSlug: slugify(e.target.value) })} />
+        </div>
+        {agenda.bookingEnabled && agenda.bookingSlug && (
+          <a href={`/citas/${agenda.bookingSlug}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#0A6CF0] hover:underline">
+            Abrir mi página de reservas (guarda primero) ↗
+          </a>
+        )}
+        <p className="text-[11px] text-slate-500">Al reservar, el cliente recibe la plantilla de recordatorio para confirmar o cancelar.</p>
+      </div>
+      <div className="md:col-span-2 rounded-xl border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+        <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
+          <input type="checkbox" className="accent-[#0A6CF0]" checked={agenda.comeBackEnabled} onChange={(e) => set({ comeBackEnabled: e.target.checked })} /> Mensaje "vuelve pronto"
+        </label>
+        <p className="text-[11px] text-slate-600">
+          Si un cliente asistió y ya pasaron los días que pusiste en el servicio ("Vuelve cada"), y no tiene otra cita, le escribimos para que agende. Usa una plantilla de marketing (Plantillas → Vuelve pronto); envíala solo a clientes que te autorizaron a escribirles.
+        </p>
+        <label className="block">
+          <span className="text-[11px] text-slate-500">Plantilla</span>
+          <input className={input} value={agenda.comeBackTemplate} onChange={(e) => set({ comeBackTemplate: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} />
+        </label>
+      </div>
       <div className="md:col-span-2 rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-2">
         <p className="text-[13px] font-semibold text-slate-900">Recordatorios por WhatsApp</p>
         <label className="flex items-center gap-2 text-xs text-slate-700">

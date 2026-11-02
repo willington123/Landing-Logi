@@ -1,12 +1,12 @@
 // Appointment reminders (24 h and 2 h before) with "Confirmar cita" / "Cancelar cita", and what happens when the
 // customer taps them. Inside WhatsApp's 24 h window the reminder is a free message with buttons; outside it, the
 // store's approved reminder template.
-import { db } from '@/lib/server/db';
+import { db, getSettings } from '@/lib/server/db';
 import { getAgenda, getAppointment, isAppointmentsBusiness, listAppointments, patchAppointmentData, setAppointmentStatus } from '@/lib/server/agenda';
-import { insideServiceWindow, sendAppointmentTemplate, sendButtons, sendText, whatsappEnabled, type InboundMessage, type SendResult } from '@/lib/server/whatsapp';
+import { insideServiceWindow, sendAppointmentTemplate, sendButtons, sendTemplate, sendText, whatsappEnabled, type InboundMessage, type SendResult } from '@/lib/server/whatsapp';
 import { recordOutbound } from '@/lib/server/wa-store';
 import { addNote } from '@/lib/server/crm-store';
-import { formatWhen, type AgendaSettings, type Appointment } from '@/lib/agenda';
+import { formatWhen, localParts, type AgendaSettings, type Appointment } from '@/lib/agenda';
 
 const H = 3600000;
 const firstName = (n: string) => (n || '').trim().split(/\s+/)[0] || 'hola';
@@ -97,4 +97,60 @@ export async function appointmentButton(m: InboundMessage & { appt: NonNullable<
     await say(`Listo, ${firstName(x.customerName)}. Cancelamos tu cita de ${t.service} del ${t.when}. Si quieres, te ayudamos a buscar otro horario: escríbenos por aquí.`);
     await addNote(m.from, `❌ El cliente canceló su cita de ${t.service} (${t.when}).`).catch(() => {});
   }
+}
+
+
+// ---------- "vuelve pronto" ----------
+
+const DAY = 24 * H;
+
+// "4 semanas", "2 meses", "10 días"
+function since(days: number) {
+  if (days >= 56) return `${Math.round(days / 30)} meses`;
+  if (days >= 14) return `${Math.round(days / 7)} semanas`;
+  return `${days} días`;
+}
+
+// Customers who attended, whose service's "vuelve cada X días" has come, and who have no upcoming appointment.
+// Once per attended appointment; at most two weeks late (older ones are left alone); daytime only.
+export async function processComeBack(now = new Date(), deadline = Date.now() + 40000): Promise<{ sent: number; failed: number }> {
+  const out = { sent: 0, failed: 0 };
+  if (!(await isAppointmentsBusiness()) || !(await whatsappEnabled())) return out;
+  const a = await getAgenda();
+  if (!a.comeBackEnabled) return out;
+  const due = a.services.filter((s) => (s.returnAfterDays || 0) > 0);
+  if (!due.length) return out;
+  const hhmm = localParts(now, a.timezone).hhmm;
+  if (hhmm < '09:00' || hhmm >= '19:00') return out;
+  const longest = Math.max(...due.map((s) => s.returnAfterDays || 0));
+  const past = await listAppointments(new Date(now.getTime() - (longest + 15) * DAY).toISOString(), now.toISOString());
+  const upcoming = await listAppointments(now.toISOString(), new Date(now.getTime() + 400 * DAY).toISOString());
+  const busyPhones = new Set(upcoming.filter((x) => x.status === 'pending' || x.status === 'confirmed').map((x) => x.phone));
+  // The latest attended appointment of each customer.
+  const latest = new Map<string, Appointment & { data?: any }>();
+  for (const x of past) if (x.status === 'completed' && x.phone && (!latest.has(x.phone) || latest.get(x.phone)!.start < x.start)) latest.set(x.phone, x);
+  const storeName = (await getSettings<{ storeName?: string }>().catch(() => null))?.storeName?.trim() || 'nuestro negocio';
+  let sentHere = 0;
+  for (const x of Array.from(latest.values())) {
+    if (Date.now() > deadline || sentHere >= 20) break;
+    if (busyPhones.has(x.phone)) continue;
+    const service = a.services.find((s) => s.id === x.serviceId);
+    const days = service?.returnAfterDays || 0;
+    if (!days) continue;
+    const late = now.getTime() - (new Date(x.start).getTime() + days * DAY);
+    if (late < 0 || late > 14 * DAY) continue;
+    const { data: row } = await (await db()).from('appointments').select('data').eq('id', x.id).maybeSingle();
+    if ((row?.data as any)?.comeBack) continue;
+    await patchAppointmentData(x.id, { comeBack: { at: now.toISOString() } });
+    const body = `Hola ${firstName(x.customerName)} 👋 Ya pasaron ${since(days)} desde tu última cita de ${service!.name} en ${storeName}. ¿Te agendamos la próxima?`;
+    const result = await sendTemplate(x.phone, { name: a.comeBackTemplate, lang: a.templateLang }, [firstName(x.customerName), since(days), service!.name, storeName]).catch(
+      (e) => ({ ok: false, error: String(e?.message || e) }) as SendResult,
+    );
+    await recordOutbound({ phone: x.phone, name: x.customerName, type: 'template', body, result, auto: true }).catch(() => {});
+    await patchAppointmentData(x.id, { comeBack: { at: now.toISOString(), ok: result.ok, error: result.error || null } });
+    sentHere++;
+    if (result.ok) out.sent++;
+    else out.failed++;
+  }
+  return out;
 }

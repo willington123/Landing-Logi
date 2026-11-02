@@ -6,8 +6,9 @@ import Link from 'next/link';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, MessageSquare, Plus, X } from 'lucide-react';
 import { addDays, DAY_NAMES, localParts, STATUS_LABEL, toMin, type AgendaSettings, type Appointment, type AppointmentStatus } from '@/lib/agenda';
 import { card, input, primary, SaveBar, ServicesEditor, SettingsEditor, StaffEditor } from '@/components/agenda/AgendaSetup';
+import AgendaReports from '@/components/agenda/AgendaReports';
 
-type Tab = 'calendar' | 'services' | 'staff' | 'settings';
+type Tab = 'calendar' | 'reports' | 'services' | 'staff' | 'settings';
 type View = 'day' | 'week';
 
 const STATUS_STYLE: Record<AppointmentStatus, string> = {
@@ -126,6 +127,7 @@ export default function AgendaPage() {
   const ready = agenda.services.some((s) => s.active) && agenda.staff.some((p) => p.active);
   const TABS: [Tab, string][] = [
     ['calendar', 'Calendario'],
+    ['reports', 'Reportes'],
     ['services', `Servicios (${agenda.services.length})`],
     ['staff', `Profesionales (${agenda.staff.length})`],
     ['settings', 'Ajustes'],
@@ -141,7 +143,9 @@ export default function AgendaPage() {
         ))}
       </div>
 
-      {tab !== 'calendar' && (
+      {tab === 'reports' && <AgendaReports agenda={agenda} />}
+
+      {tab !== 'calendar' && tab !== 'reports' && (
         <div className={`${card} p-5 space-y-4`}>
           {tab === 'services' && <ServicesEditor agenda={draft} onChange={setDraft} />}
           {tab === 'staff' && <StaffEditor agenda={draft} onChange={setDraft} />}

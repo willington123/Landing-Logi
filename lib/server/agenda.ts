@@ -1,6 +1,8 @@
 // Server side of "Negocio con citas": settings, appointments and free slots of the current store.
 import { randomUUID } from 'crypto';
 import { db } from '@/lib/server/db';
+import { rawDb } from '@/lib/server/supabase';
+import { access } from '@/lib/server/billing';
 import { normalizePhone } from '@/lib/phone';
 import {
   DEFAULT_AGENDA,
@@ -198,4 +200,26 @@ export async function patchAppointmentData(id: string, patch: Record<string, unk
   const { data: row } = await (await db()).from('appointments').select('data').eq('id', id).maybeSingle();
   if (!row) return;
   await (await db()).from('appointments').update({ data: { ...(row.data as object), ...patch }, updated_at: new Date().toISOString() }).eq('id', id);
+}
+
+// ---------- public booking page ----------
+
+// The store whose booking page is konnexa.lat/citas/<slug> (only if it is on and the store can sell).
+export async function findBookingPage(slug: string): Promise<{ orgId: string; agenda: AgendaSettings } | null> {
+  if (!/^[a-z0-9-]{3,60}$/.test(slug)) return null;
+  const { data, error } = await rawDb().from('settings').select('org_id, data').eq('id', 'agenda').eq('data->>bookingSlug', slug).limit(1);
+  if (error) throw new Error(error.message);
+  const row = data?.[0];
+  if (!row) return null;
+  const agenda = { ...DEFAULT_AGENDA, ...(row.data as Partial<AgendaSettings>) };
+  if (!agenda.bookingEnabled || agenda.businessType !== 'appointments') return null;
+  if ((await access(row.org_id as string)).landingsOff) return null;
+  return { orgId: row.org_id as string, agenda };
+}
+
+// Another store already uses this booking address.
+export async function bookingSlugTaken(slug: string, orgId: string): Promise<boolean> {
+  if (!slug) return false;
+  const { data } = await rawDb().from('settings').select('org_id').eq('id', 'agenda').eq('data->>bookingSlug', slug).limit(5);
+  return (data || []).some((r: any) => r.org_id !== orgId);
 }

@@ -21,3 +21,14 @@ export const APPOINTMENT_PRESET = {
   examples: ['Laura', 'Corte + barba', 'martes 4 de noviembre, 3:00 p. m.', 'con Juan en Calle 10 # 20-30'],
   buttons: ['Confirmar cita', 'Cancelar cita'],
 };
+
+// "Vuelve pronto" (marketing): {{1}} name, {{2}} time since the last visit, {{3}} service, {{4}} business.
+// The buttons have no payload: the customer's tap reaches the assistant, which offers free times.
+export const COME_BACK_PRESET = {
+  name: 'volver_cita',
+  language: 'es',
+  category: 'MARKETING' as const,
+  body: 'Hola {{1}} 👋 Ya pasaron {{2}} desde tu última cita de {{3}} en {{4}}. ¿Te agendamos la próxima?',
+  examples: ['Laura', '4 semanas', 'Corte + barba', 'Barbería El Parche'],
+  buttons: ['Agendar cita', 'Ahora no'],
+};

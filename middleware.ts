@@ -5,6 +5,7 @@ import { AUTH_COOKIE, SESSION_COOKIE, cloudConfigured, expectedToken, safeEqual,
 // sign-in / sign-up / invitations and static assets.
 const PUBLIC_PREFIXES = [
   '/p/',
+  '/citas/',
   '/api/public/',
   '/api/whatsapp/webhook',
   '/api/vapi/webhook',
