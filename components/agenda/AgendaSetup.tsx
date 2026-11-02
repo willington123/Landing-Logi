@@ -3,7 +3,7 @@
 // Agenda setup: services, professionals (weekly hours and days off) and reminder settings.
 import React, { useState } from 'react';
 import { CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react';
-import { DAY_NAMES, newStaffSchedule, slugify, type AgendaService, type AgendaSettings, type AgendaStaff } from '@/lib/agenda';
+import { DAY_NAMES, newStaffSchedule, type AgendaService, type AgendaSettings, type AgendaStaff } from '@/lib/agenda';
 import { TIMEZONES } from '@/lib/crm';
 
 export const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
@@ -244,22 +244,10 @@ export function SettingsEditor({ agenda, onChange }: { agenda: AgendaSettings; o
           ))}
         </select>
       </label>
-      <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
-        <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
-          <input type="checkbox" className="accent-[#0A6CF0]" checked={agenda.bookingEnabled} onChange={(e) => set({ bookingEnabled: e.target.checked })} /> Página de reservas
-        </label>
-        <p className="text-[11px] text-slate-600">Un enlace para tu Instagram, tu perfil de WhatsApp o tus anuncios: el cliente elige servicio, profesional, día y hora, y agenda sin escribir.</p>
-        <div className="flex items-center gap-1 text-[13px]">
-          <span className="text-slate-500 whitespace-nowrap">{typeof window !== 'undefined' ? window.location.host : 'konnexa.lat'}/citas/</span>
-          <input className={input} placeholder="barberia-el-parche" value={agenda.bookingSlug} onChange={(e) => set({ bookingSlug: slugify(e.target.value) })} />
-        </div>
-        {agenda.bookingEnabled && agenda.bookingSlug && (
-          <a href={`/citas/${agenda.bookingSlug}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#0A6CF0] hover:underline">
-            Abrir mi página de reservas (guarda primero) ↗
-          </a>
-        )}
-        <p className="text-[11px] text-slate-500">Al reservar, el cliente recibe la plantilla de recordatorio para confirmar o cancelar.</p>
-      </div>
+      <a href="/reservas" className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 block hover:border-emerald-300">
+        <p className="text-[13px] font-semibold text-slate-900">Página de reservas →</p>
+        <p className="text-[11px] text-slate-600">Se edita, publica y comparte en el menú <strong>Página de reservas</strong>.</p>
+      </a>
       <div className="md:col-span-2 rounded-xl border border-violet-200 bg-violet-50/40 p-3 space-y-2">
         <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
           <input type="checkbox" className="accent-[#0A6CF0]" checked={agenda.comeBackEnabled} onChange={(e) => set({ comeBackEnabled: e.target.checked })} /> Mensaje "vuelve pronto"

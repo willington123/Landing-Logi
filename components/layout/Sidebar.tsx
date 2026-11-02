@@ -7,7 +7,7 @@ import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -55,11 +55,16 @@ const NAV_GROUPS = [
   },
 ];
 
-// "Negocio con citas": Agenda takes the place of Pedidos.
+// "Negocio con citas": Agenda takes the place of Pedidos, and the booking page the place of Landing pages.
 function navGroups(type?: 'store' | 'appointments') {
   if (type !== 'appointments') return NAV_GROUPS;
+  const swap: Record<string, { href: string; label: string; icon: typeof CalendarDays }> = {
+    '/orders': { href: '/agenda', label: 'Agenda', icon: CalendarDays },
+    '/landings': { href: '/reservas', label: 'Página de reservas', icon: Globe },
+  };
+  const order = ['/dashboard', '/agenda', '/reservas'];
   return NAV_GROUPS.map((g) =>
-    g.label === 'Vender' ? { ...g, items: g.items.map((i) => (i.href === '/orders' ? { href: '/agenda', label: 'Agenda', icon: CalendarDays } : i)) } : g,
+    g.label === 'Vender' ? { ...g, items: g.items.map((i) => swap[i.href] || i).sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href)) } : g,
   );
 }
 
@@ -198,6 +203,16 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
         {/* Primary action */}
         <div className="px-4 pb-4">
+          {account?.businessType === 'appointments' ? (
+            <Link
+              href="/reservas"
+              onClick={() => setOpen(false)}
+              className="w-full h-10 rounded-xl bg-brand-gradient text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-[0_8px_20px_-8px_rgba(10,108,240,0.6)] hover:brightness-105 active:scale-[0.98] transition"
+            >
+              <CalendarDays className="w-4 h-4" />
+              Mi página de reservas
+            </Link>
+          ) : (
           <button
             onClick={() => {
               setOpen(false);
@@ -208,6 +223,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
             <Sparkles className="w-4 h-4" />
             Crear landing con IA
           </button>
+          )}
         </div>
 
         {/* Navigation */}

@@ -25,7 +25,11 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
       const [settings, wa] = await Promise.all([getSettings<{ storeName?: string }>().catch(() => null), waConfig().catch(() => null)]);
       return ok({
         business: {
-          name: settings?.storeName?.trim() || 'Reserva tu cita',
+          name: a.bookingTitle || settings?.storeName?.trim() || 'Reserva tu cita',
+          intro: a.bookingIntro,
+          color: a.bookingColor,
+          cover: a.bookingCover || null,
+          showPrices: a.bookingShowPrices,
           address: a.address,
           policies: a.policies,
           whatsapp: (wa?.displayPhone || '').replace(/\D/g, '') || null,

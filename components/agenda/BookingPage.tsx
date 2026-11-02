@@ -6,19 +6,30 @@ import { CalendarCheck2, Check, Clock, Loader2, MapPin, MessageCircle } from 'lu
 import { addDays, formatWhen, localParts } from '@/lib/agenda';
 
 interface Info {
-  business: { name: string; address: string; policies: string; whatsapp: string | null; timezone: string; maxDaysAhead: number };
+  business: {
+    name: string;
+    address: string;
+    policies: string;
+    whatsapp: string | null;
+    timezone: string;
+    maxDaysAhead: number;
+    intro?: string;
+    color?: string;
+    cover?: string | null;
+    showPrices?: boolean;
+  };
   services: { id: string; name: string; durationMin: number; price: number; description: string }[];
   staff: { id: string; name: string; serviceIds: string[] }[];
 }
 
 const money = (v: number) => (v > 0 ? `$${Math.round(v).toLocaleString('es-CO')}` : 'Precio a consultar');
-const input = 'w-full h-12 text-[15px] bg-white border border-slate-300 rounded-xl px-4 outline-none focus:border-[#0A6CF0] focus:ring-2 focus:ring-[#0A6CF0]/15';
+const input = 'w-full h-12 text-[15px] bg-white border border-slate-300 rounded-xl px-4 outline-none focus:border-[var(--bk)] focus:ring-2 focus:ring-slate-900/5';
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
       <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-        <span className="w-6 h-6 rounded-full bg-[#0A6CF0] text-white text-xs font-bold flex items-center justify-center">{n}</span>
+        <span className="w-6 h-6 rounded-full bg-[var(--bk)] text-white text-xs font-bold flex items-center justify-center">{n}</span>
         {title}
       </h2>
       {children}
@@ -26,7 +37,8 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-export default function BookingPage({ slug }: { slug: string }) {
+// `preview`: the editor shows the page live, with its own data and the panel's free-times endpoint; booking is off.
+export default function BookingPage({ slug, preview, previewSlotsUrl }: { slug: string; preview?: Info; previewSlotsUrl?: (serviceId: string, date: string, staffId: string) => string }) {
   const [info, setInfo] = useState<Info | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [serviceId, setServiceId] = useState('');
@@ -43,11 +55,12 @@ export default function BookingPage({ slug }: { slug: string }) {
   const [autoDay, setAutoDay] = useState(true); // until the customer picks a day, jump to the first one with free times
 
   useEffect(() => {
+    if (preview) return setInfo(preview);
     fetch(`/api/public/booking/${slug}`)
       .then((r) => r.json())
       .then((d) => (d.success ? setInfo(d) : setError(d.error)))
       .catch(() => setError('No pudimos cargar la página. Revisa tu conexión.'));
-  }, [slug]);
+  }, [slug, preview]);
 
   const days = useMemo(() => {
     if (!info) return [];
@@ -59,7 +72,7 @@ export default function BookingPage({ slug }: { slug: string }) {
     if (!serviceId || !date) return;
     setSlots(null);
     setTime('');
-    fetch(`/api/public/booking/${slug}/slots?serviceId=${encodeURIComponent(serviceId)}&date=${date}${staffId ? `&staffId=${staffId}` : ''}`)
+    fetch(previewSlotsUrl ? previewSlotsUrl(serviceId, date, staffId) : `/api/public/booking/${slug}/slots?serviceId=${encodeURIComponent(serviceId)}&date=${date}${staffId ? `&staffId=${staffId}` : ''}`)
       .then((r) => r.json())
       .then((d) => {
         const list = d.success ? d.slots : [];
@@ -75,6 +88,9 @@ export default function BookingPage({ slug }: { slug: string }) {
   if (!info) return <main className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></main>;
 
   const service = info.services.find((s) => s.id === serviceId);
+  const color = info.business.color || '#0A6CF0';
+  const showPrices = info.business.showPrices !== false;
+  const vars = { ['--bk' as any]: color } as React.CSSProperties;
   const people = info.staff.filter((p) => !p.serviceIds.length || p.serviceIds.includes(serviceId));
   const dayLabel = (d: string) => {
     const dt = new Date(`${d}T12:00:00Z`);
@@ -87,6 +103,7 @@ export default function BookingPage({ slug }: { slug: string }) {
 
   const book = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (preview) return setFormError('Vista previa: aquí tu cliente agenda su cita.');
     setBusy(true);
     setFormError(null);
     try {
@@ -110,7 +127,7 @@ export default function BookingPage({ slug }: { slug: string }) {
   if (done) {
     const who = info.staff.find((p) => p.id === done.staffId)?.name;
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-5">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-5" style={vars}>
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-7 max-w-md w-full text-center space-y-3">
           <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 flex items-center justify-center">
             <Check className="w-7 h-7 text-emerald-600" />
@@ -139,12 +156,19 @@ export default function BookingPage({ slug }: { slug: string }) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="bg-gradient-to-br from-[#0047C2] via-[#0A6CF0] to-[#10C569] text-white">
+    <main className={`${preview ? '' : 'min-h-screen'} bg-slate-50`} style={vars}>
+      <header
+        className="text-white bg-cover bg-center"
+        style={{
+          backgroundImage: info.business.cover
+            ? `linear-gradient(rgba(15,23,42,.35), rgba(15,23,42,.65)), url("${info.business.cover}")`
+            : `linear-gradient(135deg, ${color}, ${color}cc 60%, #0f172a)`,
+        }}
+      >
         <div className="max-w-xl mx-auto px-5 pt-10 pb-8">
           <CalendarCheck2 className="w-8 h-8 mb-3 opacity-90" />
           <h1 className="text-2xl font-bold">{info.business.name}</h1>
-          <p className="text-white/85 mt-1">Agenda tu cita en un minuto.</p>
+          {info.business.intro && <p className="text-white/90 mt-1">{info.business.intro}</p>}
           {info.business.address && (
             <p className="text-white/80 text-sm mt-2 flex items-center gap-1.5">
               <MapPin className="w-4 h-4" /> {info.business.address}
@@ -160,7 +184,7 @@ export default function BookingPage({ slug }: { slug: string }) {
               <button
                 key={s.id}
                 onClick={() => (setServiceId(s.id), setStaffId(''), setDate(autoDay ? days[0] || '' : date))}
-                className={`w-full text-left rounded-2xl border p-4 bg-white transition ${serviceId === s.id ? 'border-[#0A6CF0] ring-2 ring-[#0A6CF0]/15' : 'border-slate-200 hover:border-slate-300'}`}
+                className={`w-full text-left rounded-2xl border p-4 bg-white transition ${serviceId === s.id ? 'border-[var(--bk)] ring-2 ring-slate-900/5' : 'border-slate-200 hover:border-slate-300'}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -170,7 +194,7 @@ export default function BookingPage({ slug }: { slug: string }) {
                       <Clock className="w-3.5 h-3.5" /> {s.durationMin} min
                     </p>
                   </div>
-                  <p className="font-semibold text-slate-900 whitespace-nowrap">{money(s.price)}</p>
+                  {showPrices && <p className="font-semibold text-slate-900 whitespace-nowrap">{money(s.price)}</p>}
                 </div>
               </button>
             ))}
@@ -185,7 +209,7 @@ export default function BookingPage({ slug }: { slug: string }) {
                 <button
                   key={p.id || 'any'}
                   onClick={() => setStaffId(p.id)}
-                  className={`h-10 px-4 rounded-full border text-sm font-medium ${staffId === p.id ? 'bg-[#0A6CF0] border-[#0A6CF0] text-white' : 'bg-white border-slate-200 text-slate-700'}`}
+                  className={`h-10 px-4 rounded-full border text-sm font-medium ${staffId === p.id ? 'bg-[var(--bk)] border-[var(--bk)] text-white' : 'bg-white border-slate-200 text-slate-700'}`}
                 >
                   {p.name}
                 </button>
@@ -203,7 +227,7 @@ export default function BookingPage({ slug }: { slug: string }) {
                   <button
                     key={d}
                     onClick={() => (setAutoDay(false), setDate(d))}
-                    className={`shrink-0 w-16 rounded-2xl border py-2 text-center ${date === d ? 'bg-[#0A6CF0] border-[#0A6CF0] text-white' : 'bg-white border-slate-200 text-slate-700'}`}
+                    className={`shrink-0 w-16 rounded-2xl border py-2 text-center ${date === d ? 'bg-[var(--bk)] border-[var(--bk)] text-white' : 'bg-white border-slate-200 text-slate-700'}`}
                   >
                     <p className="text-[11px] uppercase opacity-80">{l.wd}</p>
                     <p className="text-lg font-bold leading-tight">{l.n}</p>
@@ -225,7 +249,7 @@ export default function BookingPage({ slug }: { slug: string }) {
                   <button
                     key={s.time}
                     onClick={() => (setTime(s.time), setSlotStaff(s.staffId))}
-                    className={`h-11 rounded-xl border text-sm font-semibold ${time === s.time ? 'bg-[#0A6CF0] border-[#0A6CF0] text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                    className={`h-11 rounded-xl border text-sm font-semibold ${time === s.time ? 'bg-[var(--bk)] border-[var(--bk)] text-white' : 'bg-white border-slate-200 text-slate-800'}`}
                   >
                     {s.time}
                   </button>
@@ -245,13 +269,14 @@ export default function BookingPage({ slug }: { slug: string }) {
               <input className={input} placeholder="¿Algo que debamos saber? (opcional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               <input className="hidden" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} aria-hidden="true" />
               <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm text-slate-700">
-                <strong>{service.name}</strong> · {money(service.price)}
+                <strong>{service.name}</strong>
+                {showPrices && <> · {money(service.price)}</>}
                 <br />
                 {new Intl.DateTimeFormat('es-CO', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${date}T12:00:00Z`))}, {time}
                 {(staffId || slotStaff) && ` · con ${info.staff.find((p) => p.id === (staffId || slotStaff))?.name || ''}`}
               </div>
               {formError && <p className="text-sm text-red-600">{formError}</p>}
-              <button disabled={busy || !form.name || !form.phone} className="h-12 w-full rounded-xl bg-[#0A6CF0] text-white font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50">
+              <button disabled={busy || !form.name || !form.phone} className="h-12 w-full rounded-xl bg-[var(--bk)] text-white font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50">
                 {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CalendarCheck2 className="w-5 h-5" />} Agendar cita
               </button>
               {info.business.policies && <p className="text-xs text-slate-500">{info.business.policies}</p>}

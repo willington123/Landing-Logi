@@ -61,6 +61,19 @@ export async function db(): Promise<ScopedDb> {
 
 // Uploads every base64 image inside the landing to Storage and swaps it for its public URL.
 // Files are named by content hash, so the same image is never uploaded twice.
+// Uploads one image (data URL) to the public bucket under a folder; returns its URL.
+export async function uploadPublicImage(folder: string, dataUrl: string): Promise<string> {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i.exec(dataUrl || '');
+  if (!m) throw Object.assign(new Error('La imagen debe ser JPG, PNG o WEBP.'), { userFacing: true });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 3 * 1024 * 1024) throw Object.assign(new Error('La imagen pesa más de 3 MB.'), { userFacing: true });
+  const ext = m[1].split('/')[1].replace('jpeg', 'jpg');
+  const path = `${folder}/${createHash('sha1').update(buf).digest('hex').slice(0, 20)}.${ext}`;
+  const { error } = await rawDb().storage.from(BUCKET).upload(path, buf, { contentType: m[1], upsert: false, cacheControl: '31536000' });
+  if (error && !/exists|duplicate/i.test(error.message)) throw new Error(`No se pudo subir la imagen: ${error.message}`);
+  return rawDb().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
 async function uploadInlineImages(landing: LandingPageConfig): Promise<{ landing: LandingPageConfig; replaced: Record<string, string> }> {
   const found = new Set<string>();
   const walk = (v: unknown) => {
