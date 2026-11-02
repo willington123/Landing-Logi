@@ -285,8 +285,11 @@ export async function privateText(rule: SocialRule, name: string, settings: Soci
 
 const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
-// Claude decides on comments no rule caught: answer a question, hide spam/insults, or leave it.
-async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise<{ action: 'responder' | 'ocultar' | 'ignorar'; reply: string }> {
+// Claude decides on comments no rule caught: answer a question, hide spam/insults, or leave it;
+// and whether the person shows buying interest (then they also get the private message).
+const aiOn = (s: SocialSettings) => s.ai.answer || s.ai.hide; // the private message rides along when the AI already reviews comments
+
+async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise<{ action: 'responder' | 'ocultar' | 'ignorar'; reply: string; interest: boolean }> {
   const { anthropic, getBotSettings, modelParams, storeKnowledge } = await import('@/lib/server/bot');
   const [ai, bot, k] = await Promise.all([anthropic(), getBotSettings(), storeKnowledge()]);
   const allowed = [settings.ai.answer ? '"responder" (es una pregunta o duda sobre los productos, el precio, el envío o el pago, y la información de la tienda la responde)' : '', settings.ai.hide ? '"ocultar" (insultos, groserías, spam, estafas, enlaces sospechosos o ataques)' : '', '"ignorar" (todo lo demás: elogios, etiquetas a amigos, emojis, quejas que debe ver una persona)'].filter(Boolean);
@@ -297,7 +300,12 @@ async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise
       effort: 'low',
       format: {
         type: 'json_schema',
-        schema: { type: 'object', properties: { action: { type: 'string', enum: ['responder', 'ocultar', 'ignorar'] }, reply: { type: 'string' } }, required: ['action', 'reply'], additionalProperties: false },
+        schema: {
+          type: 'object',
+          properties: { action: { type: 'string', enum: ['responder', 'ocultar', 'ignorar'] }, reply: { type: 'string' }, interest: { type: 'boolean' } },
+          required: ['action', 'reply', 'interest'],
+          additionalProperties: false,
+        },
       },
     },
     system: [
@@ -305,8 +313,9 @@ async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise
         type: 'text',
         text: `Eres el community manager de ${k.storeName}. Revisas comentarios públicos en ${c.channel === 'instagram' ? 'Instagram' : 'Facebook'} (publicaciones y anuncios).
 Acciones posibles: ${allowed.join('; ')}.
-Si respondes: una o dos frases en español, cálidas y cortas, sin inventar nada que no esté en la información de la tienda. Si la pregunta es de precio o de cómo comprar, da el dato si está y termina invitando a escribir por WhatsApp o por mensaje privado. Nunca pidas datos personales en público.
+Si respondes: una o dos frases en español, cálidas y cortas, sin inventar nada que no esté en la información de la tienda. Si la pregunta es de precio o de cómo comprar, da el dato si está y ${settings.ai.dm ? 'di que le escribiste al privado' : 'termina invitando a escribir por WhatsApp o por mensaje privado'}. Nunca pidas datos personales en público.
 Si no respondes, deja "reply" vacío.
+"interest": true si la persona muestra interés de compra o pide información (info, precio, cuánto vale, cómo compro, quiero, envíos, tallas, disponibilidad); false si no (elogios, etiquetas, quejas, spam).
 
 Información de la tienda y sus productos:
 ${k.products}`,
@@ -322,8 +331,22 @@ ${k.products}`,
   const txt = (res.content || []).find((b: any) => b.type === 'text')?.text || '{}';
   const d = JSON.parse(txt);
   const action = d.action === 'responder' && settings.ai.answer ? 'responder' : d.action === 'ocultar' && settings.ai.hide ? 'ocultar' : 'ignorar';
-  return { action, reply: String(d.reply || '').slice(0, 600) };
+  return { action, reply: String(d.reply || '').slice(0, 600), interest: action !== 'ocultar' && d.interest === true };
 }
+
+// The private message the AI sends to someone interested (same shape as a rule with the WhatsApp link).
+const aiRule = (s: SocialSettings): SocialRule => ({
+  id: 'ai',
+  name: 'IA',
+  enabled: true,
+  channels: ['facebook', 'instagram'],
+  keywords: [],
+  postIds: [],
+  publicReplies: [],
+  dm: s.ai.dmText,
+  whatsapp: true,
+  waText: s.ai.waText,
+});
 
 // Handles one comment for the store in context. Never throws.
 export async function handleComment(c: IncomingComment): Promise<SocialLogItem | null> {
@@ -372,7 +395,7 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
             .catch((e) => errors.push(`Privado: ${e.message}`));
         }
       }
-    } else if (settings.ai.answer || settings.ai.hide) {
+    } else if (aiOn(settings)) {
       key = 'ai';
       const d = await aiDecision(c, settings).catch((e) => {
         errors.push(`IA: ${e.message}`);
@@ -388,7 +411,17 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
         await graph('POST', c.commentId, token, c.channel === 'facebook' ? { is_hidden: true } : { hide: true })
           .then(() => item.done.push('Oculto'))
           .catch((e) => errors.push(`Ocultar: ${e.message}`));
-      } else if (d) item.skipped = 'La IA lo dejó para una persona.';
+      }
+      // Interested: private message with the WhatsApp link (once per person and post).
+      if (d?.interest && settings.ai.dm && (await claim([`p:ai:${c.postId}:${c.fromId}`])).size) {
+        item.rule = 'IA';
+        const text = await privateText(aiRule(settings), c.fromName, settings);
+        if (text)
+          await graph('POST', `${page.id}/messages`, token, { recipient: { comment_id: c.commentId }, message: { text } })
+            .then(() => item.done.push('Privado'))
+            .catch((e) => errors.push(`Privado: ${e.message}`));
+      }
+      if (d && !item.done.length && !errors.length) item.skipped = 'La IA lo dejó para una persona.';
     } else {
       item.skipped = 'Ninguna regla aplicó.';
     }
@@ -412,7 +445,12 @@ export async function previewComment(text: string, channel: SocialChannel, name:
       privateMessage: (await privateText(rule, name, settings)) || null,
       ai: null,
     };
-  if (!settings.ai.answer && !settings.ai.hide) return { rule: null, publicReply: null, privateMessage: null, ai: null };
+  if (!aiOn(settings)) return { rule: null, publicReply: null, privateMessage: null, ai: null };
   const d = await aiDecision({ channel, assetId: '', commentId: '', postId: '', text, fromId: '', fromName: name }, settings);
-  return { rule: null, publicReply: d.action === 'responder' ? d.reply : null, privateMessage: null, ai: d.action };
+  return {
+    rule: null,
+    publicReply: d.action === 'responder' ? d.reply : null,
+    privateMessage: d.interest && settings.ai.dm ? (await privateText(aiRule(settings), name, settings)) || null : null,
+    ai: d.action === 'ignorar' && d.interest ? 'privado' : d.action,
+  };
 }
