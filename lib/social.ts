@@ -22,10 +22,15 @@ export interface SocialSettings {
   ai: {
     answer: boolean; // comments no rule caught: answer questions in public with the store's info
     hide: boolean; // hide insults, spam and scams
+    dm: boolean; // someone shows interest (info, price, how to buy): also write in private with the WhatsApp link
+    dmText: string;
+    waText: string;
   };
 }
 
-export const DEFAULT_SOCIAL: SocialSettings = { waNumber: '', rules: [], ai: { answer: false, hide: false } };
+export const DEFAULT_AI_DM = 'Hola {nombre} 👋 Gracias por escribirnos. Te atendemos por WhatsApp: ahí te damos precios, envío y tomamos tu pedido.';
+export const DEFAULT_AI_WA = 'Hola, vi su publicación y quiero información';
+export const DEFAULT_SOCIAL: SocialSettings = { waNumber: '', rules: [], ai: { answer: false, hide: false, dm: true, dmText: DEFAULT_AI_DM, waText: DEFAULT_AI_WA } };
 
 export const SOCIAL_RECIPES: { title: string; hint: string; rule: Omit<SocialRule, 'id'> }[] = [
   {
@@ -114,7 +119,17 @@ export function cleanSocial(input: any): SocialSettings | string {
       waText: str(r?.waText, 200) || 'Hola, vi su publicación y quiero información',
     });
   }
-  return { waNumber: String(input?.waNumber ?? '').replace(/\D/g, '').slice(0, 15), rules, ai: { answer: Boolean(input?.ai?.answer), hide: Boolean(input?.ai?.hide) } };
+  return {
+    waNumber: String(input?.waNumber ?? '').replace(/\D/g, '').slice(0, 15),
+    rules,
+    ai: {
+      answer: Boolean(input?.ai?.answer),
+      hide: Boolean(input?.ai?.hide),
+      dm: input?.ai?.dm !== false,
+      dmText: str(input?.ai?.dmText, 900) || DEFAULT_AI_DM,
+      waText: str(input?.ai?.waText, 200) || DEFAULT_AI_WA,
+    },
+  };
 }
 
 const norm = (s: string) =>

@@ -292,6 +292,11 @@ export default function SocialComments() {
           {/* Rules */}
           <div>
             <p className="text-[13px] font-semibold text-slate-800 mb-2">Reglas por palabra clave</p>
+            {!settings.rules.some((r) => r.enabled) && (
+              <p className="mb-2 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[12px] text-amber-900">
+                No tienes reglas activas: nadie recibe el mensaje privado por palabra clave. Toca una de las ideas de abajo y dale <b>Guardar</b>.
+              </p>
+            )}
             {settings.rules.length > 0 && (
               <ul className="space-y-2">
                 {settings.rules.map((r, i) => {
@@ -363,6 +368,20 @@ export default function SocialComments() {
                 <Switch on={settings.ai.hide} onChange={(v) => setSettings({ ...settings, ai: { ...settings.ai, hide: v } })} label="Ocultar spam" />
                 <span>Ocultar insultos, spam y estafas (quedan ocultos para los demás, no se borran).</span>
               </label>
+              <label className={`flex items-start gap-2 text-[12px] ${settings.ai.answer || settings.ai.hide ? 'text-slate-700' : 'text-slate-400'}`}>
+                <Switch on={settings.ai.dm} onChange={(v) => setSettings({ ...settings, ai: { ...settings.ai, dm: v } })} label="Escribir al privado a interesados" />
+                <span>Si la persona muestra interés (pide info, precio, cómo comprar), escribirle también al privado con el enlace a WhatsApp.</span>
+              </label>
+              {settings.ai.dm && (settings.ai.answer || settings.ai.hide) && (
+                <textarea
+                  value={settings.ai.dmText}
+                  rows={2}
+                  maxLength={900}
+                  onChange={(e) => setSettings({ ...settings, ai: { ...settings.ai, dmText: e.target.value } })}
+                  className="w-full text-[12px] border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
+                  aria-label="Mensaje privado de la IA"
+                />
+              )}
               <p className="text-[11px] text-slate-500">Cada comentario revisado por la IA cuenta como una respuesta de IA de tu plan.</p>
             </div>
           </div>
@@ -393,7 +412,7 @@ export default function SocialComments() {
                 ) : (
                   <>
                     <p>
-                      <b>Regla:</b> {testResult.rule || (testResult.ai ? `ninguna → la IA decidió: ${testResult.ai}` : 'ninguna (no se hace nada)')}
+                      <b>Regla:</b> {testResult.rule || (testResult.ai ? `ninguna → la IA decidió: ${({ responder: 'responder', ocultar: 'ocultar', ignorar: 'dejarlo', privado: 'escribirle al privado' } as Record<string, string>)[testResult.ai] || testResult.ai}` : 'ninguna (no se hace nada)')}
                     </p>
                     {testResult.publicReply && (
                       <p>
