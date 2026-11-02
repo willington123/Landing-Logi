@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { setBotState } from '@/lib/server/bot';
+import { assertCanSeeChat } from '@/lib/server/crm-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   if (!/^\d{6,20}$/.test(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
   try {
+    await assertCanSeeChat(params.id);
     const { action } = await req.json().catch(() => ({}));
     const state =
       action === 'resume'

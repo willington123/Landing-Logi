@@ -8,6 +8,7 @@ import { recordOutbound } from '@/lib/server/wa-store';
 import { addNote, getAutoSettings, getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
 import { isWorkingTime } from '@/lib/crm';
+import { autoAssign } from '@/lib/server/crm-store';
 
 const DEBOUNCE_MS = Number(process.env.BOT_DEBOUNCE_MS ?? 4000);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -61,6 +62,7 @@ async function answer(m: InboundMessage) {
   const replies = state.day === day ? state.replies || 0 : 0;
   if (replies >= settings.maxRepliesPerDay) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'limit', note: 'Límite diario de respuestas del asistente.' });
+    await autoAssign(m.from, 'handoff').catch(() => null);
     return;
   }
 
@@ -86,6 +88,7 @@ async function answer(m: InboundMessage) {
 
   if (run.handoff) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'handoff', note: run.handoff.motivo });
+    await autoAssign(m.from, 'handoff').catch(() => null);
     await addNote(m.from, `🤖 El asistente pasó el chat a una persona: ${run.handoff.motivo}`).catch(() => {});
     const tag = HANDOFF_TAG[run.handoff.tipo];
     if (tag && (await getTags()).some((t) => t.id === tag)) {

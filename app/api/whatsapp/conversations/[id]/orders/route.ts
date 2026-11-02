@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, listOrders } from '@/lib/server/db';
 import { samePhone } from '@/lib/server/wa-store';
+import { assertCanSeeChat } from '@/lib/server/crm-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   if (!/^\d{6,20}$/.test(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
   try {
+    await assertCanSeeChat(params.id);
     const orders = (await listOrders(1000))
       .filter((o) => samePhone(o, params.id))
       .map((o) => ({ id: o.id, orderNumber: o.orderNumber, productName: o.productName, comboName: o.comboName, totalAmount: o.totalAmount, status: o.status, city: o.city, createdAt: o.createdAt }));

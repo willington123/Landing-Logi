@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { listConversations } from '@/lib/server/wa-store';
 import { whatsappStatus } from '@/lib/server/whatsapp';
-import { getAgents, getAssignments, getConversationAds, getConversationTags, getTags } from '@/lib/server/crm-store';
+import { chatScope, getAgents, getAssignments, getConversationAds, getConversationTags, getTags } from '@/lib/server/crm-store';
+import { currentRole } from '@/lib/server/tenant';
 import { botConfigured, getBotSettings, getBotStates } from '@/lib/server/bot';
 
 export const dynamic = 'force-dynamic';
@@ -21,11 +22,14 @@ export async function GET() {
       getBotSettings(),
       getConversationAds(),
     ]);
+    // Members who only see their chats get just those.
+    const [scope, role] = await Promise.all([chatScope(), currentRole()]);
+    const visible = scope.restricted ? conversations.filter((c) => assign[c.id] === scope.agentId) : conversations;
     const known = new Set(tags.map((t) => t.id));
     const people = new Set(agents.map((a) => a.id));
     return NextResponse.json({
       success: true,
-      conversations: conversations.map((c) => ({
+      conversations: visible.map((c) => ({
         ...c,
         tags: (tagMap[c.id] || []).filter((id) => known.has(id)),
         assignee: assign[c.id] && people.has(assign[c.id]) ? assign[c.id] : null,
@@ -35,6 +39,7 @@ export async function GET() {
       bot: { enabled: bot.enabled && (await botConfigured()), mode: bot.mode, name: bot.name },
       tags,
       agents,
+      me: { agentId: scope.agentId, restricted: scope.restricted, role },
       whatsapp: await whatsappStatus(),
     });
   } catch (e: any) {

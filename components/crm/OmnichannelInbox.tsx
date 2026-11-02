@@ -6,8 +6,10 @@ import Link from 'next/link';
 import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap, Megaphone } from 'lucide-react';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
-import { fillQuickReply, type CrmTag, type QuickReply } from '@/lib/crm';
+import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
 import { AgentBadge, AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
+import TeamManager from '@/components/crm/TeamManager';
+import { notifyPermission, requestNotify } from '@/lib/notify';
 import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
@@ -179,10 +181,16 @@ export default function OmnichannelInbox() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [tags, setTags] = useState<CrmTag[]>([]);
-  const [agents, setAgents] = useState<CrmTag[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [botInfo, setBotInfo] = useState<BotInfo | null>(null);
   const [botBusy, setBotBusy] = useState(false);
   const [me, setMe] = useState('');
+  // Who is signed in, from the server (team person linked to this account).
+  const [serverMe, setServerMe] = useState<{ agentId: string | null; restricted: boolean; role: string | null } | null>(null);
+  const [others, setOthers] = useState<{ name: string; typing: boolean }[]>([]);
+  const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
+  const typingAt = useRef(0);
+  const myId = serverMe?.agentId || me;
   const [replies, setReplies] = useState<QuickReply[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [tagFilter, setTagFilter] = useState('');
@@ -216,11 +224,12 @@ export default function OmnichannelInbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: CrmTag[]; bot?: BotInfo; whatsapp: WaStatus }>('/api/whatsapp/conversations');
+      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: Agent[]; bot?: BotInfo; whatsapp: WaStatus; me?: { agentId: string | null; restricted: boolean; role: string | null } }>('/api/whatsapp/conversations');
       setBotInfo(d.bot || null);
       setConversations(d.conversations);
       if (d.tags) setTags(d.tags);
       if (d.agents) setAgents(d.agents);
+      if (d.me) setServerMe(d.me);
       setWa(d.whatsapp);
       setListError(null);
     } catch (e: any) {
@@ -230,8 +239,9 @@ export default function OmnichannelInbox() {
 
   const loadMessages = useCallback(async (id: string) => {
     try {
-      const d = await api<{ messages: WaMessage[]; conversation: Conversation }>(`/api/whatsapp/conversations/${id}/messages`);
+      const d = await api<{ messages: WaMessage[]; conversation: Conversation; others?: { name: string; typing: boolean }[] }>(`/api/whatsapp/conversations/${id}/messages`);
       if (activeRef.current !== id) return;
+      setOthers(d.others || []);
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
@@ -245,6 +255,24 @@ export default function OmnichannelInbox() {
       // Keep what is on screen; the next poll retries.
     }
   }, []);
+
+  // "I have this chat open" every poll, so others see it (and don't answer at the same time).
+  const sendPresence = useCallback((id: string, typing: boolean) => {
+    fetch(`/api/whatsapp/conversations/${id}/presence`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ typing }) })
+      .then((r) => r.json())
+      .then((d) => d.success && activeRef.current === id && setOthers(d.others || []))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    (window as any).__lpActiveChat = activeId; // the menu skips the notice for the chat on screen
+    setOthers([]);
+    if (!cloud || !activeId) return;
+    sendPresence(activeId, false);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible' && activeRef.current) sendPresence(activeRef.current, Date.now() - typingAt.current < 8000);
+    }, POLL_MS);
+    return () => clearInterval(t);
+  }, [cloud, activeId, sendPresence]);
 
   // Poll the list (and the open thread) while the tab is visible.
   useEffect(() => {
@@ -316,7 +344,7 @@ export default function OmnichannelInbox() {
       unanswered: conversations.filter(isUnanswered).length,
       pending: conversations.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
       confirmed: conversations.filter((c) => c.order?.status === 'confirmed_by_voice').length,
-      mine: me ? conversations.filter((c) => c.assignee === me).length : 0,
+      mine: myId ? conversations.filter((c) => c.assignee === myId).length : 0,
       unassigned: conversations.filter((c) => !c.assignee).length,
     }),
     [conversations, me],
@@ -329,16 +357,25 @@ export default function OmnichannelInbox() {
       if (filter === 'unanswered' && !isUnanswered(c)) return false;
       if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
       if (filter === 'confirmed' && c.order?.status !== 'confirmed_by_voice') return false;
-      if (filter === 'mine' && (!me || c.assignee !== me)) return false;
+      if (filter === 'mine' && (!myId || c.assignee !== myId)) return false;
       if (filter === 'unassigned' && c.assignee) return false;
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
       if (!q) return true;
       const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
       return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [conversations, search, filter, tagFilter, tagById, me]);
+  }, [conversations, search, filter, tagFilter, tagById, myId]);
   const agentById = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a])), [agents]);
-  const meAgent = agentById[me] || null;
+  const meAgent = agentById[myId] || null;
+  const toggleAvailable = async () => {
+    if (!meAgent) return;
+    try {
+      const d = await api<{ agent: CrmTag & { available?: boolean } }>('/api/whatsapp/agents', { method: 'PATCH', body: JSON.stringify({ available: meAgent.available === false }) });
+      setAgents((xs) => xs.map((a) => (a.id === d.agent.id ? { ...a, available: d.agent.available } : a)));
+    } catch {}
+  };
+  const enableAlerts = async () => setAlerts(await requestNotify());
+  useEffect(() => setAlerts(notifyPermission()), []);
   const chooseMe = (id: string) => {
     setMe(id);
     try {
@@ -381,6 +418,11 @@ export default function OmnichannelInbox() {
 
   const onTextChange = (v: string) => {
     setText(v);
+    // Tell the team I'm writing here (at most every 5 s).
+    if (activeId && v.trim() && Date.now() - typingAt.current > 5000) {
+      typingAt.current = Date.now();
+      sendPresence(activeId, true);
+    }
     if (/^\/\S*$/.test(v)) setQr({ open: true, slash: true, highlight: 0 });
     else if (qr.slash) setQr({ open: false, slash: false, highlight: 0 });
   };
@@ -609,7 +651,23 @@ export default function OmnichannelInbox() {
               </div>
             )}
             <div className="mt-2 flex items-center gap-2">
-              {agents.length > 0 ? (
+              {serverMe?.agentId && meAgent ? (
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <AgentBadge agent={meAgent} />
+                  <button
+                    onClick={toggleAvailable}
+                    className={`h-7 px-2 rounded-full text-[11px] font-semibold border whitespace-nowrap shrink-0 ${meAgent.available !== false ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}
+                    title="Si estás ausente no te llegan chats nuevos del reparto automático"
+                  >
+                    {meAgent.available !== false ? '● Disponible' : '○ Ausente'}
+                  </button>
+                  {alerts !== 'unsupported' && alerts !== 'granted' && (
+                    <button onClick={enableAlerts} className="text-[11px] font-medium text-brand-blue whitespace-nowrap" title="Te avisa cuando un cliente tuyo escribe, aunque estés en otra pestaña">
+                      Activar avisos
+                    </button>
+                  )}
+                </div>
+              ) : agents.length > 0 ? (
                 <select
                   value={me}
                   onChange={(e) => chooseMe(e.target.value)}
@@ -748,6 +806,13 @@ export default function OmnichannelInbox() {
                 </div>
               )}
 
+              {others.length > 0 && (
+                <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100 text-[12px] text-amber-900">
+                  {others.some((o) => o.typing)
+                    ? `✍️ ${others.filter((o) => o.typing).map((o) => o.name).join(' y ')} está escribiendo en este chat`
+                    : `👀 ${others.map((o) => o.name).join(' y ')} también tiene abierto este chat`}
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 space-y-2">
                 {threadLoading && messages.length === 0 && (
                   <div className="flex justify-center py-6 text-slate-400">
@@ -782,6 +847,7 @@ export default function OmnichannelInbox() {
                         m.body
                       )}
                       <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-400">
+                        {m.by && <span className="font-medium text-slate-500">{m.by} ·</span>}
                         <span>{timeLabel(m.created_at)}</span>
                         <Ticks m={m} />
                       </div>
@@ -886,18 +952,7 @@ export default function OmnichannelInbox() {
         )}
       </div>
       {manage === 'tags' && <TagManager tags={tags} onClose={() => setManage(null)} onSaved={(t) => (setTags(t), loadConversations())} />}
-      {manage === 'team' && (
-        <TagManager
-          tags={agents}
-          title="Equipo"
-          endpoint="/api/whatsapp/agents"
-          intro="Las personas que responden los chats. Asigna cada chat a alguien y cada uno ve los suyos con el filtro “Míos”. Todos entran con la misma contraseña del panel."
-          addLabel="Agregar persona"
-          placeholder="Nombre"
-          onClose={() => setManage(null)}
-          onSaved={(a) => (setAgents(a), loadConversations())}
-        />
-      )}
+      {manage === 'team' && <TeamManager onClose={() => setManage(null)} onSaved={(a) => (setAgents(a), loadConversations())} />}
       {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
     </div>
   );

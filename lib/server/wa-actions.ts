@@ -94,6 +94,8 @@ export async function autoReply(m: InboundMessage) {
 export async function handleInbound(m: InboundMessage) {
   const { isNew } = await recordInbound(m);
   if (!isNew) return; // duplicate delivery
+  // Automatic assignment to the team (if it's on and the chat has nobody yet).
+  await (await import('@/lib/server/crm-store')).autoAssign(m.from, 'new').catch((e) => console.error('Asignación automática', e));
 
   // Buttons on the test message sent from Integrations.
   if (m.orderId === TEST_ORDER_ID) {

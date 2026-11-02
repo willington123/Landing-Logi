@@ -47,3 +47,29 @@ export function playMessageSound() {
     // browsers may block sound until the page is clicked once
   }
 }
+
+// Browser notices ("Laura: nuevo mensaje") while the panel is open in another tab.
+export function notifyPermission(): NotificationPermission | 'unsupported' {
+  return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported';
+}
+export async function requestNotify(): Promise<NotificationPermission | 'unsupported'> {
+  if (notifyPermission() === 'unsupported') return 'unsupported';
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return Notification.permission;
+  }
+}
+export function showNotice(title: string, body: string, url: string) {
+  if (notifyPermission() !== 'granted') return;
+  try {
+    const n = new Notification(title, { body: body.slice(0, 140), icon: '/pwa/icon-192.png', tag: url });
+    n.onclick = () => {
+      window.focus();
+      window.location.href = url;
+    };
+  } catch {
+    // some phones only allow notices from the service worker
+    navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, { body: body.slice(0, 140), icon: '/pwa/icon-192.png', tag: url, data: { url } })).catch(() => {});
+  }
+}
