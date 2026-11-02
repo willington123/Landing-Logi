@@ -6,10 +6,11 @@ import { getBotSettings, setBotState } from '@/lib/server/bot';
 import { assertCanSeeChat, getAgents, myAgent, othersOnChat } from '@/lib/server/crm-store';
 import { sessionUserId } from '@/lib/server/tenant';
 import { getUser } from '@/lib/server/accounts';
+import { CHAT_ID_RE, isSocialChat } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 
-const validId = (id: string) => /^\d{6,20}$/.test(id);
+const validId = (id: string) => CHAT_ID_RE.test(id);
 
 // The team member writing: their name in the team list, else their account name or email.
 async function whoAmI(): Promise<{ uid: string; name: string } | undefined> {
@@ -40,8 +41,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // Admin: free-text reply. Only allowed within 24 h of the customer's last message.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
-  if (!(await whatsappEnabled())) return NextResponse.json({ success: false, error: 'WhatsApp no está configurado.' }, { status: 503 });
   if (!validId(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
+  if (!isSocialChat(params.id) && !(await whatsappEnabled())) return NextResponse.json({ success: false, error: 'WhatsApp no está configurado.' }, { status: 503 });
   try {
     await assertCanSeeChat(params.id);
     const { text } = await req.json().catch(() => ({}));
@@ -52,7 +53,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!conversation) return NextResponse.json({ success: false, error: 'Conversación no encontrada.' }, { status: 404 });
     if (!insideServiceWindow(conversation.last_inbound_at)) {
       return NextResponse.json(
-        { success: false, code: 'outside_window', error: 'Han pasado más de 24 horas desde el último mensaje del cliente. WhatsApp solo permite escribirle con una plantilla aprobada.' },
+        {
+          success: false,
+          code: 'outside_window',
+          error: isSocialChat(params.id)
+            ? 'Han pasado más de 24 horas desde el último mensaje del cliente: Messenger e Instagram no dejan escribirle hasta que vuelva a escribir.'
+            : 'Han pasado más de 24 horas desde el último mensaje del cliente. WhatsApp solo permite escribirle con una plantilla aprobada.',
+        },
         { status: 409 },
       );
     }

@@ -192,6 +192,13 @@ export default function WhatsAppBot() {
                 />
               </label>
             </div>
+            <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer">
+              <Toggle on={cfg.social} onChange={(v) => set({ social: v })} label="Responder Messenger e Instagram" />
+              <span>
+                <span className="block text-[13px] font-semibold text-slate-900">Responder también Messenger e Instagram</span>
+                <span className="block text-[11px] text-slate-600">Los chats de tus páginas conectadas (Automatizaciones → Comentarios) llegan a Mensajes y el asistente los atiende igual que WhatsApp.</span>
+              </span>
+            </label>
             <div>
               <span className="text-xs font-medium text-slate-600">Inteligencia del asistente</span>
               <div className="mt-1 grid gap-2">

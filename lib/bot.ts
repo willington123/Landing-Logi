@@ -10,6 +10,7 @@ export interface BotSettings {
   takeOrders: boolean; // close the sale in the chat (creates the order) instead of sending the customer to the landing
   followUp: FollowUpSettings; // one message to customers who stopped answering without ordering
   model: BotModel; // which Claude model answers the chats
+  social: boolean; // also answer Messenger and Instagram chats
 }
 
 export type BotModel = 'quality' | 'balanced' | 'economy';
@@ -43,6 +44,7 @@ export const DEFAULT_BOT: BotSettings = {
   takeOrders: true,
   followUp: DEFAULT_FOLLOW_UP,
   model: 'balanced',
+  social: true,
 };
 
 export function cleanFollowUp(f: any): FollowUpSettings {
@@ -70,6 +72,7 @@ export function cleanBot(input: any): BotSettings | string {
     takeOrders: input?.takeOrders === undefined ? DEFAULT_BOT.takeOrders : Boolean(input.takeOrders),
     followUp: cleanFollowUp(input?.followUp),
     model: BOT_MODELS.some((m) => m.id === input?.model) ? input.model : DEFAULT_BOT.model,
+    social: input?.social === undefined ? DEFAULT_BOT.social : Boolean(input.social),
   };
 }
 

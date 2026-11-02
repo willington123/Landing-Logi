@@ -9,6 +9,7 @@ import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-st
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
 import { AgentBadge, AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
 import TeamManager from '@/components/crm/TeamManager';
+import { CHANNEL_LABEL, CHAT_ID_RE, chatChannel, isSocialChat, type ChatChannel } from '@/lib/social';
 import { notifyPermission, requestNotify } from '@/lib/notify';
 import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel } from '@/components/crm/CustomerPanel';
@@ -87,7 +88,35 @@ const preview = (t: string | null) => {
   const m = /^\[(image|audio|video|document|sticker)\]\s*(.*)$/.exec(t || '');
   return m ? `${MEDIA_LABEL[m[1]]}${m[2] ? `: ${m[2]}` : ''}` : t || '';
 };
-const phoneLabel = (p: string) => `+${p}`;
+const phoneLabel = (p: string) => (isSocialChat(p) ? CHANNEL_LABEL[chatChannel(p)] : `+${p}`);
+
+// Small mark of where the chat comes from (on the avatar and in the header).
+function ChannelMark({ id, className = '' }: { id: string; className?: string }) {
+  const ch = chatChannel(id);
+  if (ch === 'messenger')
+    return (
+      <span title="Messenger" className={`inline-flex items-center justify-center rounded-full bg-gradient-to-br from-[#00B2FF] to-[#006AFF] text-white ${className}`}>
+        <svg viewBox="0 0 24 24" className="w-[70%] h-[70%]" fill="currentColor" aria-hidden>
+          <path d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78c.02.57.6.94 1.12.71l1.98-.87c.17-.08.36-.09.53-.04.91.25 1.88.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm6 7.46l-2.94 4.66c-.47.74-1.47.93-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66c.47-.74 1.47-.93 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63z" />
+        </svg>
+      </span>
+    );
+  if (ch === 'instagram')
+    return (
+      <span title="Instagram" className={`inline-flex items-center justify-center rounded-full bg-gradient-to-tr from-[#FEDA75] via-[#D62976] to-[#4F5BD5] text-white ${className}`}>
+        <svg viewBox="0 0 24 24" className="w-[65%] h-[65%]" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="5" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
+        </svg>
+      </span>
+    );
+  return (
+    <span title="WhatsApp" className={`inline-flex items-center justify-center rounded-full bg-[#25D366] text-white ${className}`}>
+      <WhatsAppIcon className="w-[65%] h-[65%]" />
+    </span>
+  );
+}
 
 function timeLabel(iso?: string | null) {
   if (!iso) return '';
@@ -173,7 +202,11 @@ export default function OmnichannelInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   // /crm?c=<phone> opens that chat (links from Agenda and Pedidos).
-  const [activeId, setActiveId] = useState<string>(() => (typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('c') || '').replace(/\D/g, '')));
+  const [activeId, setActiveId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const c = (new URLSearchParams(window.location.search).get('c') || '').trim();
+    return CHAT_ID_RE.test(c) ? c : c.replace(/\D/g, ''); // "+57 300…" still works for phones
+  });
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -194,6 +227,7 @@ export default function OmnichannelInbox() {
   const [replies, setReplies] = useState<QuickReply[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [tagFilter, setTagFilter] = useState('');
+  const [channelFilter, setChannelFilter] = useState<'' | ChatChannel>('');
   const [manage, setManage] = useState<'tags' | 'replies' | 'team' | null>(null);
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
@@ -360,11 +394,12 @@ export default function OmnichannelInbox() {
       if (filter === 'mine' && (!myId || c.assignee !== myId)) return false;
       if (filter === 'unassigned' && c.assignee) return false;
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
+      if (channelFilter && chatChannel(c.id) !== channelFilter) return false;
       if (!q) return true;
       const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
       return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [conversations, search, filter, tagFilter, tagById, myId]);
+  }, [conversations, search, filter, tagFilter, channelFilter, tagById, myId]);
   const agentById = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a])), [agents]);
   const meAgent = agentById[myId] || null;
   const toggleAvailable = async () => {
@@ -565,7 +600,15 @@ export default function OmnichannelInbox() {
           <div className="p-4 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-                <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
+                {conversations.some((c) => isSocialChat(c.id)) ? (
+                  <>
+                    <MessageSquare className="w-4 h-4 text-slate-700" /> Chats
+                  </>
+                ) : (
+                  <>
+                    <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
+                  </>
+                )}
               </h2>
               <div className="flex items-center gap-0.5">
               <Link
@@ -588,6 +631,19 @@ export default function OmnichannelInbox() {
               </div>
             </div>
             <p className="text-xs text-slate-500">{conversations.length} conversaciones</p>
+            {conversations.some((c) => isSocialChat(c.id)) && (
+              <div className="mt-2 flex gap-1.5 overflow-x-auto">
+                {([['', 'Todos'], ['whatsapp', 'WhatsApp'], ['messenger', 'Messenger'], ['instagram', 'Instagram']] as const).map(([k, l]) => (
+                  <button
+                    key={k}
+                    onClick={() => setChannelFilter(k)}
+                    className={`h-7 px-2.5 rounded-full text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 ${channelFilter === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
+                  >
+                    {k && <ChannelMark id={k === 'messenger' ? 'm1' : k === 'instagram' ? 'i1' : '1'} className="w-3.5 h-3.5" />} {l}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="relative mt-3">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -708,8 +764,9 @@ export default function OmnichannelInbox() {
                 onClick={() => setActiveId(c.id)}
                 className={`w-full text-left px-4 py-3 border-b border-slate-100 flex gap-3 transition ${c.id === activeId ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
               >
-                <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-semibold shrink-0">
-                  {(c.name || '#').charAt(0).toUpperCase()}
+                <div className="relative w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-semibold shrink-0">
+                  {(c.name || '#').replace(/^@/, '').charAt(0).toUpperCase()}
+                  <ChannelMark id={c.id} className="absolute -bottom-0.5 -right-0.5 w-4 h-4 ring-2 ring-white" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
@@ -759,7 +816,9 @@ export default function OmnichannelInbox() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
                   <div className="flex items-center gap-1 flex-wrap">
-                    <span className="text-xs text-slate-500 mr-1">{phoneLabel(active.id)}</span>
+                    <span className="text-xs text-slate-500 mr-1 inline-flex items-center gap-1">
+                      <ChannelMark id={active.id} className="w-3.5 h-3.5" /> {phoneLabel(active.id)}
+                    </span>
                     <WindowChip left={left} />
                     {active.ad && <AdChip ad={active.ad} full />}
                     {(active.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
@@ -862,9 +921,13 @@ export default function OmnichannelInbox() {
                 {!canReply ? (
                   <div className="text-xs text-slate-600 bg-slate-100 rounded-xl px-3 py-2.5 space-y-2">
                     <p>
-                      {active.last_inbound_at
-                        ? 'Pasaron más de 24 horas desde el último mensaje del cliente: WhatsApp solo deja escribirle con una plantilla aprobada.'
-                        : 'El cliente aún no ha escrito: WhatsApp solo deja iniciar la conversación con una plantilla aprobada.'}
+                      {isSocialChat(active.id)
+                        ? active.last_inbound_at
+                          ? `Pasaron más de 24 horas desde el último mensaje: ${phoneLabel(active.id)} no deja escribirle hasta que la persona vuelva a escribir.`
+                          : `La persona aún no ha respondido: ${phoneLabel(active.id)} solo deja escribirle cuando ella escriba.`
+                        : active.last_inbound_at
+                          ? 'Pasaron más de 24 horas desde el último mensaje del cliente: WhatsApp solo deja escribirle con una plantilla aprobada.'
+                          : 'El cliente aún no ha escrito: WhatsApp solo deja iniciar la conversación con una plantilla aprobada.'}
                     </p>
                     {active.order && PENDING_ORDER.includes(active.order.status) && wa?.confirmTemplate && (
                       <button
@@ -878,7 +941,7 @@ export default function OmnichannelInbox() {
                     )}
                     {tplMsg && <p className={tplMsg.ok ? 'text-emerald-700' : 'text-red-600'}>{tplMsg.text}</p>}
                   </div>
-                ) : !wa?.sending ? (
+                ) : !wa?.sending && !isSocialChat(active.id) ? (
                   <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">Conecta WhatsApp en Integraciones para poder responder.</p>
                 ) : (
                   <>
