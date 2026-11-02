@@ -6,6 +6,7 @@ import { cloudEnabled, db } from '@/lib/server/db';
 import { processCallQueue } from '@/lib/server/voice-actions';
 import { processWaFallback } from '@/lib/server/wa-actions';
 import { processFollowUps } from '@/lib/server/followup';
+import { processAppointmentReminders } from '@/lib/server/agenda-reminders';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { orgsWithConnections } from '@/lib/server/integrations';
 import { processBilling, runBillingNotices } from '@/lib/server/billing';
@@ -71,11 +72,11 @@ async function noteDeniedForOrg() {
 export async function runScheduled(origin?: string, source: RunSource = 'cron') {
   const orgs = cloudEnabled() ? await orgsWithConnections().catch(() => [integrationsOrg()]) : [integrationsOrg()];
   const deadline = Date.now() + 40000; // follow-ups (Claude) stop here; the next run continues
-  let main: Awaited<ReturnType<typeof runScheduledForOrg>> = { calls: null, whatsapp: null, followUps: null };
+  let main: Awaited<ReturnType<typeof runScheduledForOrg>> = { calls: null, whatsapp: null, followUps: null, reminders: null };
   for (const org of orgs) {
     const r = await runWithOrg(org, () => runScheduledForOrg(origin, source, deadline)).catch((e) => {
       console.error('Tareas programadas:', org, e);
-      return { calls: null, whatsapp: null, followUps: null };
+      return { calls: null, whatsapp: null, followUps: null, reminders: null };
     });
     if (org === integrationsOrg()) main = r;
   }
@@ -86,12 +87,13 @@ export async function runScheduled(origin?: string, source: RunSource = 'cron') 
 }
 
 async function runScheduledForOrg(origin: string | undefined, source: RunSource, deadline = Date.now() + 40000) {
-  if (!cloudEnabled()) return { calls: null, whatsapp: null, followUps: null };
+  if (!cloudEnabled()) return { calls: null, whatsapp: null, followUps: null, reminders: null };
   await noteRun(source).catch(() => {});
-  const [calls, whatsapp, followUps] = await Promise.all([
+  const [calls, whatsapp, followUps, reminders] = await Promise.all([
     processCallQueue(origin).catch((e) => ({ error: String(e?.message || e) })),
     processWaFallback().catch((e) => ({ sent: 0, failed: 0, error: String(e?.message || e) })),
     processFollowUps(new Date(), deadline).catch((e) => ({ sent: 0, skipped: 0, error: String(e?.message || e) })),
+    processAppointmentReminders(new Date(), deadline).catch((e) => ({ sent: 0, failed: 0, error: String(e?.message || e) })),
   ]);
   // Keep what happened so the panel can explain it.
   const now = new Date().toISOString();
@@ -100,7 +102,7 @@ async function runScheduledForOrg(origin: string | undefined, source: RunSource,
   const err = (whatsapp.error && !whatsapp.sent && !whatsapp.failed ? whatsapp.error : '') || ('error' in (calls || {}) ? String((calls as any).error) : '');
   if (err) patch.lastError = { at: now, error: err };
   if (Object.keys(patch).length) await patchInfo(patch).catch(() => {});
-  return { calls, whatsapp, followUps };
+  return { calls, whatsapp, followUps, reminders };
 }
 
 // Backup trigger: runs the scheduled work if nobody did in the last few minutes. Never throws.

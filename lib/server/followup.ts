@@ -7,6 +7,7 @@ import { sendText, whatsappEnabled } from '@/lib/server/whatsapp';
 import { recordOutbound, samePhone } from '@/lib/server/wa-store';
 import { localTime } from '@/lib/crm';
 import type { AdRef } from '@/lib/ads';
+import { appointmentsForPhone, isAppointmentsBusiness } from '@/lib/server/agenda';
 
 const WINDOW_MS = 23 * 3600000; // stay safely inside the 24 h window
 const AGAIN_AFTER_MS = 7 * 86400000; // at most one follow-up per chat per week
@@ -70,11 +71,17 @@ export async function processFollowUps(now = new Date(), deadline = Date.now() +
   // Already bought (with another chat or from a landing) in the last 30 days.
   const monthAgo = new Date(now.getTime() - 30 * 86400000).toISOString();
   const orders = (await listOrders(1000)).filter((o) => o.createdAt >= monthAgo);
+  const appointmentsBiz = await isAppointmentsBusiness();
 
   for (const c of candidates.slice(0, PER_RUN) as any[]) {
     if (Date.now() > deadline) break; // many stores: the next run (5 min) continues
     if (orders.some((o) => samePhone(o as any, c.id))) {
       marks[c.id] = { at: now.toISOString(), sent: false, error: 'ya tiene pedido' };
+      out.skipped++;
+      continue;
+    }
+    if (appointmentsBiz && (await appointmentsForPhone(c.id).catch(() => [])).some((x) => x.status === 'pending' || x.status === 'confirmed')) {
+      marks[c.id] = { at: now.toISOString(), sent: false, error: 'ya tiene cita' };
       out.skipped++;
       continue;
     }

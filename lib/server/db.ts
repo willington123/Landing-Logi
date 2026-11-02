@@ -12,7 +12,7 @@ export { cloudEnabled };
 const BUCKET = 'landing-images';
 
 // Tables whose rows belong to one account (organization). db() limits every query to the current one.
-const TENANT_TABLES = new Set(['landings', 'orders', 'settings', 'calls', 'wa_conversations', 'wa_messages']);
+const TENANT_TABLES = new Set(['landings', 'orders', 'settings', 'calls', 'wa_conversations', 'wa_messages', 'appointments']);
 
 const withOrg = (v: any, org: string) => (Array.isArray(v) ? v.map((r) => ({ ...r, org_id: org })) : { ...v, org_id: org });
 const withoutOrg = (v: any) => {

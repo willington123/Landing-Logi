@@ -11,6 +11,8 @@ import { requestOrgSync } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
 import { DEFAULT_BOT, cleanFollowUp, type BotChatState, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
+import { getAgenda } from '@/lib/server/agenda';
+import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
 
 // Claude Opus 5.5 by default; ANTHROPIC_MODEL can name another model.
 const MODEL = (process.env.ANTHROPIC_MODEL || '').trim() || 'claude-opus-5-5';
@@ -357,6 +359,7 @@ export interface BotRun {
   toolCalls: { name: string; input: unknown; result: unknown }[];
   refused?: boolean;
   order?: string; // order number created in this run
+  booked?: string; // appointment booked in this run ("Corte · martes 4 de noviembre, 3:00 p. m.")
   usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
@@ -369,7 +372,9 @@ export async function runBot(opts: {
   history: { direction: 'in' | 'out'; text: string }[];
   dryRun?: boolean; // simulator: never creates orders
 }): Promise<BotRun> {
-  const knowledge = await storeKnowledge();
+  const [knowledge, agenda] = await Promise.all([storeKnowledge(), getAgenda().catch(() => null)]);
+  // "Negocio con citas": the assistant books appointments instead of taking orders.
+  const appointments = agenda?.businessType === 'appointments' ? agenda : null;
   const messages = toMessages(opts.history);
   const run: BotRun = { reply: null, handoff: null, toolCalls: [], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   if (!messages.length) return run;
@@ -377,7 +382,7 @@ export async function runBot(opts: {
   const now = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const system: Anthropic.Beta.BetaTextBlockParam[] = [
     // Stable part first so it is cached between messages.
-    { type: 'text', text: systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
     { type: 'text', text: `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.` },
   ];
   if (opts.ad && (opts.ad.headline || opts.ad.body)) {
@@ -400,7 +405,7 @@ export async function runBot(opts: {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default', // if the model declines, Anthropic retries on its recommended fallback model
       system,
-      tools: opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS,
+      tools: appointments ? [...AGENDA_TOOLS, ...TOOLS.filter((t) => t.name === 'pasar_a_humano')] : opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS,
       messages,
     });
     run.usage.input += response.usage.input_tokens || 0;
@@ -434,7 +439,11 @@ export async function runBot(opts: {
       let result: unknown;
       let isError = false;
       try {
-        if (t.name === 'consultar_pedidos') {
+        if (appointments && AGENDA_TOOL_NAMES.has(t.name)) {
+          const r = await runAgendaTool(t.name, t.input, { a: appointments, phone: opts.phone, dryRun: Boolean(opts.dryRun) });
+          result = r.result;
+          if (r.booked) run.booked = r.booked;
+        } else if (t.name === 'consultar_pedidos') {
           const orders = await ordersFor(opts.phone);
           result = orders.length ? { pedidos: orders } : { pedidos: [], nota: 'No hay pedidos con este número de WhatsApp. Puede que el cliente haya usado otro número en el formulario: pídele el número del pedido (empieza por LP-) o pásalo a una persona.' };
         } else if (t.name === 'crear_pedido' && opts.settings.takeOrders) {
@@ -472,7 +481,8 @@ export async function writeFollowUp(opts: {
   history: { direction: 'in' | 'out'; text: string }[];
   hours: number;
 }): Promise<string | null> {
-  const knowledge = await storeKnowledge();
+  const [knowledge, agenda] = await Promise.all([storeKnowledge(), getAgenda().catch(() => null)]);
+  const appointments = agenda?.businessType === 'appointments' ? agenda : null;
   const lines = opts.history
     .filter((h) => h.text.trim())
     .slice(-20)
@@ -488,13 +498,13 @@ export async function writeFollowUp(opts: {
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     system: [
-      { type: 'text', text: systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
       {
         type: 'text',
-        text: `TAREA ESPECIAL: seguimiento. El cliente "${opts.customerName || 'sin nombre'}" dejó de responder hace unas ${opts.hours} horas y no hizo el pedido.${adText ? ` Llegó desde un anuncio: "${adText}".` : ''}
-Escribe UN solo mensaje de WhatsApp corto (máximo 3 líneas), cálido y natural, que retome justo donde quedó la conversación: resuelve la duda que haya quedado pendiente o pregúntale con amabilidad si le ayudas a terminar su pedido. Recuerda, si encaja, que paga al recibir.
+        text: `TAREA ESPECIAL: seguimiento. El cliente "${opts.customerName || 'sin nombre'}" dejó de responder hace unas ${opts.hours} horas y ${appointments ? 'no agendó su cita' : 'no hizo el pedido'}.${adText ? ` Llegó desde un anuncio: "${adText}".` : ''}
+Escribe UN solo mensaje de WhatsApp corto (máximo 3 líneas), cálido y natural, que retome justo donde quedó la conversación: resuelve la duda que haya quedado pendiente o pregúntale con amabilidad si le ayudas a ${appointments ? 'agendar su cita (puedes ofrecerle buscar un horario)' : 'terminar su pedido. Recuerda, si encaja, que paga al recibir'}.
 Reglas: nada de presión, urgencia, descuentos, regalos ni stock limitado que no estén en la información. No digas que eres un recordatorio automático. No repitas textualmente mensajes anteriores.
-Responde exactamente SKIP (sin nada más) si: el cliente dijo que no le interesa, que lo pensará y él escribe, ya compró, pidió no ser contactado, se quejó o está molesto, o la conversación terminó de forma natural sin interés de compra.`,
+Responde exactamente SKIP (sin nada más) si: el cliente dijo que no le interesa, que lo pensará y él escribe, ya compró o agendó, pidió no ser contactado, se quejó o está molesto, o la conversación terminó de forma natural sin interés de compra.`,
       },
     ],
     messages: [{ role: 'user', content: `Conversación hasta ahora:\n${lines}\n\nEscribe el mensaje de seguimiento (o SKIP).` }],

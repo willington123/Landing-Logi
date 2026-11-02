@@ -1,4 +1,5 @@
 // WhatsApp business flows: order confirmation and customer replies.
+import { appointmentButton } from '@/lib/server/agenda-reminders';
 import { patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/server/meta-capi';
 import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendText, type InboundMessage } from '@/lib/server/whatsapp';
@@ -97,6 +98,12 @@ export async function handleInbound(m: InboundMessage) {
   // Buttons on the test message sent from Integrations.
   if (m.orderId === TEST_ORDER_ID) {
     await reply(m.from, 'Mensaje de prueba recibido ✅ La confirmación de pedidos por WhatsApp funciona.');
+    return;
+  }
+
+  // "Confirmar cita" / "Cancelar cita" on an appointment reminder.
+  if (m.appt) {
+    await appointmentButton(m as InboundMessage & { appt: NonNullable<InboundMessage['appt']> });
     return;
   }
 

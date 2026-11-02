@@ -102,6 +102,37 @@ export async function sendConfirmTemplate(to: string, vars: { name: string; prod
   }, c);
 }
 
+// Appointment reminder template: {{1}} name, {{2}} service, {{3}} when, {{4}} with whom / where.
+// Buttons "Confirmar cita" / "Cancelar cita" carry the appointment id.
+export function sendAppointmentTemplate(to: string, t: { name: string; lang: string }, vars: [string, string, string, string], apptId: string): Promise<SendResult> {
+  return send({
+    to,
+    type: 'template',
+    template: {
+      name: t.name,
+      language: { code: t.lang || 'es' },
+      components: [
+        { type: 'body', parameters: vars.map(param) },
+        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: `appt_confirm:${apptId}` }] },
+        { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: `appt_cancel:${apptId}` }] },
+      ],
+    },
+  });
+}
+
+// Free-form message with up to 3 reply buttons (only inside the 24 h window).
+export function sendButtons(to: string, body: string, buttons: { id: string; title: string }[]): Promise<SendResult> {
+  return send({
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: body.slice(0, 1024) },
+      action: { buttons: buttons.slice(0, 3).map((b) => ({ type: 'reply', reply: { id: b.id.slice(0, 256), title: b.title.slice(0, 20) } })) },
+    },
+  });
+}
+
 export { formatMoney } from '@/lib/whatsapp-link';
 
 // Meta's default "hello_world" template: works on any number, good for testing the connection.
@@ -168,6 +199,7 @@ export interface InboundMessage {
   intent: Intent;
   orderId?: string; // from a button payload like "confirm:<orderId>"
   orderNumber?: string; // "LP-12345" written in the message (e.g. the landing's pre-filled text)
+  appt?: { action: 'confirm' | 'cancel'; id: string }; // tapped Confirmar cita / Cancelar cita
   phoneNumberId?: string; // the store's number that received it (routes the notice to its store)
   ad?: AdRef; // the customer wrote from a click-to-WhatsApp ad
   raw: unknown;
@@ -192,6 +224,7 @@ const norm = (v: string) =>
 
 // Reads a button payload ("confirm:<id>") or a reply text ("Confirmar pedido" / "Cancelar").
 export function detectIntent(payload: string, text: string, isButton: boolean): { intent: Intent; orderId?: string; orderNumber?: string } {
+  if (/^appt_(confirm|cancel):/.test(payload || '')) return { intent: null }; // appointment buttons (handled apart)
   const p = /^(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
   if (p) return { intent: p[1] as Intent, orderId: p[2] };
   // The landing's pre-filled message: "Quiero confirmar mi pedido ... *Pedido:* LP-12345 ...".
@@ -257,6 +290,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
             text = m[m.type]?.caption ? `[${m.type}] ${m[m.type].caption}` : `[${m.type}]`;
         }
         const { intent, orderId, orderNumber } = detectIntent(payload, text, isButton);
+        const ap = /^appt_(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
         messages.push({
           waMessageId: m.id,
           from: String(m.from).replace(/\D/g, ''),
@@ -267,6 +301,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           intent,
           orderId,
           orderNumber,
+          ...(ap ? { appt: { action: ap[1] as 'confirm' | 'cancel', id: ap[2] } } : {}),
           phoneNumberId,
           ad: adFromReferral(m.referral, iso(m.timestamp)) || undefined,
           raw: m,

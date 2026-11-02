@@ -6,6 +6,7 @@ export interface AccountInfo {
   org: { id: string; name: string; role: string } | null;
   orgs: { id: string; name: string; role: string }[];
   platformAdmin?: boolean;
+  businessType?: 'store' | 'appointments';
   plan?: {
     id: string;
     name: string;

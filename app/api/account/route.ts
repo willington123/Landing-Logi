@@ -1,3 +1,4 @@
+import { isAppointmentsBusiness } from '@/lib/server/agenda';
 import { NextRequest } from 'next/server';
 import { getUser, renameOrg, userOrgs } from '@/lib/server/accounts';
 import { getSubscription, isPlatformAdmin } from '@/lib/server/billing';
@@ -11,7 +12,7 @@ export async function GET() {
   try {
     const orgId = await currentOrgId();
     const uid = sessionUserId()!;
-    const [user, orgs, role, sub] = await Promise.all([getUser(uid), userOrgs(uid), currentRole(), getSubscription(orgId).catch(() => null)]);
+    const [user, orgs, role, sub, appointments] = await Promise.all([getUser(uid), userOrgs(uid), currentRole(), getSubscription(orgId).catch(() => null), isAppointmentsBusiness().catch(() => false)]);
     const org = orgs.find((o) => o.id === orgId);
     return ok({
       user: user ? { id: user.id, email: user.email, name: user.name } : null,
@@ -19,6 +20,7 @@ export async function GET() {
       orgs: orgs.map((o) => ({ id: o.id, name: o.name, role: o.role })),
       integrationsManaged: envIntegrationsAllowed(),
       platformAdmin: isPlatformAdmin(user?.email),
+      businessType: appointments ? 'appointments' : 'store',
       plan: sub
         ? { id: sub.plan, name: sub.planInfo.name, status: sub.status, effective: sub.effective, daysLeft: sub.daysLeft, panelLocked: sub.panelLocked, landingsOff: sub.landingsOff, accessEndsAt: sub.accessEndsAt }
         : null,

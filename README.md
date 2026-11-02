@@ -153,6 +153,14 @@ Cada tienda conecta sus propias cuentas en **Integraciones**; las claves se comp
 - Si Claude no está disponible o falla, Gemini escribe la página como respaldo.
 - Opcional: `ANTHROPIC_LANDING_MODEL` para usar otro modelo de Claude solo en las landings.
 
+## Agenda: negocios con citas
+Para barberías, consultorios, spas y todo negocio que trabaja con citas.
+- **Activarla:** ejecuta `supabase/migrations/006_appointments.sql` en Supabase (**antes** de publicar). Luego, en la tienda, **Agenda → Activar la agenda** (o Configuración → "¿Tu negocio trabaja con citas?"). El menú cambia Pedidos por **Agenda**.
+- **Servicios** (duración y precio), **Profesionales** (qué servicios hacen, horario por día, días libres) y **Ajustes** (dirección, políticas, cada cuánto empiezan las citas, anticipación mínima y recordatorios).
+- **El asistente agenda por WhatsApp:** consulta horarios libres, ofrece opciones, agenda, muestra las citas del cliente, cancela y reprograma. No da consejos médicos.
+- **Recordatorios** 24 h y 2 h antes con botones *Confirmar cita* / *Cancelar cita*: gratis si el cliente escribió en las últimas 24 h; si no, con la plantilla `recordatorio_cita` (Plantillas → Nueva plantilla → Recordatorio de citas). Necesita la revisión automática cada 5 minutos.
+- **Calendario** por día (una columna por profesional) y por semana, citas desde el panel, estados (agendada, confirmada, asistió, no llegó, cancelada) y botón para abrir el chat del cliente.
+
 ## Planes y pagos (Wompi)
 Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. Después elige un plan en **Plan y pagos**:
 
