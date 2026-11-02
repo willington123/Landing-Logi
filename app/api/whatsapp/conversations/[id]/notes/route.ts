@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { addNote, deleteNote, getNotes } from '@/lib/server/crm-store';
 import { assertCanSeeChat } from '@/lib/server/crm-store';
+import { CHAT_ID_RE } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 
 const check = (id: string) =>
   !cloudEnabled()
     ? NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 })
-    : !/^\d{6,20}$/.test(id)
+    : !CHAT_ID_RE.test(id)
       ? NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 })
       : null;
 const fail = (e: any) => NextResponse.json({ success: false, error: e?.message || String(e) }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });

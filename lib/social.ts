@@ -158,3 +158,14 @@ export function waLink(phone: string, text: string): string {
   const digits = phone.replace(/\D/g, '');
   return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : '';
 }
+
+// ---------- chats from Messenger and Instagram (in Mensajes, next to WhatsApp) ----------
+// Their conversation id is the person's id on that network with a letter in front:
+// "m…" Messenger, "i…" Instagram. WhatsApp chats stay as the phone number.
+export type ChatChannel = 'whatsapp' | 'messenger' | 'instagram';
+export const CHAT_ID_RE = /^(?:\d{6,20}|[mi]\d{5,30})$/;
+export function chatChannel(id: string): ChatChannel {
+  return /^m\d/.test(id) ? 'messenger' : /^i\d/.test(id) ? 'instagram' : 'whatsapp';
+}
+export const isSocialChat = (id: string) => chatChannel(id) !== 'whatsapp';
+export const CHANNEL_LABEL: Record<ChatChannel, string> = { whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram' };

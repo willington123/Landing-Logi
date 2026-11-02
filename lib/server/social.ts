@@ -7,6 +7,7 @@ import { seal, storedIntegrations, updateIntegrations } from '@/lib/server/integ
 import { requestOrgSync } from '@/lib/server/tenant';
 import { GRAPH_VERSION } from '@/lib/server/whatsapp';
 import { DEFAULT_SOCIAL, cleanSocial, fillName, matchRule, waLink, type SocialChannel, type SocialRule, type SocialSettings } from '@/lib/social';
+import type { InboundMessage, SendResult } from '@/lib/server/whatsapp';
 
 const env = (k: string) => (process.env[k] || '').trim();
 const GRAPH = () => `${env('META_GRAPH_URL') || 'https://graph.facebook.com'}/${GRAPH_VERSION}`;
@@ -119,7 +120,7 @@ export async function setActivePages(active: string[]): Promise<{ id: string; ok
         continue;
       }
       try {
-        await graph('POST', `${p.id}/subscribed_apps`, token, { subscribed_fields: ['feed'] });
+        await graph('POST', `${p.id}/subscribed_apps`, token, { subscribed_fields: ['feed', 'messages'] });
         await rawDb().from('settings').upsert({ org_id: d.orgId, id: indexId('page', p.id), data: { at: new Date().toISOString() } });
         if (p.ig) await rawDb().from('settings').upsert({ org_id: d.orgId, id: indexId('ig', p.ig.id), data: { page: p.id } });
         results.push({ id: p.id, ok: true });
@@ -391,7 +392,7 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
         const text = await privateText(rule, c.fromName, settings);
         if (text) {
           await graph('POST', `${page.id}/messages`, token, { recipient: { comment_id: c.commentId }, message: { text } })
-            .then(() => item.done.push('Privado'))
+            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text)))
             .catch((e) => errors.push(`Privado: ${e.message}`));
         }
       }
@@ -418,7 +419,7 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
         const text = await privateText(aiRule(settings), c.fromName, settings);
         if (text)
           await graph('POST', `${page.id}/messages`, token, { recipient: { comment_id: c.commentId }, message: { text } })
-            .then(() => item.done.push('Privado'))
+            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text)))
             .catch((e) => errors.push(`Privado: ${e.message}`));
       }
       if (d && !item.done.length && !errors.length) item.skipped = 'La IA lo dejó para una persona.';
@@ -453,4 +454,149 @@ export async function previewComment(text: string, channel: SocialChannel, name:
     privateMessage: d.interest && settings.ai.dm ? (await privateText(aiRule(settings), name, settings)) || null : null,
     ai: d.action === 'ignorar' && d.interest ? 'privado' : d.action,
   };
+}
+
+
+// ---------- Messenger and Instagram chats in Mensajes ----------
+
+// Which page answers each chat, and the person's name / @user (kept per store).
+interface ChatMeta {
+  pageId: string;
+  name?: string;
+  username?: string;
+}
+async function chatMetas(): Promise<Record<string, ChatMeta>> {
+  return (await readSetting<Record<string, ChatMeta>>('social_chats')) || {};
+}
+async function saveChatMeta(id: string, meta: ChatMeta) {
+  const all = await chatMetas();
+  all[id] = { ...all[id], ...meta };
+  await writeSetting('social_chats', all);
+}
+export async function chatMeta(id: string): Promise<ChatMeta | null> {
+  return (await chatMetas())[id] || null;
+}
+
+async function pageFor(pageId: string) {
+  const org = requestOrgSync();
+  if (!org) return null;
+  const p = ((await storedIntegrations(org)).social?.pages || []).find((x) => x.id === pageId && x.active);
+  const token = p ? decrypt(p.token) : '';
+  return p && token ? { ...p, token } : null;
+}
+
+// Reply in a Messenger / Instagram chat (only inside Meta's 24 h window after the person's last message).
+export async function sendSocialText(chatId: string, text: string): Promise<SendResult> {
+  const meta = await chatMeta(chatId);
+  const page = meta ? await pageFor(meta.pageId) : null;
+  if (!page) return { ok: false, error: 'La página de este chat ya no está conectada en Konnexa.' };
+  try {
+    const r = await graph('POST', `${page.id}/messages`, page.token, { recipient: { id: chatId.slice(1) }, messaging_type: 'RESPONSE', message: { text: text.slice(0, 2000) } });
+    return { ok: true, messageId: r.message_id };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// The private message sent for a comment starts the chat with that person (with a note of what they commented).
+async function privateToChat(c: IncomingComment, pageId: string, r: any, text: string) {
+  const rid = String(r?.recipient_id || '');
+  if (!rid) return;
+  const id = `${c.channel === 'instagram' ? 'i' : 'm'}${rid}`;
+  await saveChatMeta(id, { pageId, ...(c.channel === 'instagram' ? { username: c.fromName } : { name: c.fromName }) }).catch(() => {});
+  const { recordOutbound } = await import('@/lib/server/wa-store');
+  const { addNote } = await import('@/lib/server/crm-store');
+  await recordOutbound({ phone: id, name: c.fromName, type: 'text', body: text, result: { ok: true, messageId: r?.message_id } }).catch(() => {});
+  await addNote(id, `💬 Comentó "${c.text.slice(0, 200)}" en ${c.adId ? 'un anuncio' : 'una publicación'} de ${c.channel === 'instagram' ? 'Instagram' : 'Facebook'}. Se le escribió por privado.`).catch(() => {});
+}
+
+export interface IncomingChatEvent {
+  kind: 'page' | 'ig';
+  assetId: string; // page id or instagram account id
+  message: InboundMessage;
+}
+
+// Messenger / Instagram Direct notices → messages in the same shape as WhatsApp ones.
+// Echoes (what the page sends, from Konnexa or Meta's inbox) come back as { echo: true }.
+export function parseSocialMessaging(body: any): (IncomingChatEvent & { echo?: boolean; appId?: string | null })[] {
+  const out: (IncomingChatEvent & { echo?: boolean; appId?: string | null })[] = [];
+  if (body?.object !== 'page' && body?.object !== 'instagram') return out;
+  const kind = body.object === 'page' ? 'page' : 'ig';
+  const prefix = kind === 'page' ? 'm' : 'i';
+  for (const entry of Array.isArray(body.entry) ? body.entry : []) {
+    const assetId = String(entry?.id || '');
+    for (const ev of Array.isArray(entry?.messaging) ? entry.messaging : []) {
+      const msg = ev?.message;
+      if (!msg?.mid || msg.is_deleted) continue;
+      const echo = Boolean(msg.is_echo) || String(ev.sender?.id || '') === assetId;
+      const person = String(echo ? ev.recipient?.id || '' : ev.sender?.id || '');
+      if (!/^\d{5,30}$/.test(person)) continue;
+      const files = Array.isArray(msg.attachments) ? msg.attachments : [];
+      const label = files.length
+        ? files.map((a: any) => ({ image: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz', file: '📎 Archivo', story_mention: '📣 Te mencionó en una historia', share: '🔗 Compartió una publicación' } as Record<string, string>)[a.type] || '📎 Adjunto').join(' ')
+        : '';
+      const text = [msg.text, label].filter(Boolean).join('\n') || (msg.quick_reply?.payload ? String(msg.quick_reply.payload) : '');
+      if (!text) continue;
+      out.push({
+        kind,
+        assetId,
+        echo,
+        appId: msg.app_id ? String(msg.app_id) : null,
+        message: {
+          waMessageId: String(msg.mid),
+          from: `${prefix}${person}`,
+          timestamp: new Date(Number(ev.timestamp) || Date.now()).toISOString(),
+          type: 'text',
+          text,
+          intent: null,
+          raw: { channel: kind === 'page' ? 'messenger' : 'instagram' },
+        },
+      });
+    }
+  }
+  return out;
+}
+
+// Name of a new person (best effort: Meta only shares it with some permissions).
+async function lookupName(id: string, token: string): Promise<Partial<ChatMeta>> {
+  try {
+    if (id.startsWith('m')) {
+      const d = await graph('GET', id.slice(1), token, { fields: 'first_name,last_name,name' });
+      return { name: String(d.name || [d.first_name, d.last_name].filter(Boolean).join(' ') || '') || undefined };
+    }
+    const d = await graph('GET', id.slice(1), token, { fields: 'name,username' });
+    return { name: d.name ? String(d.name) : undefined, username: d.username ? String(d.username) : undefined };
+  } catch {
+    return {};
+  }
+}
+
+// One Messenger / Instagram message for the store in context: saved in Mensajes and answered like WhatsApp
+// (assistant, automatic replies, flows, team assignment).
+export async function handleSocialMessage(ev: IncomingChatEvent & { echo?: boolean; appId?: string | null }) {
+  const org = requestOrgSync();
+  if (!org) return;
+  const pages = (await storedIntegrations(org)).social?.pages || [];
+  const page = pages.find((p) => p.active && (ev.kind === 'page' ? p.id === ev.assetId : p.ig?.id === ev.assetId));
+  if (!page) return;
+  const id = ev.message.from;
+  const known = await chatMeta(id);
+  if (!known || (!known.name && !known.username)) {
+    const token = decrypt(page.token);
+    await saveChatMeta(id, { pageId: page.id, ...(token ? await lookupName(id, token) : {}) });
+  } else if (known.pageId !== page.id) await saveChatMeta(id, { pageId: page.id });
+  const meta = (await chatMeta(id))!;
+  const name = meta.name || (meta.username ? `@${meta.username}` : undefined);
+
+  if (ev.echo) {
+    // Sent by Konnexa (already saved) or answered from Meta's own inbox: keep the thread complete.
+    if (ev.appId && ev.appId === env('META_APP_ID')) return;
+    const { data } = await (await db()).from('wa_messages').select('id').eq('wa_message_id', ev.message.waMessageId).limit(1);
+    if (data?.length) return;
+    const { recordOutbound } = await import('@/lib/server/wa-store');
+    await recordOutbound({ phone: id, name, type: 'text', body: ev.message.text, result: { ok: true, messageId: ev.message.waMessageId }, by: { uid: 'meta', name: 'Desde Meta' } });
+    return;
+  }
+  const { handleInbound } = await import('@/lib/server/wa-actions');
+  await handleInbound({ ...ev.message, profileName: name });
 }

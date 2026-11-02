@@ -388,7 +388,12 @@ export async function runBot(opts: {
   const system: Anthropic.Beta.BetaTextBlockParam[] = [
     // Stable part first so it is cached between messages.
     { type: 'text', text: appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.` },
+    {
+      type: 'text',
+      text: /^[mi]\d/.test(opts.phone)
+        ? `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", escribe por ${opts.phone.startsWith('m') ? 'Messenger' : 'Instagram'} (no tienes su celular: para un pedido o una cita pídeselo; si prefiere, invítalo a seguir por WhatsApp). Fecha y hora en Colombia: ${now}.`
+        : `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.`,
+    },
   ];
   if (opts.ad && (opts.ad.headline || opts.ad.body)) {
     // Ad text is written by the store, but keep it short and clearly marked as data.

@@ -173,8 +173,8 @@ export default function SocialComments() {
     setSaving(true);
     setNotice(null);
     try {
-      const pagesChanged = data.pages.some((p) => p.active !== active.has(p.id));
-      const d = await call('/api/social', { method: 'PUT', body: JSON.stringify({ settings, ...(pagesChanged ? { activePages: Array.from(active) } : {}) }) });
+      // Pages are sent every time: saving also renews the subscription (comments and messages).
+      const d = await call('/api/social', { method: 'PUT', body: JSON.stringify({ settings, activePages: Array.from(active) }) });
       setSettings(d.settings);
       const failed = (d.results || []).filter((r: any) => !r.ok);
       setNotice(failed.length ? { ok: false, text: `Guardado, pero no se pudieron prender ${failed.length} página(s): ${failed[0].error}` } : { ok: true, text: 'Guardado. Konnexa ya está atendiendo los comentarios.' });
@@ -464,8 +464,8 @@ export default function SocialComments() {
         </button>
         {showSetup && (
           <ol className="mt-2 list-decimal pl-5 text-[12px] text-slate-600 space-y-1">
-            <li>En developers.facebook.com → tu app → Webhooks: elige “Page”, URL de devolución <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/meta/webhook</code>, el mismo token de verificación de WhatsApp, y suscribe el campo “feed”.</li>
-            <li>En el mismo lugar elige “Instagram” con la misma URL y suscribe el campo “comments”.</li>
+            <li>En developers.facebook.com → tu app → Webhooks: elige “Page”, URL de devolución <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/meta/webhook</code>, el mismo token de verificación de WhatsApp, y suscribe los campos “feed” y “messages”.</li>
+            <li>En el mismo lugar elige “Instagram” con la misma URL y suscribe los campos “comments” y “messages”.</li>
             <li>En Inicio de sesión con Facebook → Configuración, agrega la URL de redirección <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/integrations/meta-pages/oauth/callback</code>.</li>
             <li>Agrega los permisos pages_manage_engagement, pages_messaging, pages_manage_metadata, pages_read_engagement, pages_read_user_content, instagram_basic, instagram_manage_comments e instagram_manage_messages. Con tus propias páginas funcionan ya; para tus clientes van en la revisión de la app.</li>
           </ol>

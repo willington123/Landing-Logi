@@ -75,7 +75,12 @@ async function send(body: Record<string, unknown>, cfg?: WaConfig | null): Promi
   }
 }
 
-export function sendText(to: string, text: string): Promise<SendResult> {
+// Messenger / Instagram chats ("m…" / "i…") go through the Facebook Page; templates are WhatsApp only.
+const social = (to: string) => /^[mi]\d/.test(to);
+const NOT_WHATSAPP: SendResult = { ok: false, error: 'Las plantillas son solo para WhatsApp.' };
+
+export async function sendText(to: string, text: string): Promise<SendResult> {
+  if (social(to)) return (await import('@/lib/server/social')).sendSocialText(to, text);
   return send({ to, type: 'text', text: { preview_url: false, body: text.slice(0, 4096) } });
 }
 
@@ -85,6 +90,7 @@ const param = (v: string) => ({ type: 'text', text: (v || '-').replace(/[\n\t\r]
 // Order confirmation template: {{1}} name, {{2}} product, {{3}} total, {{4}} city.
 // The two quick-reply buttons carry the order id so the reply maps to the exact order.
 export async function sendConfirmTemplate(to: string, vars: { name: string; product: string; total: string; city: string }, orderId: string): Promise<SendResult> {
+  if (social(to)) return NOT_WHATSAPP;
   const c = await waConfig();
   if (!c?.confirmTemplate) return { ok: false, error: 'Plantilla de confirmación no configurada' };
   return send({
@@ -105,6 +111,7 @@ export async function sendConfirmTemplate(to: string, vars: { name: string; prod
 // Appointment reminder template: {{1}} name, {{2}} service, {{3}} when, {{4}} with whom / where.
 // Buttons "Confirmar cita" / "Cancelar cita" carry the appointment id.
 export function sendAppointmentTemplate(to: string, t: { name: string; lang: string }, vars: [string, string, string, string], apptId: string): Promise<SendResult> {
+  if (social(to)) return Promise.resolve(NOT_WHATSAPP);
   return send({
     to,
     type: 'template',
@@ -122,11 +129,13 @@ export function sendAppointmentTemplate(to: string, t: { name: string; lang: str
 
 // Any approved template with body variables (its quick-reply buttons send their own text back).
 export function sendTemplate(to: string, t: { name: string; lang: string }, vars: string[]): Promise<SendResult> {
+  if (social(to)) return Promise.resolve(NOT_WHATSAPP);
   return send({ to, type: 'template', template: { name: t.name, language: { code: t.lang || 'es' }, components: vars.length ? [{ type: 'body', parameters: vars.map(param) }] : [] } });
 }
 
 // Free-form message with up to 3 reply buttons (only inside the 24 h window).
 export function sendButtons(to: string, body: string, buttons: { id: string; title: string }[]): Promise<SendResult> {
+  if (social(to)) return sendText(to, body);
   return send({
     to,
     type: 'interactive',
