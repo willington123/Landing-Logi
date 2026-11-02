@@ -3,20 +3,35 @@ import { cloudEnabled } from '@/lib/server/db';
 import { getConversationWithOrder, listMessages, recordOutbound } from '@/lib/server/wa-store';
 import { insideServiceWindow, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
 import { getBotSettings, setBotState } from '@/lib/server/bot';
+import { assertCanSeeChat, getAgents, myAgent, othersOnChat } from '@/lib/server/crm-store';
+import { sessionUserId } from '@/lib/server/tenant';
+import { getUser } from '@/lib/server/accounts';
 
 export const dynamic = 'force-dynamic';
 
 const validId = (id: string) => /^\d{6,20}$/.test(id);
+
+// The team member writing: their name in the team list, else their account name or email.
+async function whoAmI(): Promise<{ uid: string; name: string } | undefined> {
+  const uid = sessionUserId();
+  if (!uid) return undefined;
+  const agent = await myAgent(await getAgents()).catch(() => null);
+  if (agent) return { uid, name: agent.name };
+  const user = await getUser(uid).catch(() => null);
+  return { uid, name: (user?.name || user?.email?.split('@')[0] || 'Equipo').slice(0, 60) };
+}
 
 // Admin: messages of one conversation (oldest first) plus the conversation itself.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   if (!validId(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
   try {
+    await assertCanSeeChat(params.id);
     const conversation = await getConversationWithOrder(params.id);
     if (!conversation) return NextResponse.json({ success: false, error: 'Conversación no encontrada.' }, { status: 404 });
     const messages = await listMessages(params.id);
-    return NextResponse.json({ success: true, conversation, messages, canReply: insideServiceWindow(conversation.last_inbound_at) });
+    const others = await othersOnChat(params.id).catch(() => []);
+    return NextResponse.json({ success: true, conversation, messages, canReply: insideServiceWindow(conversation.last_inbound_at), others });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
@@ -28,6 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!(await whatsappEnabled())) return NextResponse.json({ success: false, error: 'WhatsApp no está configurado.' }, { status: 503 });
   if (!validId(params.id)) return NextResponse.json({ success: false, error: 'Conversación no válida.' }, { status: 400 });
   try {
+    await assertCanSeeChat(params.id);
     const { text } = await req.json().catch(() => ({}));
     const body = String(text ?? '').trim().slice(0, 4096);
     if (!body) return NextResponse.json({ success: false, error: 'Escribe un mensaje.' }, { status: 400 });
@@ -41,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       );
     }
     const result = await sendText(params.id, body);
-    await recordOutbound({ phone: params.id, type: 'text', body, result });
+    await recordOutbound({ phone: params.id, type: 'text', body, result, by: await whoAmI() });
     if (!result.ok) return NextResponse.json({ success: false, error: `WhatsApp rechazó el mensaje: ${result.error}` }, { status: 502 });
     // A person answered: the AI assistant stops answering this chat until it's handed back.
     if ((await getBotSettings().catch(() => null))?.enabled) {

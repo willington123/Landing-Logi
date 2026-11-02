@@ -135,12 +135,35 @@ export function cleanTags(input: unknown): CrmTag[] | string {
 }
 
 // ---------- team (who handles each chat) ----------
-// Same shape as tags: a name and a color.
-export type Agent = CrmTag;
+// A name and a color like tags, linked to the person's account in the store.
+export interface Agent extends CrmTag {
+  userId?: string | null; // team member who signs in as this person ("Míos" works by itself)
+  onlyAssigned?: boolean; // members only: they see just the chats assigned to them
+  available?: boolean; // gets new chats when automatic assignment is on (default true)
+}
 export const cleanAgents = (input: unknown): Agent[] | string => {
   const r = cleanTags(input);
-  return typeof r === 'string' ? r.replace('etiqueta', 'persona').replace('etiquetas', 'personas') : r;
+  if (typeof r === 'string') return r.replace('etiqueta', 'persona').replace('etiquetas', 'personas');
+  const src = Array.isArray(input) ? input : [];
+  const users = new Set<string>();
+  const out: Agent[] = [];
+  for (let i = 0; i < r.length; i++) {
+    const raw: any = src[i] || {};
+    const userId = /^[\w-]{1,60}$/.test(String(raw.userId ?? '')) ? String(raw.userId) : null;
+    if (userId && users.has(userId)) return `"${r[i].name}": esa cuenta ya está unida a otra persona.`;
+    if (userId) users.add(userId);
+    out.push({ ...r[i], userId, onlyAssigned: Boolean(userId && raw.onlyAssigned), available: raw.available !== false });
+  }
+  return out;
 };
+
+// Automatic assignment of chats to the team, in turns.
+export interface RoutingSettings {
+  enabled: boolean;
+  when: 'new' | 'handoff'; // every unassigned chat that writes, or only when the AI assistant hands it to a person
+}
+export const DEFAULT_ROUTING: RoutingSettings = { enabled: false, when: 'new' };
+export const cleanRouting = (r: any): RoutingSettings => ({ enabled: Boolean(r?.enabled), when: r?.when === 'handoff' ? 'handoff' : 'new' });
 
 // ---------- shipping ----------
 

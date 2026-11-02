@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { addNote, deleteNote, getNotes } from '@/lib/server/crm-store';
+import { assertCanSeeChat } from '@/lib/server/crm-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const bad = check(params.id);
   if (bad) return bad;
   try {
+    await assertCanSeeChat(params.id);
     return NextResponse.json({ success: true, notes: await getNotes(params.id) });
   } catch (e) {
     return fail(e);
@@ -28,6 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const bad = check(params.id);
   if (bad) return bad;
   try {
+    await assertCanSeeChat(params.id);
     const { text } = await req.json().catch(() => ({}));
     const clean = String(text ?? '').trim().slice(0, 1000);
     if (!clean) return NextResponse.json({ success: false, error: 'Escribe la nota.' }, { status: 400 });
@@ -42,6 +45,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const bad = check(params.id);
   if (bad) return bad;
   try {
+    await assertCanSeeChat(params.id);
     const noteId = req.nextUrl.searchParams.get('noteId') || '';
     return NextResponse.json({ success: true, notes: await deleteNote(params.id, noteId) });
   } catch (e) {

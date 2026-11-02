@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOrg } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
-import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
+import { UNREAD_REFRESH_EVENT, playMessageSound, showNotice, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import InstallApp from '@/components/layout/InstallApp';
 import Link from 'next/link';
@@ -128,11 +128,23 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
   useEffect(() => {
     let stop = false;
     const SEEN = 'lp_last_inbound_seen';
+    const SEEN_MINE = 'lp_last_mine_seen';
     const check = async () => {
       try {
         const d = await fetch('/api/whatsapp/unread', { cache: 'no-store' }).then((r) => r.json());
         if (stop || !d.success) return;
         setUnread(d.unread || 0);
+        // A customer of mine wrote: browser notice (the panel can be in another tab).
+        const mine = d.mine as { lastInboundAt: string | null; latest: { id: string; name: string; preview: string } | null } | null;
+        if (mine?.lastInboundAt) {
+          let seenMine: string | null = null;
+          try {
+            seenMine = sessionStorage.getItem(SEEN_MINE);
+            sessionStorage.setItem(SEEN_MINE, mine.lastInboundAt);
+          } catch {}
+          const here = window.location.pathname === '/crm' && (window as any).__lpActiveChat === mine.latest?.id && document.visibilityState === 'visible';
+          if (seenMine && mine.lastInboundAt > seenMine && mine.latest && !here) showNotice(`${mine.latest.name} te escribió`, mine.latest.preview, `/crm?c=${mine.latest.id}`);
+        }
         const last: string | null = d.lastInboundAt;
         let seen: string | null = null;
         try {

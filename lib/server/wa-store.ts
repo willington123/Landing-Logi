@@ -30,6 +30,7 @@ export interface WaMessage {
   order_id: string | null;
   created_at: string;
   media?: WaMedia | null; // photo, voice note, video, document or sticker sent by the customer
+  by?: string | null; // who on the team wrote it (panel replies)
 }
 
 export interface WaMedia {
@@ -77,7 +78,7 @@ async function existingOrderId(id?: string): Promise<string | null> {
 
 // Saves a message we sent (template, auto-reply or manual reply).
 // auto: an automatic reply. It doesn't count as answered, so the chat stays in "Sin responder".
-export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult; auto?: boolean }) {
+export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult; auto?: boolean; by?: { uid: string; name: string } }) {
   const now = new Date().toISOString();
   const existing = await getConversation(p.phone);
   const orderId = await existingOrderId(p.orderId);
@@ -97,6 +98,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
     status: p.result.ok ? 'sent' : 'failed',
     error: p.result.error || null,
     order_id: orderId || existing?.order_id || null,
+    ...(p.by ? { payload: { by: p.by } } : {}),
     created_at: now,
   });
   if (error) throw new Error(error.message);
@@ -246,19 +248,26 @@ export async function listMessages(conversationId: string, limit = 300): Promise
     .limit(limit);
   if (error) throw new Error(error.message);
   return (data || [])
-    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null }) as WaMessage)
+    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null, by: m.direction === 'out' && payload?.by?.name ? String(payload.by.name) : null }) as WaMessage)
     .reverse();
 }
 
 // For the menu badge and the new-message sound.
-export async function unreadSummary() {
-  const { data, error } = await (await db()).from('wa_conversations').select('unread_count, last_inbound_at, last_message_at').gt('unread_count', 0).limit(1000);
+export async function unreadSummary(opts: { only?: (id: string) => boolean; mine?: (id: string) => boolean } = {}) {
+  const { data, error } = await (await db()).from('wa_conversations').select('id, name, last_message, unread_count, last_inbound_at, last_message_at').gt('unread_count', 0).limit(1000);
   if (error) throw new Error(error.message);
-  const rows = data || [];
+  const rows = (data || []).filter((r: any) => !opts.only || opts.only(r.id));
+  const sum = (list: any[]) => ({
+    unread: list.reduce((n, r) => n + (Number(r.unread_count) || 0), 0),
+    chats: list.length,
+    lastInboundAt: list.reduce<string | null>((max, r) => (r.last_inbound_at && (!max || r.last_inbound_at > max) ? r.last_inbound_at : max), null),
+  });
+  const mineRows = opts.mine ? rows.filter((r: any) => opts.mine!(r.id)) : [];
+  const latest = mineRows.sort((a: any, b: any) => String(b.last_inbound_at || '').localeCompare(String(a.last_inbound_at || '')))[0];
   return {
-    unread: rows.reduce((n, r) => n + (Number(r.unread_count) || 0), 0),
-    chats: rows.length,
-    lastInboundAt: rows.reduce<string | null>((max, r) => (r.last_inbound_at && (!max || r.last_inbound_at > max) ? r.last_inbound_at : max), null),
+    ...sum(rows),
+    // Chats assigned to the person signed in: for the "Míos" badge and the browser notice.
+    mine: { ...sum(mineRows), latest: latest ? { id: latest.id, name: latest.name || `+${latest.id}`, preview: latest.last_message || '' } : null },
   };
 }
 
