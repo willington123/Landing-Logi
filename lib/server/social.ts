@@ -15,6 +15,7 @@ const GRAPH = () => `${env('META_GRAPH_URL') || 'https://graph.facebook.com'}/${
 export const SOCIAL_SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
+  'pages_read_user_content', // the comments people leave on the page
   'pages_manage_engagement',
   'pages_manage_metadata',
   'pages_messaging',
