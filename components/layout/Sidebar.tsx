@@ -7,13 +7,14 @@ import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
   org: { id: string; name: string; role: string } | null;
   orgs: { id: string; name: string; role: string }[];
   platformAdmin?: boolean;
+  businessType?: 'store' | 'appointments';
 }
 
 // Header's menu button dispatches this event to open the sidebar on mobile.
@@ -53,6 +54,14 @@ const NAV_GROUPS = [
     ],
   },
 ];
+
+// "Negocio con citas": Agenda takes the place of Pedidos.
+function navGroups(type?: 'store' | 'appointments') {
+  if (type !== 'appointments') return NAV_GROUPS;
+  return NAV_GROUPS.map((g) =>
+    g.label === 'Vender' ? { ...g, items: g.items.map((i) => (i.href === '/orders' ? { href: '/agenda', label: 'Agenda', icon: CalendarDays } : i)) } : g,
+  );
+}
 
 export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void }) {
   const pathname = usePathname();
@@ -213,7 +222,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               </Link>
             </div>
           )}
-          {NAV_GROUPS.map((group) => (
+          {navGroups(account?.businessType).map((group) => (
             <div key={group.label}>
               <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em]">
                 {group.label}

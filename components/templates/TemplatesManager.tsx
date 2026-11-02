@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Check, CheckCircle2, Gauge, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from 'lucide-react';
-import { CONFIRM_PRESET } from '@/lib/wa-templates';
+import { APPOINTMENT_PRESET, CONFIRM_PRESET } from '@/lib/wa-templates';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -239,6 +239,7 @@ export default function TemplatesManager() {
   }, [list]);
   const shown = (list || []).filter((t) => type === 'all' || t.category === type);
   const hasPreset = list?.some((t) => t.name === CONFIRM_PRESET.name);
+  const hasApptPreset = list?.some((t) => t.name === APPOINTMENT_PRESET.name);
   const varsIn = (f.body.match(/\{\{\d+\}\}/g) || []).length;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -303,6 +304,17 @@ export default function TemplatesManager() {
                 </div>
                 <button onClick={() => run('preset', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'confirm' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
+                </button>
+              </div>
+            )}
+            {!hasApptPreset && (
+              <div className="rounded-lg bg-white border border-sky-200 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="text-[13px] font-semibold text-slate-900">Recordatorio de citas</p>
+                  <p className="text-[11px] text-slate-500">Para negocios con citas: recuerda la cita con los botones Confirmar cita / Cancelar cita.</p>
+                </div>
+                <button onClick={() => run('preset-appt', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'appointment' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
+                  {busy === 'preset-appt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
                 </button>
               </div>
             )}

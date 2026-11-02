@@ -1,10 +1,11 @@
+import { getAgenda, saveAgenda } from '@/lib/server/agenda';
 import { NextRequest } from 'next/server';
 import { createTemplate, deleteTemplate, listTemplates } from '@/lib/server/whatsapp';
 import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET } from '@/lib/wa-templates';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,9 @@ export async function POST(req: NextRequest) {
     const t =
       b.preset === 'confirm'
         ? CONFIRM_PRESET
-        : {
+        : b.preset === 'appointment'
+          ? APPOINTMENT_PRESET
+          : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
             category: b.category === 'MARKETING' ? ('MARKETING' as const) : ('UTILITY' as const),
@@ -48,6 +51,11 @@ export async function POST(req: NextRequest) {
     if (b.preset === 'confirm') {
       const c = await waConfig();
       if (c?.source === 'store') await updateIntegrations((s) => ({ ...s, whatsapp: { ...s.whatsapp!, confirmTemplate: t.name, templateLang: t.language } }));
+    }
+    // The reminder preset becomes the agenda's reminder template.
+    if (b.preset === 'appointment') {
+      const a = await getAgenda();
+      await saveAgenda({ ...a, reminderTemplate: t.name, templateLang: t.language });
     }
     return ok({ template: created });
   } catch (e) {

@@ -74,6 +74,8 @@ async function answer(m: InboundMessage) {
   }
   state = await setBotState(m.from, { day, replies: replies + (run.reply ? 1 : 0), ...(run.handoff ? {} : { reason: undefined, note: undefined }) });
 
+  if (run.booked) await addNote(m.from, `📅 El asistente agendó una cita: ${run.booked}.`).catch(() => {});
+
   if (run.order) {
     await addNote(m.from, `🛒 El asistente tomó el pedido ${run.order} (confirmado en el chat).`).catch(() => {});
     if ((await getTags()).some((t) => t.id === 'confirmado')) {

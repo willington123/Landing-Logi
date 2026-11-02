@@ -170,7 +170,8 @@ export default function OmnichannelInbox() {
   const [wa, setWa] = useState<WaStatus | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [listError, setListError] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string>('');
+  // /crm?c=<phone> opens that chat (links from Agenda and Pedidos).
+  const [activeId, setActiveId] = useState<string>(() => (typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('c') || '').replace(/\D/g, '')));
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [search, setSearch] = useState('');

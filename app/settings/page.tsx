@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
 import { logiStore } from '@/lib/store';
 import { pushSettings, CLOUD_SYNC_EVENT } from '@/lib/cloud';
@@ -82,6 +83,11 @@ export default function SettingsPage() {
               Configura los valores por defecto que heredarán todas tus landing pages y agentes de voz.
             </p>
           </div>
+
+          <Link href="/agenda" className="block bg-white rounded-2xl border border-slate-200 p-4 shadow-sm mb-6 hover:border-[#0A6CF0]/40">
+            <p className="text-[14px] font-semibold text-slate-900">¿Tu negocio trabaja con citas?</p>
+            <p className="text-xs text-slate-500">Barberías, consultorios, spas, estética… Activa la Agenda: el asistente agenda por WhatsApp y Konnexa envía los recordatorios. →</p>
+          </Link>
 
           <form onSubmit={handleSave} className="space-y-6">
             {/* General Info */}
