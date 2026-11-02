@@ -89,7 +89,7 @@ export default function WhatsAppAutoReplies() {
   const setRule = (i: number, patch: Partial<RuleDraft>) => setRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
-    <section id="whatsapp" className={`${card} p-5 md:p-6 space-y-5`}>
+    <section id="whatsapp" className={`scroll-mt-20 ${card} p-5 md:p-6 space-y-5`}>
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
           <Bot className="w-5 h-5" />

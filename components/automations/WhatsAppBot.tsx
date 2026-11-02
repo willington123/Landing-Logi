@@ -124,7 +124,7 @@ export default function WhatsAppBot() {
   const set = (patch: Partial<BotSettings>) => cfg && setCfg({ ...cfg, ...patch });
 
   return (
-    <section id="asistente" className={`${card} p-5 md:p-6 space-y-5`}>
+    <section id="asistente" className={`scroll-mt-20 ${card} p-5 md:p-6 space-y-5`}>
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white flex items-center justify-center shrink-0">
           <Sparkles className="w-5 h-5" />
