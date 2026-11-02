@@ -448,7 +448,7 @@ export default function SocialComments() {
             <li>En developers.facebook.com → tu app → Webhooks: elige “Page”, URL de devolución <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/meta/webhook</code>, el mismo token de verificación de WhatsApp, y suscribe el campo “feed”.</li>
             <li>En el mismo lugar elige “Instagram” con la misma URL y suscribe el campo “comments”.</li>
             <li>En Inicio de sesión con Facebook → Configuración, agrega la URL de redirección <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/integrations/meta-pages/oauth/callback</code>.</li>
-            <li>Agrega los permisos pages_manage_engagement, pages_messaging, pages_manage_metadata, pages_read_engagement, instagram_basic, instagram_manage_comments e instagram_manage_messages. Con tus propias páginas funcionan ya; para tus clientes van en la revisión de la app.</li>
+            <li>Agrega los permisos pages_manage_engagement, pages_messaging, pages_manage_metadata, pages_read_engagement, pages_read_user_content, instagram_basic, instagram_manage_comments e instagram_manage_messages. Con tus propias páginas funcionan ya; para tus clientes van en la revisión de la app.</li>
           </ol>
         )}
       </div>
