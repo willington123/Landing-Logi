@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import AutomationsOverview from '@/components/automations/AutomationsOverview';
 import MyFlows from '@/components/automations/MyFlows';
+import SocialComments from '@/components/automations/SocialComments';
 import WhatsAppAutoReplies from '@/components/automations/WhatsAppAutoReplies';
 import WhatsAppBot from '@/components/automations/WhatsAppBot';
 
@@ -22,6 +23,7 @@ export default function AutomationsPage() {
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           <AutomationsOverview />
           <MyFlows />
+          <SocialComments />
           <WhatsAppBot />
           <WhatsAppAutoReplies />
         </main>

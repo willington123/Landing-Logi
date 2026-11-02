@@ -11,6 +11,9 @@ import { getConversionSettings } from '@/lib/server/conversions';
 import { capiConfig } from '@/lib/server/integrations';
 import { getAgenda } from '@/lib/server/agenda';
 import { getSchedulerInfo } from '@/lib/server/scheduled';
+import { getSocialSettings, getSocialStats } from '@/lib/server/social';
+import { currentOrgId } from '@/lib/server/tenant';
+import { storedIntegrations } from '@/lib/server/integrations';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +96,31 @@ export async function GET() {
       href: '#whatsapp',
     };
     const fu = bot.followUp.enabled ? await followUpStats().catch(() => null) : null;
+    // Comments on Facebook / Instagram.
+    const [social, socialSet, socialStats] = await Promise.all([
+      currentOrgId().then(storedIntegrations).then((x) => x.social || null).catch(() => null),
+      getSocialSettings().catch(() => null),
+      getSocialStats().catch(() => ({}) as Record<string, any>),
+    ]);
+    const activePages = (social?.pages || []).filter((p) => p.active);
+    const liveRules = (socialSet?.rules || []).filter((r) => r.enabled);
+    const socialOn = activePages.length > 0 && (liveRules.length > 0 || Boolean(socialSet?.ai.answer || socialSet?.ai.hide));
+    const dms = Object.values(socialStats).reduce((n: number, s: any) => n + (s.privateMessages || 0), 0);
+    const socialItem: AutomationItem = {
+      id: 'comments',
+      when: 'Alguien comenta tu anuncio o publicación',
+      does: 'Le responde en público y le escribe al privado con el enlace a WhatsApp',
+      state: socialOn ? 'on' : social && activePages.length ? 'warn' : 'off',
+      detail: socialOn
+        ? `${activePages.length} página(s) · ${liveRules.length} regla(s)${socialSet?.ai.answer || socialSet?.ai.hide ? ' + IA' : ''}.`
+        : social && activePages.length
+          ? 'Páginas prendidas pero sin reglas.'
+          : social
+            ? 'Conectado: falta prender tus páginas.'
+            : 'Conecta tus páginas de Facebook e Instagram.',
+      count: socialOn ? n(dms, 'mensaje privado', 'mensajes privados') : undefined,
+      href: '#comentarios',
+    };
     const followItem: AutomationItem = {
       id: 'followup',
       when: appointments ? 'Un cliente deja de responder sin agendar' : 'Un cliente deja de responder sin comprar',
@@ -127,7 +155,7 @@ export async function GET() {
         state: agenda.comeBackEnabled ? (connected ? 'on' : 'warn') : 'off',
         detail: agenda.comeBackEnabled ? (connected ? `Con la plantilla "${agenda.comeBackTemplate}".` : noWa) : 'Apagado.',
         href: '/agenda?tab=settings',
-      }, followItem, autoItem);
+      }, followItem, autoItem, socialItem);
     } else {
       // New order → confirmation on WhatsApp.
       let confirm: Pick<AutomationItem, 'state' | 'detail'>;
@@ -169,6 +197,7 @@ export async function GET() {
           count: capi ? n(orders.filter((o) => o.sale?.ok).length, 'venta reportada', 'ventas reportadas') : undefined,
           href: '/integrations',
         },
+        socialItem,
       );
     }
 

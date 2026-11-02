@@ -54,12 +54,12 @@ export function checkState(state: string | null, orgId: string, uid: string): bo
   return o === orgId && u === uid && Number(exp) > Date.now();
 }
 
-export function oauthUrl(redirectUri: string, state: string) {
+export function oauthUrl(redirectUri: string, state: string, scope: string = ADS_SCOPE) {
   const u = new URL(`${env('META_OAUTH_URL') || 'https://www.facebook.com'}/${GRAPH_VERSION}/dialog/oauth`);
   u.searchParams.set('client_id', env('META_APP_ID'));
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
-  u.searchParams.set('scope', ADS_SCOPE);
+  u.searchParams.set('scope', scope);
   u.searchParams.set('response_type', 'code');
   return u.toString();
 }
