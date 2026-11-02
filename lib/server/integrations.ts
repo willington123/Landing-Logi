@@ -57,6 +57,11 @@ export interface StoredIntegrations {
     expiresAt?: string | null;
     connectedAt: string;
   };
+  // Facebook Pages (and their Instagram accounts) for answering comments. Page tokens are encrypted.
+  social?: {
+    pages: { id: string; name: string; token: string; picture?: string | null; ig?: { id: string; username: string } | null; active: boolean }[];
+    connectedAt: string;
+  };
 }
 
 // ---------- reading (cached a few seconds per store) ----------

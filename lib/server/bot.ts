@@ -17,7 +17,7 @@ import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/
 // The store picks the model in Automatizaciones (Sonnet by default).
 const MODEL_IDS: Record<BotModel, string> = { quality: 'claude-opus-5-5', balanced: 'claude-sonnet-5-5', economy: 'claude-haiku-5-5' };
 // Model plus the refusal fallback (Haiku has no server-side fallback, so it goes without it).
-function modelParams(settings: BotSettings) {
+export function modelParams(settings: BotSettings) {
   const model = MODEL_IDS[settings.model] || MODEL_IDS.balanced;
   return model === MODEL_IDS.economy ? { model } : { model, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const };
 }
@@ -28,7 +28,7 @@ export const botConfigured = async () => Boolean(await anthropicKey());
 
 // One client per API key (each store can use its own key).
 const clients = new Map<string, Anthropic>();
-async function anthropic(): Promise<{ client: Anthropic; source: 'env' | 'store' | 'plan' }> {
+export async function anthropic(): Promise<{ client: Anthropic; source: 'env' | 'store' | 'plan' }> {
   const k = await anthropicKey();
   if (!k) throw new Error('Falta la clave de Claude (Anthropic) de esta tienda, o se acabaron las respuestas incluidas en el plan este mes.');
   let c = clients.get(k.key);
@@ -112,7 +112,7 @@ function landingText(l: LandingPageConfig, base: string): string {
   return lines.join('\n');
 }
 
-async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
+export async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
   const [{ data }, settings] = await Promise.all([
     (await db()).from('landings').select('data, published').order('updated_at', { ascending: false }).limit(20),
     getSettings<{ storeName?: string }>().catch(() => null),
