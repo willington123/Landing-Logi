@@ -3,7 +3,7 @@
 // AI assistant for WhatsApp (Claude): settings and a simulator to try it before turning it on.
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, Search, Send, Sparkles, UserRound } from 'lucide-react';
-import { DEFAULT_BOT, FOLLOW_UP_HOURS, type BotSettings } from '@/lib/bot';
+import { BOT_MODELS, DEFAULT_BOT, FOLLOW_UP_HOURS, type BotSettings } from '@/lib/bot';
 import { isCloud } from '@/lib/cloud';
 
 interface SimMsg {
@@ -12,10 +12,11 @@ interface SimMsg {
   notes?: string[]; // what the assistant did (tools)
 }
 
-// Claude Opus 5.5 list prices (USD per million tokens), for the cost shown in the simulator.
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
-const usd = (u: { input: number; output: number; cacheRead: number; cacheWrite: number }) =>
-  (u.input * PRICE.input + u.output * PRICE.output + u.cacheRead * PRICE.cacheRead + u.cacheWrite * PRICE.cacheWrite) / 1_000_000;
+// Cost shown in the simulator, at the list prices of the chosen model (USD per million tokens).
+const usd = (u: { input: number; output: number; cacheRead: number; cacheWrite: number }, model: BotSettings['model']) => {
+  const p = (BOT_MODELS.find((m) => m.id === model) || BOT_MODELS[1]).price;
+  return (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1_000_000;
+};
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -109,7 +110,7 @@ export default function WhatsAppBot() {
           );
       }
       if (d.refused) notes.push('⚠️ El asistente no quiso responder este mensaje: pasaría a una persona.');
-      setCost((c) => c + usd(d.usage));
+      setCost((c) => c + usd(d.usage, cfg?.model || DEFAULT_BOT.model));
       setSim([...history, { direction: 'out', text: d.reply || '(sin respuesta)', notes }]);
     } catch (e: any) {
       setSimError(e.message);
@@ -190,6 +191,20 @@ export default function WhatsAppBot() {
                   className="mt-1 w-full h-9 text-[13px] border border-slate-200 rounded-lg px-3"
                 />
               </label>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-slate-600">Inteligencia del asistente</span>
+              <div className="mt-1 grid gap-2">
+                {BOT_MODELS.map((m) => (
+                  <label key={m.id} className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${cfg.model === m.id ? 'border-brand-blue bg-brand-blue/[0.04]' : 'border-slate-200'}`}>
+                    <input type="radio" name="bot-model" checked={cfg.model === m.id} onChange={() => set({ model: m.id })} className="mt-1 accent-brand-blue" />
+                    <span>
+                      <span className="block text-[13px] font-semibold text-slate-900">{m.label}</span>
+                      <span className="block text-[11px] text-slate-600">{m.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
             <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 cursor-pointer">
               <Toggle on={cfg.takeOrders} onChange={(v) => set({ takeOrders: v })} label="Tomar pedidos en el chat" />

@@ -9,13 +9,18 @@ import { anthropicKey } from '@/lib/server/integrations';
 import { addAiReply } from '@/lib/server/billing';
 import { requestOrgSync } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
-import { DEFAULT_BOT, cleanFollowUp, type BotChatState, type BotSettings } from '@/lib/bot';
+import { DEFAULT_BOT, cleanFollowUp, type BotChatState, type BotModel, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 import { getAgenda } from '@/lib/server/agenda';
 import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
 
-// Claude Opus 5.5 by default; ANTHROPIC_MODEL can name another model.
-const MODEL = (process.env.ANTHROPIC_MODEL || '').trim() || 'claude-opus-5-5';
+// The store picks the model in Automatizaciones (Sonnet by default).
+const MODEL_IDS: Record<BotModel, string> = { quality: 'claude-opus-5-5', balanced: 'claude-sonnet-5-5', economy: 'claude-haiku-5-5' };
+// Model plus the refusal fallback (Haiku has no server-side fallback, so it goes without it).
+function modelParams(settings: BotSettings) {
+  const model = MODEL_IDS[settings.model] || MODEL_IDS.balanced;
+  return model === MODEL_IDS.economy ? { model } : { model, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const };
+}
 const HISTORY = 30; // messages of the chat sent to the model
 const MAX_STEPS = 4; // model calls per customer message (tool use included)
 
@@ -399,11 +404,9 @@ export async function runBot(opts: {
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await ai.client.beta.messages.create({
-      model: MODEL,
+      ...modelParams(opts.settings), // if the model declines, Anthropic retries on its recommended fallback model
       max_tokens: 8000,
       output_config: { effort: 'low' }, // short chat replies
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default', // if the model declines, Anthropic retries on its recommended fallback model
       system,
       tools: appointments ? [...AGENDA_TOOLS, ...TOOLS.filter((t) => t.name === 'pasar_a_humano')] : opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS,
       messages,
@@ -492,11 +495,9 @@ export async function writeFollowUp(opts: {
   const adText = opts.ad ? [opts.ad.headline, opts.ad.body].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 300) : '';
   const ai = await anthropic();
   const response = await ai.client.beta.messages.create({
-    model: MODEL,
+    ...modelParams(opts.settings),
     max_tokens: 2000,
     output_config: { effort: 'low' },
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
     system: [
       { type: 'text', text: appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
       {
