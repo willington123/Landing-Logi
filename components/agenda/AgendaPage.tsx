@@ -40,6 +40,11 @@ export default function AgendaPage() {
   const [draft, setDraft] = useState<AgendaSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('calendar');
+  // Links like /agenda?tab=settings open that tab.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t && ['calendar', 'reports', 'services', 'staff', 'settings'].includes(t)) setTab(t as Tab);
+  }, []);
   const [view, setView] = useState<View>('day');
   const [date, setDate] = useState('');
   const [staffFilter, setStaffFilter] = useState('');
