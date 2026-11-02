@@ -64,6 +64,7 @@ export async function setOrderCallState(id: string, status: OrderStatus, opts: {
   const { data: row, error: readErr } = await (await db()).from('orders').select('data').eq('id', id).maybeSingle();
   if (readErr) throw new Error(readErr.message);
   if (!row) return;
+  const from = (row.data as OrderItem).status;
   const data = {
     ...(row.data as OrderItem),
     ...(opts.patch || {}),
@@ -75,6 +76,7 @@ export async function setOrderCallState(id: string, status: OrderStatus, opts: {
   const { error } = await (await db()).from('orders').update(update).eq('id', id);
   if (error) throw new Error(error.message);
   await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
+  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_status', order: data, from });
 }
 
 export async function scheduleOrderCall(id: string, at: string) {

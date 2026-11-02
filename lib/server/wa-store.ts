@@ -54,7 +54,7 @@ export const PENDING_STATUSES: OrderStatus[] = ['pending_call', 'retry_scheduled
 
 const preview = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 160);
 
-async function getConversation(id: string): Promise<WaConversation | null> {
+export async function getConversation(id: string): Promise<WaConversation | null> {
   const { data, error } = await (await db()).from('wa_conversations').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   return (data as WaConversation) || null;

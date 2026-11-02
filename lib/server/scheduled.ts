@@ -9,6 +9,7 @@ import { processFollowUps } from '@/lib/server/followup';
 import { processAppointmentReminders, processComeBack } from '@/lib/server/agenda-reminders';
 import { integrationsOrg, runWithOrg } from '@/lib/server/tenant';
 import { orgsWithConnections } from '@/lib/server/integrations';
+import { orgsWithFlows, processFlows } from '@/lib/server/flows';
 import { processBilling, runBillingNotices } from '@/lib/server/billing';
 
 export type RunSource = 'cron' | 'visita' | 'panel';
@@ -70,7 +71,9 @@ async function noteDeniedForOrg() {
 // Runs the pending work of every store with WhatsApp or Vapi connected (each inside its own store).
 // Returns the main store's result plus how many stores ran.
 export async function runScheduled(origin?: string, source: RunSource = 'cron') {
-  const orgs = cloudEnabled() ? await orgsWithConnections().catch(() => [integrationsOrg()]) : [integrationsOrg()];
+  const orgs = cloudEnabled()
+    ? Array.from(new Set([...(await orgsWithConnections().catch(() => [integrationsOrg()])), ...(await orgsWithFlows().catch(() => [] as string[]))]))
+    : [integrationsOrg()];
   const deadline = Date.now() + 40000; // follow-ups (Claude) stop here; the next run continues
   let main: Awaited<ReturnType<typeof runScheduledForOrg>> = { calls: null, whatsapp: null, followUps: null, reminders: null, comeBack: null };
   for (const org of orgs) {
@@ -96,6 +99,8 @@ async function runScheduledForOrg(origin: string | undefined, source: RunSource,
     processAppointmentReminders(new Date(), deadline).catch((e) => ({ sent: 0, failed: 0, error: String(e?.message || e) })),
     processComeBack(new Date(), deadline).catch((e) => ({ sent: 0, failed: 0, error: String(e?.message || e) })),
   ]);
+  // The store's own flows: waits that ended and chats that went quiet.
+  await processFlows(new Date(), deadline).catch((e) => console.error('Flujos:', e));
   // Keep what happened so the panel can explain it.
   const now = new Date().toISOString();
   const patch: Partial<SchedulerInfo> = {};

@@ -164,7 +164,9 @@ export async function bookAppointment(input: BookInput, a?: AgendaSettings): Pro
     await (await db()).from('appointments').delete().eq('id', row.id);
     throw new AgendaError('Ese horario se acaba de ocupar. Elige otro, por favor.');
   }
-  return fromRow(row);
+  const appt = fromRow(row);
+  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'appointment_created', appt });
+  return appt;
 }
 
 export async function setAppointmentStatus(id: string, status: AppointmentStatus): Promise<Appointment | null> {
@@ -172,7 +174,9 @@ export async function setAppointmentStatus(id: string, status: AppointmentStatus
   if (!cur) return null;
   const { error } = await (await db()).from('appointments').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw new Error(error.message);
-  return { ...cur, status };
+  const appt = { ...cur, status };
+  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'appointment_status', appt, from: cur.status });
+  return appt;
 }
 
 // Moves an appointment to another free slot (same service).

@@ -22,8 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ success: true, order });
     }
     if (!STATUSES.includes(status)) return NextResponse.json({ success: false, error: 'Estado inválido.' }, { status: 400 });
-    await updateOrderStatus(params.id, status);
-    // Shipping details given with "Marcar enviado".
+    // Shipping details given with "Marcar enviado" (saved first, so flows on "Enviado" have the tracking number).
     if (status === 'shipped' && (body.carrier !== undefined || body.trackingNumber !== undefined)) {
       await patchOrderData(params.id, {
         carrier: String(body.carrier ?? '').trim().slice(0, 60) || null,
@@ -31,6 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         shippedAt: new Date().toISOString(),
       });
     }
+    await updateOrderStatus(params.id, status);
     return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
