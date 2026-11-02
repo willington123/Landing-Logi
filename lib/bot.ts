@@ -9,7 +9,15 @@ export interface BotSettings {
   maxRepliesPerDay: number; // per customer; after that the chat goes to a person
   takeOrders: boolean; // close the sale in the chat (creates the order) instead of sending the customer to the landing
   followUp: FollowUpSettings; // one message to customers who stopped answering without ordering
+  model: BotModel; // which Claude model answers the chats
 }
+
+export type BotModel = 'quality' | 'balanced' | 'economy';
+export const BOT_MODELS: { id: BotModel; label: string; hint: string; price: { input: number; output: number; cacheRead: number; cacheWrite: number } }[] = [
+  { id: 'quality', label: 'Máxima calidad (Opus)', hint: 'El más inteligente. Para productos caros o clientes difíciles. Cuesta el doble que Equilibrado.', price: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 } },
+  { id: 'balanced', label: 'Equilibrado (Sonnet)', hint: 'Recomendado. Vende y agenda muy bien a la mitad del costo de Opus.', price: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 } },
+  { id: 'economy', label: 'Económico (Haiku)', hint: 'Muy barato y rápido. Bien para preguntas simples; menos hábil cerrando ventas.', price: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 } },
+];
 
 export interface FollowUpSettings {
   enabled: boolean;
@@ -34,6 +42,7 @@ export const DEFAULT_BOT: BotSettings = {
   maxRepliesPerDay: 30,
   takeOrders: true,
   followUp: DEFAULT_FOLLOW_UP,
+  model: 'balanced',
 };
 
 export function cleanFollowUp(f: any): FollowUpSettings {
@@ -60,6 +69,7 @@ export function cleanBot(input: any): BotSettings | string {
     maxRepliesPerDay: Number.isFinite(max) ? Math.min(100, Math.max(5, max)) : DEFAULT_BOT.maxRepliesPerDay,
     takeOrders: input?.takeOrders === undefined ? DEFAULT_BOT.takeOrders : Boolean(input.takeOrders),
     followUp: cleanFollowUp(input?.followUp),
+    model: BOT_MODELS.some((m) => m.id === input?.model) ? input.model : DEFAULT_BOT.model,
   };
 }
 
