@@ -43,6 +43,16 @@ export default function AgendaPage() {
   const [view, setView] = useState<View>('day');
   const [date, setDate] = useState('');
   const [staffFilter, setStaffFilter] = useState('');
+  // Phone: the day view shows one professional at a time.
+  const [phone, setPhone] = useState(false);
+  const [phoneStaff, setPhoneStaff] = useState('');
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const [list, setList] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<Appointment | null>(null);
@@ -230,7 +240,29 @@ export default function AgendaPage() {
           </div>
           <Summary list={list.filter((x) => !staffFilter || x.staffId === staffFilter)} />
           {view === 'day' ? (
-            <DayView agenda={agenda} date={date} staff={staff} list={list} onOpen={setOpen} onNew={(time, staffId) => setCreating({ time, staffId })} />
+            <>
+              {phone && staff.length > 1 && (
+                <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+                  {staff.map((p) => {
+                    const on = (phoneStaff || staff[0].id) === p.id;
+                    const n = list.filter((x) => x.staffId === p.id && x.status !== 'cancelled' && localParts(new Date(x.start), agenda.timezone).date === date).length;
+                    return (
+                      <button key={p.id} onClick={() => setPhoneStaff(p.id)} className={`shrink-0 h-9 px-3.5 rounded-full text-[13px] font-medium ${on ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                        {p.name} <span className={on ? 'text-white/70' : 'text-slate-400'}>{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <DayView
+                agenda={agenda}
+                date={date}
+                staff={phone && staff.length > 1 ? staff.filter((p) => p.id === (phoneStaff && staff.some((x) => x.id === phoneStaff) ? phoneStaff : staff[0].id)) : staff}
+                list={list}
+                onOpen={setOpen}
+                onNew={(time, staffId) => setCreating({ time, staffId })}
+              />
+            </>
           ) : (
             <WeekView agenda={agenda} from={range.from} list={list.filter((x) => !staffFilter || x.staffId === staffFilter)} onOpen={setOpen} onDay={(d) => (setDate(d), setView('day'))} />
           )}
@@ -310,7 +342,7 @@ function DayView({
   if (!staff.length) return <p className="text-sm text-slate-500">No hay profesionales activos.</p>;
   return (
     <div className="overflow-x-auto">
-      <div className="grid min-w-[560px]" style={{ gridTemplateColumns: `52px repeat(${staff.length}, minmax(160px, 1fr))` }}>
+      <div className={`grid ${staff.length > 1 ? "min-w-[560px]" : ""}`} style={{ gridTemplateColumns: `52px repeat(${staff.length}, minmax(160px, 1fr))` }}>
         <div />
         {staff.map((p) => (
           <div key={p.id} className="px-2 pb-2 text-[13px] font-semibold text-slate-800 truncate">

@@ -10,12 +10,12 @@ export default function CRMPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-slate-100 overflow-hidden">
+    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] lg:h-screen bg-slate-100 overflow-hidden">
       {/* Sidebar navigation */}
       <Sidebar onOpenWizard={() => setWizardOpen(true)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Header
           title="Mensajes"
           onOpenWizard={() => setWizardOpen(true)}

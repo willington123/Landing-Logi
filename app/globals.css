@@ -64,3 +64,30 @@ body {
 /* Hide scrollbars on horizontal tab strips */
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Phone: space for the bottom tab bar of the panel (components/layout/Sidebar.tsx). */
+@media (max-width: 1023px) {
+  body.has-tabbar {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Touch screens: a bigger invisible hit area for small controls (switches, text links), same look. */
+@media (pointer: coarse) {
+  .hit {
+    position: relative;
+  }
+  .hit::after {
+    content: '';
+    position: absolute;
+    inset: -10px -6px;
+  }
+  [role='switch'] {
+    position: relative;
+  }
+  [role='switch']::after {
+    content: '';
+    position: absolute;
+    inset: -10px -8px;
+  }
+}

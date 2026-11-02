@@ -408,7 +408,7 @@ export default function TemplatesManager() {
                   {info?.canManage && (
                     <button
                       onClick={() => window.confirm(`¿Eliminar ${t.name} en Meta? No se puede deshacer.`) && run(`del-${t.name}`, () => call(`/api/integrations/whatsapp/templates?name=${encodeURIComponent(t.name)}`, 'DELETE'))}
-                      className="p-1 text-slate-300 hover:text-red-600"
+                      className="p-1 text-slate-300 hover:text-red-600 hit"
                       aria-label={`Eliminar ${t.name}`}
                     >
                       {busy === `del-${t.name}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}

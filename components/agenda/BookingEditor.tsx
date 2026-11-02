@@ -30,6 +30,7 @@ export default function BookingEditor() {
   const [uploading, setUploading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qr, setQr] = useState('');
+  const [showPreview, setShowPreview] = useState(false); // phone: full-screen preview
 
   useEffect(() => {
     Promise.all([call('/api/agenda/settings'), fetch('/api/settings', { cache: 'no-store' }).then((r) => r.json()).catch(() => null)])
@@ -261,8 +262,25 @@ export default function BookingEditor() {
         </div>
       </div>
 
+      {/* phone: preview button + full-screen preview */}
+      <button onClick={() => setShowPreview(true)} className="lg:hidden fixed right-4 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 h-11 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-lg">
+        Ver vista previa
+      </button>
+      {showPreview && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
+          <button onClick={() => setShowPreview(false)} className="fixed top-3 right-3 z-10 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-lg">
+            Cerrar vista previa
+          </button>
+          <BookingPage
+            slug={draft.bookingSlug || 'vista-previa'}
+            preview={preview}
+            previewSlotsUrl={(serviceId, date, staffId) => `/api/agenda/availability?serviceId=${encodeURIComponent(serviceId)}&date=${date}${staffId ? `&staffId=${staffId}` : ''}`}
+          />
+        </div>
+      )}
+
       {/* live preview */}
-      <div className="lg:sticky lg:top-6">
+      <div className="hidden lg:block lg:sticky lg:top-6">
         <p className="text-[11px] font-semibold text-slate-500 mb-2 text-center">Vista previa</p>
         <div className="mx-auto w-[360px] h-[720px] rounded-[2.5rem] border-[10px] border-slate-900 bg-slate-900 shadow-xl overflow-hidden">
           <div className="w-full h-full overflow-y-auto rounded-[1.8rem] bg-slate-50">
