@@ -290,7 +290,49 @@ export default function OrdersPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+          {/* Phone: one card per order (the table doesn't fit). */}
+          <div className="md:hidden space-y-2">
+            {filteredOrders.length === 0 && <p className="py-10 text-center text-sm text-slate-500">No hay pedidos con estos filtros.</p>}
+            {filteredOrders.map((order) => (
+              <div
+                key={order.id}
+                onClick={() => setSelectedOrder(order)}
+                className={`bg-white rounded-2xl border p-4 active:bg-slate-50 ${checked.has(order.id) ? 'border-brand-blue/40' : 'border-slate-200/80'}`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar pedido ${order.orderNumber}`}
+                    checked={checked.has(order.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleChecked(order.id)}
+                    className="w-5 h-5 mt-0.5 rounded border-slate-300"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-slate-900 truncate">{order.customerName}</p>
+                      <p className="font-semibold text-slate-900 tabular-nums whitespace-nowrap">${order.totalAmount.toLocaleString('es-CO')}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 truncate">
+                      {order.city} · {order.comboName}
+                    </p>
+                    <p className="text-[11px] font-mono text-slate-400">{order.orderNumber}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex flex-col items-start">
+                        {getStatusBadge(order.status)}
+                        <WaFallbackBadge order={order} now={now} />
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <CallButton order={order} onCalled={() => pullFromCloud()} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -370,8 +412,8 @@ export default function OrdersPage() {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 ring-1 ring-inset ring-slate-600/15">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 ring-1 ring-inset ring-slate-600/15 max-h-[92vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
                 <span className="text-base font-semibold text-slate-900">

@@ -186,14 +186,15 @@ export default function AnalyticsDashboard() {
       </section>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <section className={`${card} p-5 lg:col-span-2`}>
+        <section className={`${card} p-5 lg:col-span-2 min-w-0 overflow-hidden`}>
           <h3 className="text-[15px] font-semibold text-slate-900 mb-4">Pedidos por día</h3>
-          <div className="flex items-end gap-1.5 h-44">
-            {daily.map((d) => (
+          <div className="flex items-end gap-px sm:gap-1.5 h-44 min-w-0">
+            {daily.map((d, i) => (
               <div key={d.key} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${d.label}: ${d.count} pedidos · ${money(d.amount)}`}>
-                <span className="text-[10.5px] text-slate-500 tabular-nums">{d.count || ''}</span>
+                <span className="hidden sm:block text-[10.5px] text-slate-500 tabular-nums">{d.count || ''}</span>
                 <div className="w-full rounded-t-md bg-brand-navy/80" style={{ height: `${(d.count / maxDay) * 100}%`, minHeight: d.count ? 4 : 1, opacity: d.count ? 1 : 0.15 }} />
-                <span className="text-[10px] text-slate-400 truncate w-full text-center">{d.label}</span>
+                {/* On a phone only every 5th day is labeled, so the labels fit. */}
+                <span className={`text-[10px] text-slate-400 truncate w-full text-center ${daily.length > 10 && i % 5 !== 0 ? 'invisible sm:visible' : ''}`}>{d.label}</span>
               </div>
             ))}
           </div>

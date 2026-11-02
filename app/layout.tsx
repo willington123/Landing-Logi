@@ -9,10 +9,13 @@ export const metadata: Metadata = {
   title: 'Konnexa — Landings de alta conversión con IA',
   description:
     'Crea landing pages a partir de una foto, confirma pedidos contraentrega con llamadas de voz con IA y gestiona tus clientes en un CRM omnicanal.',
+  // Installed on an iPhone home screen it opens full screen, with its own name.
+  appleWebApp: { capable: true, title: 'Konnexa', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
   themeColor: '#ffffff',
+  viewportFit: 'cover', // lets the tab bar sit above the iPhone home indicator (safe-area insets)
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -24,6 +24,9 @@ const PUBLIC_PREFIXES = [
   '/favicon',
   '/icon',
   '/apple-icon',
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/pwa/',
 ];
 
 const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv', 'x-lp-path'];

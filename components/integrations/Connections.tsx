@@ -116,7 +116,7 @@ function Disconnect({ kind, onDone, label = 'Desconectar' }: { kind: string; onD
           setBusy(false);
         }
       }}
-      className="text-xs font-medium text-slate-400 hover:text-red-600 inline-flex items-center gap-1"
+      className="text-xs font-medium text-slate-400 hover:text-red-600 inline-flex items-center gap-1 hit"
     >
       {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unplug className="w-3.5 h-3.5" />} {label}
     </button>
@@ -265,7 +265,7 @@ export function WhatsAppConnection({ info, onChanged }: { info: IntegrationsInfo
         {info.canManage && wa.source === 'env' && (
           <p className="text-[11px] text-slate-500">
             Esta tienda usa el número configurado en Vercel. Si conectas otro aquí, se usa el nuevo.{' '}
-            <button type="button" className="font-semibold text-brand-navy hover:underline" onClick={() => setShowManual((v) => !v)}>
+            <button type="button" className="font-semibold text-brand-navy hover:underline hit" onClick={() => setShowManual((v) => !v)}>
               Conectar otro número
             </button>
           </p>
@@ -460,7 +460,7 @@ export function VapiConnection({ info, onChanged }: { info: IntegrationsInfo; on
           {v.apiKey && <span className="font-mono text-slate-500">{v.apiKey}</span>}
           {info.canManage && v.source === 'store' && <Disconnect kind="vapi" onDone={onChanged} />}
           {info.canManage && v.source === 'env' && (
-            <button type="button" onClick={() => setOpen((x) => !x)} className="font-semibold text-brand-navy hover:underline">
+            <button type="button" onClick={() => setOpen((x) => !x)} className="font-semibold text-brand-navy hover:underline hit">
               Usar otra cuenta
             </button>
           )}
@@ -551,7 +551,7 @@ export function KeyConnection({
           {masked && <span className="font-mono text-slate-500">{masked}</span>}
           {canManage && state.source === 'store' && <Disconnect kind={kind} onDone={onChanged} />}
           {canManage && (state.source === 'env' || state.source === 'plan') && (
-            <button type="button" onClick={() => setOpen((x) => !x)} className="font-semibold text-brand-navy hover:underline">
+            <button type="button" onClick={() => setOpen((x) => !x)} className="font-semibold text-brand-navy hover:underline hit">
               Usar otra clave
             </button>
           )}
@@ -567,7 +567,7 @@ export function KeyConnection({
         </form>
       )}
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
-      <a href={docs.href} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1">
+      <a href={docs.href} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1 hit">
         {docs.label} <ExternalLink className="w-3 h-3" />
       </a>
     </div>
@@ -700,11 +700,11 @@ export function MetaAdsConnection({ info, onChanged }: { info: IntegrationsInfo;
           )}
           {info.canManage && (
             <div className="flex items-center gap-3 pt-1 flex-wrap">
-              <button type="button" onClick={openPicker} className="font-semibold text-brand-navy hover:underline">
+              <button type="button" onClick={openPicker} className="font-semibold text-brand-navy hover:underline hit">
                 Cambiar cuentas
               </button>
               {st.oauthAvailable && (
-                <a href="/api/integrations/meta-ads/oauth" className="font-semibold text-brand-navy hover:underline">
+                <a href="/api/integrations/meta-ads/oauth" className="font-semibold text-brand-navy hover:underline hit">
                   Volver a conectar
                 </a>
               )}

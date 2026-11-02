@@ -5,9 +5,10 @@ import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOr
 import { logiStore } from '@/lib/store';
 import { UNREAD_REFRESH_EVENT, playMessageSound, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
+import InstallApp from '@/components/layout/InstallApp';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -180,6 +181,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
   // Close the mobile drawer after navigating.
   useEffect(() => setOpen(false), [pathname]);
+  // Room at the bottom of every panel page for the phone tab bar.
+  useEffect(() => {
+    document.body.classList.add('has-tabbar');
+    return () => document.body.classList.remove('has-tabbar');
+  }, []);
 
   return (
     <>
@@ -286,7 +292,8 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
         </nav>
 
         {/* Account */}
-        <div className="p-3 border-t border-slate-200/80">
+        <div className="p-3 border-t border-slate-200/80 space-y-2">
+          <InstallApp />
           <div className="relative">
             <button
               onClick={() => (account && (account.orgs.length > 1 || account.platformAdmin) ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
@@ -316,6 +323,35 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           )}
         </div>
       </aside>
+
+      {/* Phone: bottom tab bar, like an app. "Más" opens the full menu. */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
+        aria-label="Navegación principal"
+      >
+        {[
+          { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
+          account?.businessType === 'appointments' ? { href: '/agenda', label: 'Agenda', icon: CalendarDays } : { href: '/orders', label: 'Pedidos', icon: ShoppingBag },
+          { href: '/crm', label: 'Mensajes', icon: MessageSquare },
+        ].map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || pathname?.startsWith(href + '/');
+          return (
+            <Link key={href} href={href} className={`relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${active ? 'text-brand-navy' : 'text-slate-500'}`}>
+              <Icon className="w-[22px] h-[22px]" strokeWidth={active ? 2.4 : 2} />
+              {label}
+              {href === '/crm' && unread > 0 && (
+                <span className="absolute top-2 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-green text-white text-[10px] font-bold flex items-center justify-center">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+        <button onClick={() => setOpen(true)} className={`h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${open ? 'text-brand-navy' : 'text-slate-500'}`}>
+          <Menu className="w-[22px] h-[22px]" />
+          Más
+        </button>
+      </nav>
     </>
   );
 }
