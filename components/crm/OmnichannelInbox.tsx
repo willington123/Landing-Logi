@@ -227,7 +227,23 @@ export default function OmnichannelInbox() {
   const [replies, setReplies] = useState<QuickReply[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [tagFilter, setTagFilter] = useState('');
-  const [channelFilter, setChannelFilter] = useState<'' | ChatChannel>('');
+  // One tab per channel (WhatsApp / Messenger / Instagram). Remembered in this browser; a link to a chat opens its tab.
+  const [channelFilter, setChannelFilterState] = useState<ChatChannel>(() => {
+    if (typeof window === 'undefined') return 'whatsapp';
+    const c = new URLSearchParams(window.location.search).get('c') || '';
+    if (c) return chatChannel(c.trim());
+    try {
+      const v = localStorage.getItem('lp_inbox_tab');
+      if (v === 'messenger' || v === 'instagram') return v;
+    } catch {}
+    return 'whatsapp';
+  });
+  const setChannelFilter = (ch: ChatChannel) => {
+    setChannelFilterState(ch);
+    try {
+      localStorage.setItem('lp_inbox_tab', ch);
+    } catch {}
+  };
   const [manage, setManage] = useState<'tags' | 'replies' | 'team' | null>(null);
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
@@ -372,21 +388,31 @@ export default function OmnichannelInbox() {
   };
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags]);
+  const inTab = useMemo(() => conversations.filter((c) => chatChannel(c.id) === channelFilter), [conversations, channelFilter]);
+  const tabs = useMemo(
+    () =>
+      (['whatsapp', 'messenger', 'instagram'] as ChatChannel[]).map((ch) => {
+        const list = conversations.filter((c) => chatChannel(c.id) === ch);
+        return { ch, chats: list.length, unread: list.filter((c) => c.unread_count > 0).length };
+      }),
+    [conversations],
+  );
+  const showTabs = tabs.some((t) => t.ch !== 'whatsapp' && t.chats > 0);
   const counts = useMemo(
     () => ({
-      unread: conversations.filter((c) => c.unread_count > 0).length,
-      unanswered: conversations.filter(isUnanswered).length,
-      pending: conversations.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
-      confirmed: conversations.filter((c) => c.order?.status === 'confirmed_by_voice').length,
-      mine: myId ? conversations.filter((c) => c.assignee === myId).length : 0,
-      unassigned: conversations.filter((c) => !c.assignee).length,
+      unread: inTab.filter((c) => c.unread_count > 0).length,
+      unanswered: inTab.filter(isUnanswered).length,
+      pending: inTab.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
+      confirmed: inTab.filter((c) => c.order?.status === 'confirmed_by_voice').length,
+      mine: myId ? inTab.filter((c) => c.assignee === myId).length : 0,
+      unassigned: inTab.filter((c) => !c.assignee).length,
     }),
-    [conversations, me],
+    [inTab, myId],
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return conversations.filter((c) => {
+    return (showTabs ? inTab : conversations).filter((c) => {
       if (filter === 'unread' && !(c.unread_count > 0)) return false;
       if (filter === 'unanswered' && !isUnanswered(c)) return false;
       if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
@@ -394,12 +420,11 @@ export default function OmnichannelInbox() {
       if (filter === 'mine' && (!myId || c.assignee !== myId)) return false;
       if (filter === 'unassigned' && c.assignee) return false;
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
-      if (channelFilter && chatChannel(c.id) !== channelFilter) return false;
       if (!q) return true;
       const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
       return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [conversations, search, filter, tagFilter, channelFilter, tagById, myId]);
+  }, [conversations, inTab, showTabs, search, filter, tagFilter, tagById, myId]);
   const agentById = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a])), [agents]);
   const meAgent = agentById[myId] || null;
   const toggleAvailable = async () => {
@@ -582,7 +607,7 @@ export default function OmnichannelInbox() {
 
   return (
     <div className={`${card} flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
-      {wa && !wa.sending && (
+      {wa && !wa.sending && (!showTabs || channelFilter === 'whatsapp') && (
         <div className="px-4 py-2.5 border-b border-amber-200 bg-amber-50 text-[13px] text-amber-800 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>
@@ -594,15 +619,39 @@ export default function OmnichannelInbox() {
         </div>
       )}
 
+      {showTabs && (
+        <div className="flex border-b border-slate-200 bg-white shrink-0 overflow-x-auto" role="tablist">
+          {tabs.map((t) => (
+            <button
+              key={t.ch}
+              role="tab"
+              aria-selected={channelFilter === t.ch}
+              aria-label={`${CHANNEL_LABEL[t.ch]}${t.unread ? ` (${t.unread} sin leer)` : ''}`}
+              onClick={() => {
+                setChannelFilter(t.ch);
+                if (activeId && chatChannel(activeId) !== t.ch) setActiveId('');
+              }}
+              className={`${channelFilter === t.ch ? 'flex-[2] sm:flex-1' : 'flex-1'} min-w-0 h-12 px-2 sm:px-3 inline-flex items-center justify-center gap-1.5 sm:gap-2 text-[12px] sm:text-[13px] font-semibold border-b-2 transition whitespace-nowrap ${
+                channelFilter === t.ch ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <ChannelMark id={t.ch === 'messenger' ? 'm1' : t.ch === 'instagram' ? 'i1' : '1'} className="w-5 h-5 shrink-0" />
+              <span className={`truncate ${channelFilter === t.ch ? '' : 'hidden sm:inline'}`}>{CHANNEL_LABEL[t.ch]}</span>
+              {t.unread > 0 && <span className="shrink-0 text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 min-w-[18px] text-center">{t.unread}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 flex min-h-0">
         {/* Conversation list */}
         <div className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 border-r border-slate-200 flex-col min-h-0`}>
           <div className="p-4 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-                {conversations.some((c) => isSocialChat(c.id)) ? (
+                {showTabs && channelFilter !== 'whatsapp' ? (
                   <>
-                    <MessageSquare className="w-4 h-4 text-slate-700" /> Chats
+                    <ChannelMark id={channelFilter === 'messenger' ? 'm1' : 'i1'} className="w-4 h-4" /> {CHANNEL_LABEL[channelFilter]}
                   </>
                 ) : (
                   <>
@@ -630,20 +679,7 @@ export default function OmnichannelInbox() {
               </button>
               </div>
             </div>
-            <p className="text-xs text-slate-500">{conversations.length} conversaciones</p>
-            {conversations.some((c) => isSocialChat(c.id)) && (
-              <div className="mt-2 flex gap-1.5 overflow-x-auto">
-                {([['', 'Todos'], ['whatsapp', 'WhatsApp'], ['messenger', 'Messenger'], ['instagram', 'Instagram']] as const).map(([k, l]) => (
-                  <button
-                    key={k}
-                    onClick={() => setChannelFilter(k)}
-                    className={`h-7 px-2.5 rounded-full text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 ${channelFilter === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
-                  >
-                    {k && <ChannelMark id={k === 'messenger' ? 'm1' : k === 'instagram' ? 'i1' : '1'} className="w-3.5 h-3.5" />} {l}
-                  </button>
-                ))}
-              </div>
-            )}
+            <p className="text-xs text-slate-500">{(showTabs ? inTab : conversations).length} conversaciones</p>
             <div className="relative mt-3">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
