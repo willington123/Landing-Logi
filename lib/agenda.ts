@@ -10,6 +10,7 @@ export interface AgendaService {
   price: number; // 35000 (0 = a consultar)
   description?: string;
   active: boolean;
+  returnAfterDays?: number; // "vuelve pronto": write to the customer this many days after an attended appointment (0 = never)
 }
 
 export interface TimeRange {
@@ -40,6 +41,10 @@ export interface AgendaSettings {
   templateLang: string;
   services: AgendaService[];
   staff: AgendaStaff[];
+  bookingEnabled: boolean; // public booking page konnexa.lat/citas/<bookingSlug>
+  bookingSlug: string;
+  comeBackEnabled: boolean; // "vuelve pronto" messages (marketing template)
+  comeBackTemplate: string;
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
@@ -90,6 +95,10 @@ export const DEFAULT_AGENDA: AgendaSettings = {
   templateLang: 'es',
   services: [],
   staff: [],
+  bookingEnabled: false,
+  bookingSlug: '',
+  comeBackEnabled: false,
+  comeBackTemplate: 'volver_cita',
 };
 
 export const newStaffSchedule = (): Record<string, TimeRange[]> => JSON.parse(JSON.stringify(WEEK));
@@ -124,6 +133,7 @@ export function cleanAgenda(input: any): AgendaSettings | string {
     price: Math.max(0, Math.round(Number(s?.price) || 0)),
     description: str(s?.description, 300) || undefined,
     active: s?.active !== false,
+    returnAfterDays: int(s?.returnAfterDays, 0, 365, 0) || undefined,
   }));
   if (services.some((s) => !s.name)) return 'Cada servicio necesita un nombre.';
   const serviceIds = new Set(services.map((s) => s.id));
@@ -143,6 +153,7 @@ export function cleanAgenda(input: any): AgendaSettings | string {
     };
   });
   if (staff.some((p) => !p.name)) return 'Cada profesional necesita un nombre.';
+  if (input?.bookingEnabled && slugify(str(input?.bookingSlug, 60)).length < 3) return 'Elige la dirección de tu página de reservas (mínimo 3 letras).';
   const tz = str(input?.timezone, 60) || DEFAULT_AGENDA.timezone;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: tz });
@@ -163,7 +174,22 @@ export function cleanAgenda(input: any): AgendaSettings | string {
     templateLang: str(input?.templateLang, 10) || 'es',
     services,
     staff,
+    bookingEnabled: Boolean(input?.bookingEnabled),
+    bookingSlug: slugify(str(input?.bookingSlug, 60)),
+    comeBackEnabled: Boolean(input?.comeBackEnabled),
+    comeBackTemplate: str(input?.comeBackTemplate, 120).replace(/[^a-z0-9_]/g, '') || DEFAULT_AGENDA.comeBackTemplate,
   };
+}
+
+// "Barbería El Parche" → "barberia-el-parche"
+export function slugify(v: string): string {
+  return v
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
 }
 
 // ---------- time zones ----------

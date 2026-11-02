@@ -160,6 +160,9 @@ Para barberías, consultorios, spas y todo negocio que trabaja con citas.
 - **El asistente agenda por WhatsApp:** consulta horarios libres, ofrece opciones, agenda, muestra las citas del cliente, cancela y reprograma. No da consejos médicos.
 - **Recordatorios** 24 h y 2 h antes con botones *Confirmar cita* / *Cancelar cita*: gratis si el cliente escribió en las últimas 24 h; si no, con la plantilla `recordatorio_cita` (Plantillas → Nueva plantilla → Recordatorio de citas). Necesita la revisión automática cada 5 minutos.
 - **Calendario** por día (una columna por profesional) y por semana, citas desde el panel, estados (agendada, confirmada, asistió, no llegó, cancelada) y botón para abrir el chat del cliente.
+- **Página de reservas** (Agenda → Ajustes): `https://<tu-dominio>/citas/<dirección>`. El cliente elige servicio, profesional, día y hora, y deja nombre y WhatsApp; recibe la plantilla de recordatorio para confirmar. Máximo 3 citas próximas por número.
+- **"Vuelve pronto"**: en cada servicio pon "Vuelve cada (días)" y actívalo en Ajustes. A quien asistió y no tiene otra cita se le escribe una vez con la plantilla de marketing `volver_cita` (Plantillas → Vuelve pronto), de 9 a. m. a 7 p. m.
+- **Reportes**: citas, asistencia, no-shows, ingresos y ticket promedio; por profesional, por servicio, origen de las citas y clientes nuevos vs. recurrentes.
 
 ## Planes y pagos (Wompi)
 Cada tienda nueva tiene **7 días de prueba gratis** del plan Pro, sin tarjeta. Después elige un plan en **Plan y pagos**:

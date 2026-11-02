@@ -120,6 +120,11 @@ export function sendAppointmentTemplate(to: string, t: { name: string; lang: str
   });
 }
 
+// Any approved template with body variables (its quick-reply buttons send their own text back).
+export function sendTemplate(to: string, t: { name: string; lang: string }, vars: string[]): Promise<SendResult> {
+  return send({ to, type: 'template', template: { name: t.name, language: { code: t.lang || 'es' }, components: vars.length ? [{ type: 'body', parameters: vars.map(param) }] : [] } });
+}
+
 // Free-form message with up to 3 reply buttons (only inside the 24 h window).
 export function sendButtons(to: string, body: string, buttons: { id: string; title: string }[]): Promise<SendResult> {
   return send({

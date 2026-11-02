@@ -5,7 +5,7 @@ import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET, APPOINTMENT_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET } from '@/lib/wa-templates';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +32,9 @@ export async function POST(req: NextRequest) {
         ? CONFIRM_PRESET
         : b.preset === 'appointment'
           ? APPOINTMENT_PRESET
-          : {
+          : b.preset === 'comeback'
+            ? COME_BACK_PRESET
+            : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
             category: b.category === 'MARKETING' ? ('MARKETING' as const) : ('UTILITY' as const),
@@ -56,6 +58,10 @@ export async function POST(req: NextRequest) {
     if (b.preset === 'appointment') {
       const a = await getAgenda();
       await saveAgenda({ ...a, reminderTemplate: t.name, templateLang: t.language });
+    }
+    if (b.preset === 'comeback') {
+      const a = await getAgenda();
+      await saveAgenda({ ...a, comeBackTemplate: t.name });
     }
     return ok({ template: created });
   } catch (e) {

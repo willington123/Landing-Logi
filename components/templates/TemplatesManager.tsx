@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Check, CheckCircle2, Gauge, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from 'lucide-react';
-import { APPOINTMENT_PRESET, CONFIRM_PRESET } from '@/lib/wa-templates';
+import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET } from '@/lib/wa-templates';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -240,6 +240,7 @@ export default function TemplatesManager() {
   const shown = (list || []).filter((t) => type === 'all' || t.category === type);
   const hasPreset = list?.some((t) => t.name === CONFIRM_PRESET.name);
   const hasApptPreset = list?.some((t) => t.name === APPOINTMENT_PRESET.name);
+  const hasComeBackPreset = list?.some((t) => t.name === COME_BACK_PRESET.name);
   const varsIn = (f.body.match(/\{\{\d+\}\}/g) || []).length;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -315,6 +316,17 @@ export default function TemplatesManager() {
                 </div>
                 <button onClick={() => run('preset-appt', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'appointment' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset-appt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
+                </button>
+              </div>
+            )}
+            {!hasComeBackPreset && (
+              <div className="rounded-lg bg-white border border-violet-200 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="text-[13px] font-semibold text-slate-900">Vuelve pronto (citas)</p>
+                  <p className="text-[11px] text-slate-500">Marketing: invita a volver a quien ya asistió, con el botón Agendar cita. Solo para clientes que aceptaron recibir mensajes.</p>
+                </div>
+                <button onClick={() => run('preset-back', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'comeback' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
+                  {busy === 'preset-back' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
                 </button>
               </div>
             )}
