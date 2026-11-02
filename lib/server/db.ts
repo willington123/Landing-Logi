@@ -212,6 +212,7 @@ export async function createOrder(order: OrderItem) {
     created_at: order.createdAt,
   });
   if (error) throw new Error(error.message);
+  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_created', order });
   return order;
 }
 
@@ -232,11 +233,13 @@ export async function updateOrderStatus(id: string, status: OrderItem['status'])
   const { data: row, error: readErr } = await (await db()).from('orders').select('data').eq('id', id).maybeSingle();
   if (readErr) throw new Error(readErr.message);
   if (!row) return;
+  const from = (row.data as OrderItem).status;
   const data = { ...(row.data as OrderItem), status, ...(status === 'confirmed_by_voice' ? { confirmedAt: new Date().toISOString() } : {}) };
   const { error } = await (await db()).from('orders').update({ status, data }).eq('id', id);
   if (error) throw new Error(error.message);
   // A confirmed/delivered order is a real sale: tell Meta (never blocks the status change).
   await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
+  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_status', order: data, from });
 }
 
 // Corrects the delivery address. The first address is kept as previousAddress.

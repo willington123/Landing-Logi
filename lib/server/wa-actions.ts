@@ -122,6 +122,8 @@ export async function handleInbound(m: InboundMessage) {
       return false;
     });
     if (!byBot) await fallback();
+    // The store's own flows ("un cliente escribe una palabra clave"), after the reply.
+    if (m.text) await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'message', phone: m.from, text: m.text, name: m.profileName });
     return;
   }
 
