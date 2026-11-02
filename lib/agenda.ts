@@ -43,6 +43,11 @@ export interface AgendaSettings {
   staff: AgendaStaff[];
   bookingEnabled: boolean; // public booking page konnexa.lat/citas/<bookingSlug>
   bookingSlug: string;
+  bookingTitle: string; // "" = the store's name
+  bookingIntro: string; // "Agenda tu cita en un minuto."
+  bookingColor: string; // #RRGGBB
+  bookingCover: string; // photo URL for the header ("" = color gradient)
+  bookingShowPrices: boolean;
   comeBackEnabled: boolean; // "vuelve pronto" messages (marketing template)
   comeBackTemplate: string;
 }
@@ -97,6 +102,11 @@ export const DEFAULT_AGENDA: AgendaSettings = {
   staff: [],
   bookingEnabled: false,
   bookingSlug: '',
+  bookingTitle: '',
+  bookingIntro: 'Agenda tu cita en un minuto.',
+  bookingColor: '#0A6CF0',
+  bookingCover: '',
+  bookingShowPrices: true,
   comeBackEnabled: false,
   comeBackTemplate: 'volver_cita',
 };
@@ -176,6 +186,11 @@ export function cleanAgenda(input: any): AgendaSettings | string {
     staff,
     bookingEnabled: Boolean(input?.bookingEnabled),
     bookingSlug: slugify(str(input?.bookingSlug, 60)),
+    bookingTitle: str(input?.bookingTitle, 80),
+    bookingIntro: str(input?.bookingIntro, 200),
+    bookingColor: /^#[0-9a-f]{6}$/i.test(String(input?.bookingColor || '')) ? String(input.bookingColor) : DEFAULT_AGENDA.bookingColor,
+    bookingCover: /^https:\/\/[^\s"'<>]{8,600}$/.test(String(input?.bookingCover || '')) ? String(input.bookingCover) : '',
+    bookingShowPrices: input?.bookingShowPrices !== false,
     comeBackEnabled: Boolean(input?.comeBackEnabled),
     comeBackTemplate: str(input?.comeBackTemplate, 120).replace(/[^a-z0-9_]/g, '') || DEFAULT_AGENDA.comeBackTemplate,
   };

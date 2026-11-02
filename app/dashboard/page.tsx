@@ -6,6 +6,8 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
+import AppointmentsHome from '@/components/agenda/AppointmentsHome';
+import { fetchAccount } from '@/lib/account-client';
 import { CallButton, useVapiReady } from '@/components/voice/CallButton';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
@@ -35,7 +37,12 @@ export default function DashboardPage() {
   const [landings, setLandings] = useState<LandingPageConfig[]>([]);
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [bizType, setBizType] = useState<'store' | 'appointments' | null>(null);
   const vapiReady = useVapiReady();
+
+  useEffect(() => {
+    fetchAccount().then((r) => setBizType(r.data?.businessType === 'appointments' ? 'appointments' : 'store'));
+  }, []);
 
   const refreshData = () => {
     setLandings(logiStore.getLandings());
@@ -84,6 +91,11 @@ export default function DashboardPage() {
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           <OnboardingChecklist onCreateLanding={() => setIsWizardOpen(true)} />
+
+          {bizType === 'appointments' ? (
+            <AppointmentsHome />
+          ) : (
+            <>
 
           {/* Welcome */}
           <section className={`${card} relative overflow-hidden p-6 sm:p-8`}>
@@ -291,6 +303,8 @@ export default function DashboardPage() {
               </section>
             </div>
           </div>
+            </>
+          )}
         </main>
       </div>
 

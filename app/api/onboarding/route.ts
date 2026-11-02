@@ -4,6 +4,7 @@ import { currentOrgId } from '@/lib/server/tenant';
 import { waConfig } from '@/lib/server/integrations';
 import { getBotSettings } from '@/lib/server/bot';
 import { failFrom, ok } from '@/lib/server/http';
+import { getAgenda } from '@/lib/server/agenda';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,14 +17,32 @@ export async function GET() {
       const { count: n } = await d.from(table).select('id', { count: 'exact', head: true });
       return n || 0;
     };
-    const [landings, orders, wa, bot, saved] = await Promise.all([
+    const [landings, orders, wa, bot, saved, agenda] = await Promise.all([
       count('landings'),
       count('orders'),
       waConfig(orgId).catch(() => null),
       getBotSettings().catch(() => null),
       d.from('settings').select('data').eq('id', 'onboarding').maybeSingle(),
+      getAgenda().catch(() => null),
     ]);
+    const dismissed = Boolean((saved.data?.data as { dismissed?: boolean } | null)?.dismissed);
+    // "Negocio con citas" has its own first steps.
+    if (agenda?.businessType === 'appointments') {
+      return ok({
+        type: 'appointments',
+        steps: {
+          services: agenda.services.some((s) => s.active),
+          staff: agenda.staff.some((p) => p.active),
+          booking: Boolean(agenda.bookingEnabled && agenda.bookingSlug),
+          whatsapp: Boolean(wa),
+          assistant: Boolean(bot?.enabled),
+          appointment: (await count('appointments').catch(() => 0)) > 0,
+        },
+        dismissed,
+      });
+    }
     return ok({
+      type: 'store',
       steps: {
         landing: landings > 0,
         whatsapp: Boolean(wa),
@@ -31,7 +50,7 @@ export async function GET() {
         assistant: Boolean(bot?.enabled),
         order: orders > 0,
       },
-      dismissed: Boolean((saved.data?.data as { dismissed?: boolean } | null)?.dismissed),
+      dismissed,
     });
   } catch (e) {
     return failFrom(e);
