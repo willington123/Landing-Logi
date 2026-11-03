@@ -67,7 +67,12 @@ async function answer(m: InboundMessage) {
     return;
   }
 
-  const ad = m.ad || (await getConversationAds().catch(() => ({}) as Record<string, AdRef>))[m.from] || null;
+  let ad: { headline?: string; body?: string } | null = m.ad || (await getConversationAds().catch(() => ({}) as Record<string, AdRef>))[m.from] || null;
+  // Messenger / Instagram chat that started from a comment: the post it was about.
+  if (!ad && /^[mi]\d/.test(m.from)) {
+    const meta = await (await import('@/lib/server/social')).chatMeta(m.from).catch(() => null);
+    if (meta?.post) ad = { headline: meta.product || undefined, body: meta.post };
+  }
   const run = await runBot({ settings, phone: m.from, customerName: m.profileName, ad, history: await chatHistory(m.from) });
 
   if (run.reply) {

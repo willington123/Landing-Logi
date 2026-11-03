@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     const b = await req.json().catch(() => ({}));
     const text = String(b.text || '').trim().slice(0, 500);
     if (!text) return fail('Escribe un comentario de prueba.', 400);
-    return ok({ result: await previewComment(text, b.channel === 'instagram' ? 'instagram' : 'facebook', String(b.name || 'Laura').slice(0, 40)) });
+    return ok({ result: await previewComment(text, b.channel === 'instagram' ? 'instagram' : 'facebook', String(b.name || 'Laura').slice(0, 40), String(b.postText || '').slice(0, 2000)) });
   } catch (e) {
     return userError(e);
   }

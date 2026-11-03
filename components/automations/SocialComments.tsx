@@ -112,8 +112,17 @@ function RuleEditor({ rule, onChange, onDelete }: { rule: SocialRule; onChange: 
         <textarea value={rule.publicReplies.join('\n')} rows={3} onChange={(e) => set({ publicReplies: e.target.value.split('\n') })} className={`mt-1 ${area}`} />
       </label>
       <label className="block">
-        <span className={label}>Mensaje privado (Messenger o Instagram Direct). Usa {'{nombre}'}</span>
+        <span className={label}>
+          Mensaje privado (Messenger o Instagram Direct). Usa {'{nombre}'} y {'{producto}'} (el producto de la publicación donde comentó)
+        </span>
         <textarea value={rule.dm} rows={3} maxLength={900} onChange={(e) => set({ dm: e.target.value })} className={`mt-1 ${area}`} />
+      </label>
+      <label className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3 text-[12px] text-slate-700">
+        <Switch on={rule.smartDm} onChange={(v) => set({ smartDm: v })} label="La IA escribe el privado" />
+        <span>
+          <span className="block text-[13px] font-semibold text-slate-900">Que la IA escriba el privado según la publicación</span>
+          Lee el texto del anuncio o publicación donde comentó, habla de ese producto y responde lo que preguntó. Tu mensaje de arriba le sirve de guía (y se usa si la IA falla). Cuenta como una respuesta de IA.
+        </span>
       </label>
       <div className="rounded-lg bg-emerald-50/60 border border-emerald-200 p-3 space-y-2">
         <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
@@ -147,7 +156,7 @@ export default function SocialComments() {
   const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const [test, setTest] = useState({ text: 'Info por favor', channel: 'instagram' as SocialChannel });
+  const [test, setTest] = useState({ text: 'Info por favor', channel: 'instagram' as SocialChannel, postText: '' });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [showLog, setShowLog] = useState(false);
@@ -206,7 +215,7 @@ export default function SocialComments() {
     const id = `r_${Date.now().toString(36)}`;
     const r: SocialRule = base
       ? { ...base, id, keywords: [...base.keywords], publicReplies: [...base.publicReplies], channels: [...base.channels], postIds: [] }
-      : { id, name: 'Nueva regla', enabled: true, channels: ['facebook', 'instagram'], keywords: [], postIds: [], publicReplies: ['¡Hola {nombre}! Te escribimos al privado 📩'], dm: 'Hola {nombre} 👋', whatsapp: true, waText: 'Hola, vi su publicación y quiero información' };
+      : { id, name: 'Nueva regla', enabled: true, channels: ['facebook', 'instagram'], keywords: [], postIds: [], publicReplies: ['¡Hola {nombre}! Te escribimos al privado 📩'], dm: 'Hola {nombre} 👋', whatsapp: true, waText: 'Hola, vi su publicación de {producto} y quiero información', smartDm: true };
     setSettings({ ...settings, rules: [...settings.rules, r] });
     setOpen(id);
   };
@@ -405,6 +414,13 @@ export default function SocialComments() {
                 {testing && <Loader2 className="w-4 h-4 animate-spin" />} Probar
               </button>
             </div>
+            <textarea
+              value={test.postText}
+              onChange={(e) => setTest({ ...test, postText: e.target.value })}
+              rows={2}
+              className={area}
+              placeholder="Opcional: pega el texto del anuncio o publicación, para ver cómo responde sobre ese producto"
+            />
             {testResult && (
               <div className="text-[12px] text-slate-700 bg-slate-50 rounded-lg p-3 space-y-1.5 whitespace-pre-wrap">
                 {testResult.error ? (
@@ -412,6 +428,12 @@ export default function SocialComments() {
                 ) : (
                   <>
                     <p>
+                      {testResult.product && (
+                        <>
+                          <b>Producto de la publicación:</b> {testResult.product}
+                          <br />
+                        </>
+                      )}
                       <b>Regla:</b> {testResult.rule || (testResult.ai ? `ninguna → la IA decidió: ${({ responder: 'responder', ocultar: 'ocultar', ignorar: 'dejarlo', privado: 'escribirle al privado' } as Record<string, string>)[testResult.ai] || testResult.ai}` : 'ninguna (no se hace nada)')}
                     </p>
                     {testResult.publicReply && (
@@ -443,6 +465,7 @@ export default function SocialComments() {
                       <div className="flex items-center gap-1.5 text-slate-500">
                         {l.channel === 'instagram' ? <Instagram className="w-3.5 h-3.5" /> : <Facebook className="w-3.5 h-3.5" />} {l.account} · {l.who}
                         {l.adId ? ' · anuncio' : ''}
+                        {(l as any).product ? ` · ${(l as any).product}` : ''}
                         <span className="ml-auto">{new Date(l.at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
                       <p className="text-slate-800">“{l.text}”</p>
