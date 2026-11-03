@@ -3,7 +3,7 @@
 // Creativos: which ads sell (confirmed cash-on-delivery sales) and which spend without selling.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Check, Copy, ExternalLink, Eye, Flame, X, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, Trophy } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Copy, ExternalLink, Eye, Flame, FlaskConical, LayoutGrid, List, X, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, ShoppingBag, Trophy } from 'lucide-react';
 
 type Range = 'today' | '7d' | '30d' | 'month';
 type Flag = 'winner' | 'waste' | 'cancels';
@@ -14,6 +14,7 @@ interface Row {
   currency: string | null;
   name: string;
   campaign: string;
+  adset?: string;
   status: string | null;
   thumb: string | null;
   thumbs?: string[];
@@ -86,6 +87,120 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+type GroupBy = 'ad' | 'adset' | 'campaign';
+type Layout = 'table' | 'cards';
+const GROUPS: { id: GroupBy; label: string }[] = [
+  { id: 'campaign', label: 'Campaña' },
+  { id: 'adset', label: 'Conjunto' },
+  { id: 'ad', label: 'Anuncio' },
+];
+
+// A campaign or an ad set: the sum of its ads.
+interface Group {
+  key: string;
+  level: 'campaign' | 'adset';
+  name: string;
+  campaign: string;
+  accountName: string | null;
+  currency: string | null;
+  ads: Row[];
+  children: Group[];
+  spend: number;
+  clicks: number;
+  chats: number;
+  orders: number;
+  confirmed: number;
+  cancelled: number;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
+  flags: Flag[];
+}
+
+const NO_CAMPAIGN = '(sin campaña)';
+const NO_ADSET = '(sin conjunto)';
+const isCop = (cur: string | null) => !cur || cur.toUpperCase() === 'COP';
+
+function makeGroup(level: Group['level'], key: string, name: string, ads: Row[], wasteMin: number, children: Group[] = []): Group {
+  const g = ads.reduce(
+    (a, r) => ({
+      spend: a.spend + r.spend,
+      clicks: a.clicks + r.clicks,
+      chats: a.chats + Math.max(r.chats, r.metaChats),
+      orders: a.orders + r.orders,
+      confirmed: a.confirmed + r.confirmed,
+      cancelled: a.cancelled + r.cancelled,
+      revenue: a.revenue + r.revenue,
+    }),
+    { spend: 0, clicks: 0, chats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0 },
+  );
+  const currency = ads[0]?.currency ?? null;
+  const flags: Flag[] = [];
+  if (ads.some((r) => r.flags.includes('winner'))) flags.push('winner');
+  if (!g.confirmed && g.spend >= wasteMin && g.spend > 0) flags.push('waste');
+  if (g.orders >= 3 && g.cancelled / g.orders >= 0.4) flags.push('cancels');
+  return {
+    key,
+    level,
+    name,
+    campaign: ads[0]?.campaign || NO_CAMPAIGN,
+    accountName: ads[0]?.accountName ?? null,
+    currency,
+    ads,
+    children,
+    ...g,
+    cpa: g.confirmed && g.spend ? g.spend / g.confirmed : null,
+    roas: g.spend && isCop(currency) ? g.revenue / g.spend : null,
+    flags,
+  };
+}
+
+const bySpend = (a: { spend: number; revenue: number }, b: { spend: number; revenue: number }) => b.revenue - a.revenue || b.spend - a.spend;
+
+function groupAds(rows: Row[], by: Exclude<GroupBy, 'ad'>, wasteMin: number): Group[] {
+  const adsetsOf = (list: Row[], prefix: string) => {
+    const m = new Map<string, Row[]>();
+    for (const r of list) {
+      const k = r.adset || NO_ADSET;
+      m.set(k, [...(m.get(k) || []), r]);
+    }
+    return Array.from(m).map(([name, ads]) => makeGroup('adset', `${prefix}|${name}`, name, [...ads].sort(bySpend), wasteMin)).sort(bySpend);
+  };
+  const camps = new Map<string, Row[]>();
+  for (const r of rows) {
+    const k = `${r.accountId || ''}|${r.campaign || NO_CAMPAIGN}`;
+    camps.set(k, [...(camps.get(k) || []), r]);
+  }
+  if (by === 'adset') return Array.from(camps).flatMap(([k, ads]) => adsetsOf(ads, k)).sort(bySpend);
+  return Array.from(camps).map(([k, ads]) => makeGroup('campaign', k, ads[0].campaign || NO_CAMPAIGN, ads, wasteMin, adsetsOf(ads, k))).sort(bySpend);
+}
+
+// Performance columns of the cards board.
+type Lane = 'winner' | 'cancels' | 'waste' | 'sells' | 'testing';
+const LANES: { id: Lane; label: string; hint: string; cls: string; Icon: typeof Trophy }[] = [
+  { id: 'winner', label: 'Ganadores', hint: 'Los que más venden con buen ROAS', cls: 'bg-emerald-500', Icon: Trophy },
+  { id: 'sells', label: 'Venden', hint: 'Ya tienen ventas confirmadas', cls: 'bg-sky-500', Icon: ShoppingBag },
+  { id: 'testing', label: 'En prueba', hint: 'Aún no gastan lo suficiente para juzgarlos', cls: 'bg-slate-400', Icon: FlaskConical },
+  { id: 'waste', label: 'Gastan sin vender', hint: 'Gastaron sin ninguna venta confirmada', cls: 'bg-red-500', Icon: Flame },
+  { id: 'cancels', label: 'Se cancelan mucho', hint: 'Muchos de sus pedidos se cancelan', cls: 'bg-amber-500', Icon: AlertTriangle },
+];
+const laneOf = (r: Row): Lane =>
+  r.flags.includes('winner') ? 'winner' : r.flags.includes('cancels') ? 'cancels' : r.flags.includes('waste') ? 'waste' : r.confirmed > 0 ? 'sells' : 'testing';
+
+function readPref<T extends string>(key: string, ok: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null;
+    return v && ok.includes(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {}
+}
+
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
 
 export default function CreativesPage() {
@@ -113,14 +228,42 @@ export default function CreativesPage() {
     !cur || cur.toUpperCase() === 'COP' ? `$${Math.round(n).toLocaleString('es-CO')}` : `${n.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${cur}`;
   const cop = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
   const [acct, setAcct] = useState('');
+  const [groupBy, setGroupBy] = useState<GroupBy>('ad');
+  const [layout, setLayout] = useState<Layout>('table');
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setGroupBy(readPref('kx.creativos.group', ['ad', 'adset', 'campaign'] as const, 'ad'));
+    setLayout(readPref('kx.creativos.layout', ['table', 'cards'] as const, 'table'));
+  }, []);
+  const pickGroup = (g: GroupBy) => {
+    setGroupBy(g);
+    setExpanded(new Set());
+    savePref('kx.creativos.group', g);
+  };
+  const pickLayout = (l: Layout) => {
+    setLayout(l);
+    savePref('kx.creativos.layout', l);
+  };
+  const toggle = useCallback((k: string) => setExpanded((s) => {
+    const n = new Set(s);
+    if (n.has(k)) n.delete(k);
+    else n.add(k);
+    return n;
+  }), []);
   const accounts = state.report?.accounts || [];
+  const wasteMin = state.report?.wasteMin ?? 0;
   const byAccount = useMemo(() => (state.report?.rows || []).filter((r) => !acct || r.accountId === acct), [state.report, acct]);
   const rows = useMemo(() => byAccount.filter((r) => filter === 'all' || r.flags.includes(filter)), [byAccount, filter]);
+  const groups = useMemo(() => (groupBy === 'ad' ? [] : groupAds(byAccount, groupBy, wasteMin)), [byAccount, groupBy, wasteMin]);
+  const shownGroups = useMemo(() => groups.filter((g) => filter === 'all' || g.flags.includes(filter)), [groups, filter]);
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: byAccount.length, winner: 0, waste: 0, cancels: 0 };
-    for (const r of byAccount) r.flags.forEach((f) => c[f]++);
+    const list: { flags: Flag[] }[] = groupBy === 'ad' ? byAccount : groups;
+    const c: Record<string, number> = { all: list.length, winner: 0, waste: 0, cancels: 0 };
+    for (const r of list) r.flags.forEach((f) => c[f]++);
     return c;
-  }, [byAccount]);
+  }, [byAccount, groups, groupBy]);
+  const empty = groupBy === 'ad' ? !rows.length : !shownGroups.length;
+  const unit = groupBy === 'campaign' ? 'campaña' : groupBy === 'adset' ? 'conjunto' : 'anuncio';
   // Totals of what is on screen (COP accounts only; other currencies can't be added to COP sales).
   const view = useMemo(() => {
     const cops = byAccount.filter((r) => !r.currency || r.currency.toUpperCase() === 'COP');
@@ -245,6 +388,31 @@ export default function CreativesPage() {
         </div>
       )}
 
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500">Ver por:</span>
+          <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600">
+            {GROUPS.map((g) => (
+              <button key={g.id} onClick={() => pickGroup(g.id)} className={`px-3 py-1.5 rounded-lg transition ${groupBy === g.id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600 w-fit">
+          {(
+            [
+              ['table', 'Tabla', List],
+              ['cards', 'Tarjetas', LayoutGrid],
+            ] as const
+          ).map(([id, label, Icon]) => (
+            <button key={id} onClick={() => pickLayout(id)} className={`px-3 py-1.5 rounded-lg transition inline-flex items-center gap-1.5 ${layout === id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex items-center gap-1.5 flex-wrap">
         {FILTERS.map((f) => (
           <button
@@ -257,81 +425,68 @@ export default function CreativesPage() {
         ))}
       </div>
 
-      <section className={card}>
-        {state.loading && !rep ? (
-          <div className="py-16 flex justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
-          </div>
-        ) : !rows.length ? (
-          <p className="py-14 text-center text-sm text-slate-500">{filter === 'all' ? 'No hay anuncios con gasto ni pedidos en este periodo.' : 'Ningún anuncio en este grupo. 👌'}</p>
+      {state.loading && !rep ? (
+        <section className={`${card} py-16 flex justify-center`}>
+          <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+        </section>
+      ) : empty ? (
+        <section className={card}>
+          <p className="py-14 text-center text-sm text-slate-500">
+            {filter === 'all' ? 'No hay anuncios con gasto ni pedidos en este periodo.' : groupBy === 'ad' ? 'Ningún anuncio en este grupo. 👌' : `Ningún ${unit} en este grupo. 👌`}
+          </p>
+        </section>
+      ) : layout === 'cards' ? (
+        groupBy === 'ad' ? (
+          <Board rows={rows} money={money} cop={cop} onOpen={setOpenAd} />
         ) : (
-          <>
-            {/* desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
-                    <th className="px-4 py-2.5 font-medium">Creativo</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Gasto</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Clics</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Chats</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Pedidos</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Confirmados</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Ventas</th>
-                    <th className="px-3 py-2.5 font-medium text-right">Costo/venta</th>
-                    <th className="px-4 py-2.5 font-medium text-right">ROAS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((r) => (
-                    <tr key={r.adId} className={r.flags.includes('waste') ? 'bg-red-50/30' : r.flags.includes('winner') ? 'bg-emerald-50/30' : ''}>
-                      <td className="px-4 py-3">
-                        <AdCell r={r} onOpen={setOpenAd} />
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums font-medium">{money(r.spend, r.currency)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{r.clicks.toLocaleString('es-CO')}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{Math.max(r.chats, r.metaChats).toLocaleString('es-CO')}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">
-                        {r.orders}
-                        {r.cancelled > 0 && <span className="block text-[11px] text-slate-400">{r.cancelled} cancel.</span>}
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums font-semibold text-slate-900">{r.confirmed}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{cop(r.revenue)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{r.cpa === null ? '—' : money(r.cpa, r.currency)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${r.roas === null ? 'text-slate-400' : r.roas >= 2 ? 'text-emerald-700' : r.roas < 1 ? 'text-red-600' : 'text-slate-900'}`}>
-                        {r.roas === null ? '—' : `${r.roas.toFixed(2)}x`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* mobile cards */}
-            <ul className="md:hidden divide-y divide-slate-100">
-              {rows.map((r) => (
-                <li key={r.adId} className="p-4 space-y-3">
-                  <AdCell r={r} onOpen={setOpenAd} />
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                      ['Gasto', money(r.spend, r.currency)],
-                      ['Confirmados', String(r.confirmed)],
-                      ['ROAS', r.roas === null ? '—' : `${r.roas.toFixed(2)}x`],
-                      ['Pedidos', String(r.orders)],
-                      ['Ventas', cop(r.revenue)],
-                      ['Costo/venta', r.cpa === null ? '—' : money(r.cpa, r.currency)],
-                    ].map(([k, v]) => (
-                      <div key={k} className="rounded-lg bg-slate-50 py-1.5">
-                        <p className="text-[10px] text-slate-500">{k}</p>
-                        <p className="text-[13px] font-semibold tabular-nums text-slate-900">{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+          <div className="space-y-4">
+            {shownGroups.map((g) => (
+              <GroupCards key={g.key} g={g} showCampaign={groupBy === 'adset'} money={money} cop={cop} onOpen={setOpenAd} />
+            ))}
+          </div>
+        )
+      ) : groupBy === 'ad' ? (
+        <section className={card}>
+          {/* desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <TableHead first="Creativo" />
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((r) => (
+                  <AdTr key={r.adId} r={r} money={money} cop={cop} onOpen={setOpenAd} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* mobile cards */}
+          <ul className="md:hidden divide-y divide-slate-100">
+            {rows.map((r) => (
+              <li key={r.adId} className="p-4 space-y-3">
+                <AdCell r={r} onOpen={setOpenAd} />
+                <MiniStats m={adMetrics(r)} money={money} cop={cop} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <section className={card}>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <TableHead first={groupBy === 'campaign' ? 'Campaña' : 'Conjunto'} />
+              <tbody className="divide-y divide-slate-100">
+                {shownGroups.map((g) => (
+                  <GroupTrs key={g.key} g={g} depth={0} showCampaign={groupBy === 'adset'} expanded={expanded} toggle={toggle} money={money} cop={cop} onOpen={setOpenAd} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="md:hidden divide-y divide-slate-100">
+            {shownGroups.map((g) => (
+              <GroupMobile key={g.key} g={g} depth={0} showCampaign={groupBy === 'adset'} expanded={expanded} toggle={toggle} money={money} cop={cop} onOpen={setOpenAd} />
+            ))}
+          </ul>
+        </section>
+      )}
       {rep && (
         <p className="text-xs text-slate-400">
           Confirmados = pedidos confirmados, enviados o entregados. "Gasta sin vender" = gastó al menos {money(rep.wasteMin)} sin ninguna venta confirmada. El gasto viene de Meta y se
@@ -340,6 +495,309 @@ export default function CreativesPage() {
       )}
       {openAd && <AdPreview r={openAd} money={money} onClose={() => setOpenAd(null)} />}
     </div>
+  );
+}
+
+type Money = (n: number, cur?: string | null) => string;
+interface Metrics {
+  spend: number;
+  clicks: number;
+  chats: number;
+  orders: number;
+  confirmed: number;
+  cancelled: number;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
+  currency: string | null;
+}
+const adMetrics = (r: Row): Metrics => ({ ...r, chats: Math.max(r.chats, r.metaChats) });
+const roasCls = (roas: number | null) => (roas === null ? 'text-slate-400' : roas >= 2 ? 'text-emerald-700' : roas < 1 ? 'text-red-600' : 'text-slate-900');
+const rowTint = (flags: Flag[]) => (flags.includes('waste') ? 'bg-red-50/30' : flags.includes('winner') ? 'bg-emerald-50/30' : '');
+
+function TableHead({ first }: { first: string }) {
+  return (
+    <thead>
+      <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
+        <th className="px-4 py-2.5 font-medium">{first}</th>
+        <th className="px-3 py-2.5 font-medium text-right">Gasto</th>
+        <th className="px-3 py-2.5 font-medium text-right">Clics</th>
+        <th className="px-3 py-2.5 font-medium text-right">Chats</th>
+        <th className="px-3 py-2.5 font-medium text-right">Pedidos</th>
+        <th className="px-3 py-2.5 font-medium text-right">Confirmados</th>
+        <th className="px-3 py-2.5 font-medium text-right">Ventas</th>
+        <th className="px-3 py-2.5 font-medium text-right">Costo/venta</th>
+        <th className="px-4 py-2.5 font-medium text-right">ROAS</th>
+      </tr>
+    </thead>
+  );
+}
+
+function MetricTds({ m, money, cop }: { m: Metrics; money: Money; cop: (n: number) => string }) {
+  return (
+    <>
+      <td className="px-3 py-3 text-right tabular-nums font-medium">{money(m.spend, m.currency)}</td>
+      <td className="px-3 py-3 text-right tabular-nums">{m.clicks.toLocaleString('es-CO')}</td>
+      <td className="px-3 py-3 text-right tabular-nums">{m.chats.toLocaleString('es-CO')}</td>
+      <td className="px-3 py-3 text-right tabular-nums">
+        {m.orders}
+        {m.cancelled > 0 && <span className="block text-[11px] text-slate-400">{m.cancelled} cancel.</span>}
+      </td>
+      <td className="px-3 py-3 text-right tabular-nums font-semibold text-slate-900">{m.confirmed}</td>
+      <td className="px-3 py-3 text-right tabular-nums">{cop(m.revenue)}</td>
+      <td className="px-3 py-3 text-right tabular-nums">{m.cpa === null ? '—' : money(m.cpa, m.currency)}</td>
+      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${roasCls(m.roas)}`}>{m.roas === null ? '—' : `${m.roas.toFixed(2)}x`}</td>
+    </>
+  );
+}
+
+function MiniStats({ m, money, cop }: { m: Metrics; money: Money; cop: (n: number) => string }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 text-center">
+      {[
+        ['Gasto', money(m.spend, m.currency)],
+        ['Confirmados', String(m.confirmed)],
+        ['ROAS', m.roas === null ? '—' : `${m.roas.toFixed(2)}x`],
+        ['Pedidos', String(m.orders)],
+        ['Ventas', cop(m.revenue)],
+        ['Costo/venta', m.cpa === null ? '—' : money(m.cpa, m.currency)],
+      ].map(([k, v]) => (
+        <div key={k} className="rounded-lg bg-slate-50 py-1.5">
+          <p className="text-[10px] text-slate-500">{k}</p>
+          <p className="text-[13px] font-semibold tabular-nums text-slate-900">{v}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlagBadges({ flags }: { flags: Flag[] }) {
+  if (!flags.length) return null;
+  return (
+    <div className="mt-1 flex gap-1 flex-wrap">
+      {flags.map((f) => {
+        const F = FLAG[f];
+        return (
+          <span key={f} className={`inline-flex items-center gap-1 text-[10px] font-semibold border rounded-full px-1.5 py-0.5 ${F.cls}`}>
+            <F.Icon className="w-3 h-3" /> {F.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function AdTr({ r, money, cop, onOpen, depth = 0 }: { r: Row; money: Money; cop: (n: number) => string; onOpen: (r: Row) => void; depth?: number }) {
+  return (
+    <tr className={depth ? 'bg-slate-50/50' : rowTint(r.flags)}>
+      <td className="px-4 py-3" style={depth ? { paddingLeft: 16 + depth * 28 } : undefined}>
+        <AdCell r={r} onOpen={onOpen} />
+      </td>
+      <MetricTds m={adMetrics(r)} money={money} cop={cop} />
+    </tr>
+  );
+}
+
+const groupSub = (g: Group, showCampaign: boolean) =>
+  [showCampaign ? g.campaign : '', g.level === 'campaign' ? `${g.children.length} ${g.children.length === 1 ? 'conjunto' : 'conjuntos'}` : '', `${g.ads.length} ${g.ads.length === 1 ? 'anuncio' : 'anuncios'}`, g.accountName || '']
+    .filter(Boolean)
+    .join(' · ');
+
+// Small stack of the group's ad thumbnails.
+function Thumbs({ ads }: { ads: Row[] }) {
+  return (
+    <div className="flex -space-x-3 shrink-0">
+      {ads.slice(0, 3).map((r) => (
+        <div key={r.adId} className="relative w-10 h-10 rounded-lg bg-slate-100 overflow-hidden ring-2 ring-white flex items-center justify-center">
+          <ImageIcon className="absolute w-4 h-4 text-slate-300" />
+          <AdImage r={r} className="relative w-full h-full object-cover" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface GroupProps {
+  g: Group;
+  depth: number;
+  showCampaign: boolean;
+  expanded: Set<string>;
+  toggle: (k: string) => void;
+  money: Money;
+  cop: (n: number) => string;
+  onOpen: (r: Row) => void;
+}
+
+function GroupTrs({ g, depth, showCampaign, expanded, toggle, money, cop, onOpen }: GroupProps) {
+  const open = expanded.has(g.key);
+  return (
+    <>
+      <tr className={`${depth ? 'bg-slate-50/50' : rowTint(g.flags)} cursor-pointer hover:bg-slate-50`} onClick={() => toggle(g.key)}>
+        <td className="px-4 py-3" style={depth ? { paddingLeft: 16 + depth * 28 } : undefined}>
+          <div className="flex items-center gap-3 min-w-0">
+            <ChevronRight className={`w-4 h-4 text-slate-400 shrink-0 transition ${open ? 'rotate-90' : ''}`} />
+            <Thumbs ads={g.ads} />
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900 truncate max-w-[280px]" title={g.name}>
+                {g.name}
+              </p>
+              <p className="text-[11px] text-slate-500 truncate max-w-[280px]">{groupSub(g, showCampaign)}</p>
+              <FlagBadges flags={g.flags} />
+            </div>
+          </div>
+        </td>
+        <MetricTds m={g} money={money} cop={cop} />
+      </tr>
+      {open &&
+        (g.level === 'campaign'
+          ? g.children.map((c) => <GroupTrs key={c.key} g={c} depth={depth + 1} showCampaign={false} expanded={expanded} toggle={toggle} money={money} cop={cop} onOpen={onOpen} />)
+          : g.ads.map((r) => <AdTr key={r.adId} r={r} depth={depth + 1} money={money} cop={cop} onOpen={onOpen} />))}
+    </>
+  );
+}
+
+function GroupMobile({ g, depth, showCampaign, expanded, toggle, money, cop, onOpen }: GroupProps) {
+  const open = expanded.has(g.key);
+  return (
+    <li className={depth ? 'border-l-2 border-slate-200 ml-3' : ''}>
+      <button type="button" onClick={() => toggle(g.key)} className="w-full text-left p-4 space-y-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <ChevronRight className={`w-4 h-4 text-slate-400 shrink-0 transition ${open ? 'rotate-90' : ''}`} />
+          <Thumbs ads={g.ads} />
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900 truncate">{g.name}</p>
+            <p className="text-[11px] text-slate-500 truncate">{groupSub(g, showCampaign)}</p>
+            <FlagBadges flags={g.flags} />
+          </div>
+        </div>
+        <MiniStats m={g} money={money} cop={cop} />
+      </button>
+      {open && (
+        <ul className="divide-y divide-slate-100 pb-2">
+          {g.level === 'campaign'
+            ? g.children.map((c) => <GroupMobile key={c.key} g={c} depth={depth + 1} showCampaign={false} expanded={expanded} toggle={toggle} money={money} cop={cop} onOpen={onOpen} />)
+            : g.ads.map((r) => (
+                <li key={r.adId} className="p-4 space-y-3 ml-3 border-l-2 border-slate-200">
+                  <AdCell r={r} onOpen={onOpen} />
+                  <MiniStats m={adMetrics(r)} money={money} cop={cop} />
+                </li>
+              ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+// One ad as a card: big image, where it lives and how it sells.
+function AdCard({ r, money, cop, onOpen, hideAdset }: { r: Row; money: Money; cop: (n: number) => string; onOpen: (r: Row) => void; hideAdset?: boolean }) {
+  const st = statusOf(r.status);
+  const m = adMetrics(r);
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)] overflow-hidden flex flex-col">
+      <button type="button" onClick={() => onOpen(r)} className="group relative aspect-square bg-slate-100 flex items-center justify-center overflow-hidden" aria-label={`Ver el anuncio ${r.name}`}>
+        <ImageIcon className="absolute w-7 h-7 text-slate-300" />
+        <AdImage r={r} className="relative w-full h-full object-cover" />
+        <span className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
+          {r.kind === 'video' ? <PlayCircle className="w-10 h-10 text-white drop-shadow" /> : <Eye className="w-7 h-7 text-white opacity-0 group-hover:opacity-100 drop-shadow" />}
+        </span>
+        {st && <span className={`absolute top-2 left-2 text-[10px] font-semibold bg-white/90 rounded-full px-2 py-0.5 ${st.cls}`}>{st.label}</span>}
+      </button>
+      <div className="p-3 space-y-2 flex-1 flex flex-col">
+        <div className="min-w-0">
+          <button type="button" onClick={() => onOpen(r)} className="block w-full font-medium text-[13px] text-slate-900 truncate text-left hover:text-brand-blue" title={r.name}>
+            {r.name}
+          </button>
+          <p className="text-[11px] text-slate-500 truncate" title={[r.campaign, r.adset].filter(Boolean).join(' · ')}>
+            {[r.campaign || `id ${r.adId}`, hideAdset ? '' : r.adset].filter(Boolean).join(' · ')}
+          </p>
+          <FlagBadges flags={r.flags} />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 text-[11px] mt-auto">
+          {[
+            ['Gasto', money(m.spend, m.currency)],
+            [`Ventas (${m.confirmed})`, cop(m.revenue)],
+            ['ROAS', m.roas === null ? '—' : `${m.roas.toFixed(2)}x`],
+            ['Costo/venta', m.cpa === null ? '—' : money(m.cpa, m.currency)],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-md bg-slate-50 px-2 py-1">
+              <p className="text-[10px] text-slate-500">{k}</p>
+              <p className={`font-semibold tabular-nums truncate ${k === 'ROAS' ? roasCls(m.roas) : 'text-slate-900'}`}>{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Ads in columns by how they perform, like the orders board.
+function Board({ rows, money, cop, onOpen }: { rows: Row[]; money: Money; cop: (n: number) => string; onOpen: (r: Row) => void }) {
+  const lanes = LANES.map((l) => ({ ...l, ads: rows.filter((r) => laneOf(r) === l.id) }));
+  return (
+    <div className="overflow-x-auto -mx-4 px-4 pb-2">
+      <div className="flex gap-3 items-start min-w-max xl:min-w-0">
+        {lanes.map((l) => {
+          const spend = l.ads.filter((r) => isCop(r.currency)).reduce((a, r) => a + r.spend, 0);
+          return (
+            <div key={l.id} className="w-[240px] shrink-0 xl:w-0 xl:flex-1 xl:min-w-[190px] rounded-2xl bg-slate-100/80 border border-slate-200/70 flex flex-col max-h-[calc(100vh-220px)]">
+              <div className="px-3 pt-3 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${l.cls}`} />
+                  <l.Icon className="w-3.5 h-3.5 text-slate-500" />
+                  <p className="text-[13px] font-semibold text-slate-800 flex-1">{l.label}</p>
+                  <span className="text-[11px] font-semibold text-slate-500 bg-white rounded-full px-2 py-0.5">{l.ads.length}</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">{l.hint}</p>
+                <p className="text-[11px] text-slate-700 font-medium tabular-nums">Gasto {money(spend)}</p>
+              </div>
+              <div className="px-2 pb-2 space-y-2 overflow-y-auto">
+                {l.ads.length ? (
+                  l.ads.map((r) => <AdCard key={r.adId} r={r} money={money} cop={cop} onOpen={onOpen} />)
+                ) : (
+                  <p className="text-[12px] text-slate-400 text-center py-6 px-2">Ningún anuncio aquí</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// A campaign or ad set with its ads as cards.
+function GroupCards({ g, showCampaign, money, cop, onOpen }: { g: Group; showCampaign: boolean; money: Money; cop: (n: number) => string; onOpen: (r: Row) => void }) {
+  return (
+    <section className={`${card} p-4`}>
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-900 truncate" title={g.name}>
+            {g.name}
+          </p>
+          <p className="text-[11px] text-slate-500 truncate">{groupSub(g, showCampaign)}</p>
+          <FlagBadges flags={g.flags} />
+        </div>
+        <div className="flex gap-2 flex-wrap text-[12px]">
+          {[
+            ['Gasto', money(g.spend, g.currency)],
+            ['Confirmados', String(g.confirmed)],
+            ['Ventas', cop(g.revenue)],
+            ['Costo/venta', g.cpa === null ? '—' : money(g.cpa, g.currency)],
+            ['ROAS', g.roas === null ? '—' : `${g.roas.toFixed(2)}x`],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-lg bg-slate-50 px-2.5 py-1">
+              <p className="text-[10px] text-slate-500">{k}</p>
+              <p className={`font-semibold tabular-nums ${k === 'ROAS' ? roasCls(g.roas) : 'text-slate-900'}`}>{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {g.ads.map((r) => (
+          <AdCard key={r.adId} r={r} money={money} cop={cop} onOpen={onOpen} hideAdset={g.level === 'adset'} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -390,6 +848,7 @@ function AdCell({ r, onOpen }: { r: Row; onOpen: (r: Row) => void }) {
         </button>
         <p className="text-[11px] text-slate-500 truncate max-w-[280px]">
           {r.campaign || `id ${r.adId}`}
+          {r.adset && <span className="text-slate-400"> · {r.adset}</span>}
           {r.accountName && <span className="ml-1 text-slate-400">· {r.accountName}</span>}
           {st && <span className={`ml-1 ${st.cls}`}>· {st.label}</span>}
         </p>

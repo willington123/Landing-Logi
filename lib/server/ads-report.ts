@@ -32,6 +32,7 @@ export interface AdRow {
   currency: string | null; // of the ad account (null = ad only seen in orders/chats)
   name: string;
   campaign: string;
+  adset: string;
   status: string | null;
   thumb: string | null;
   thumbs: string[];
@@ -88,7 +89,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
   const row = (adId: string): AdRow => {
     let r = rows.get(adId);
     if (!r) {
-      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', status: null, thumb: null, thumbs: [], kind: null, previewLink: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
+      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', adset: '', status: null, thumb: null, thumbs: [], kind: null, previewLink: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
       rows.set(adId, r);
     }
     return r;
@@ -101,6 +102,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<Ad
       r.currency = account.currency;
       r.name = i.adName;
       r.campaign = i.campaignName;
+      r.adset = i.adsetName;
       r.spend += i.spend;
       r.impressions += i.impressions;
       r.clicks += i.clicks;
