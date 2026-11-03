@@ -151,7 +151,7 @@ export default function DropiConnection() {
             <div className="space-y-2">
               <ol className="list-decimal pl-5 text-[12.5px] text-slate-600 space-y-0.5">
                 <li>
-                  Entra a <b>Dropi</b> → menú <b>Mis tiendas</b> → <b>Crear tienda</b> (ponle el nombre de tu tienda). Una sola tienda sirve para todos tus productos.
+                  Entra a <b>Dropi</b> → menú <b>Mis Integraciones</b> → crea una tienda (ponle el nombre de tu tienda y guarda). Una sola tienda sirve para todos tus productos.
                 </li>
                 <li>Dropi te muestra un <b>token de integración</b>: cópialo y pégalo aquí.</li>
               </ol>
