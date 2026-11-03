@@ -210,6 +210,7 @@ export interface DropiOrderState {
   error?: string | null;
   at?: string;
   sending?: string; // while being sent (avoids sending twice)
+  exportedAt?: string; // downloaded in the bulk Excel
 }
 
 export function buildOrderPayload(order: OrderItem, link: DropiLink) {
