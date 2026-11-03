@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import WhatsAppProfile from '@/components/integrations/WhatsAppProfile';
 import { KeyConnection, ConversionsCard, MetaAdsConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -518,6 +519,7 @@ function WhatsAppCard({ status, integ, onChanged }: { status: WaStatus | null | 
       </p>
 
       {integ ? <WhatsAppConnection info={integ} onChanged={onChanged} /> : <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}
+      {integ?.whatsapp.connected && <WhatsAppProfile />}
       {integ?.whatsapp.connected && (
         <a href="/plantillas" className="rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition">
           <span>
