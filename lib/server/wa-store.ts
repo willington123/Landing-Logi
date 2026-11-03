@@ -31,6 +31,7 @@ export interface WaMessage {
   created_at: string;
   media?: WaMedia | null; // photo, voice note, video, document or sticker sent by the customer
   by?: string | null; // who on the team wrote it (panel replies)
+  transcript?: string | null; // what the customer said in a voice note
 }
 
 export interface WaMedia {
@@ -248,7 +249,7 @@ export async function listMessages(conversationId: string, limit = 300): Promise
     .limit(limit);
   if (error) throw new Error(error.message);
   return (data || [])
-    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null, by: m.direction === 'out' && payload?.by?.name ? String(payload.by.name) : null }) as WaMessage)
+    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null, by: m.direction === 'out' && payload?.by?.name ? String(payload.by.name) : null, transcript: m.direction === 'in' && payload?.transcript ? String(payload.transcript) : null }) as WaMessage)
     .reverse();
 }
 

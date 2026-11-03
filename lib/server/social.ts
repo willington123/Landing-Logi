@@ -549,7 +549,11 @@ export function parseSocialMessaging(body: any): (IncomingChatEvent & { echo?: b
           type: 'text',
           text,
           intent: null,
-          raw: { channel: kind === 'page' ? 'messenger' : 'instagram' },
+          raw: {
+            channel: kind === 'page' ? 'messenger' : 'instagram',
+            // A voice note: its file link, so it can be turned into text.
+            audioUrl: files.find((a: any) => a.type === 'audio' && a.payload?.url)?.payload?.url || null,
+          },
         },
       });
     }

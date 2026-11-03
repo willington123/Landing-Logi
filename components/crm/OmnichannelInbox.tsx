@@ -941,6 +941,12 @@ export default function OmnichannelInbox() {
                         <div className="space-y-1">
                           <MediaView m={m} />
                           {m.media.caption && <p>{m.media.caption}</p>}
+                          {m.transcript && (
+                            <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
+                              <span className="font-semibold text-slate-500">📝 Dijo: </span>
+                              {m.transcript}
+                            </p>
+                          )}
                         </div>
                       ) : (
                         m.body

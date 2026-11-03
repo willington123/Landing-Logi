@@ -94,6 +94,12 @@ export async function autoReply(m: InboundMessage) {
 export async function handleInbound(m: InboundMessage) {
   const { isNew } = await recordInbound(m);
   if (!isNew) return; // duplicate delivery
+  // Voice note: to text first, so the assistant, automatic replies and flows understand it.
+  const vn = await import('@/lib/server/voice-notes');
+  if (vn.isVoiceNote(m)) {
+    const said = await vn.transcribeVoiceNote(m);
+    if (said) m = { ...m, text: said, type: 'text' };
+  }
   // Automatic assignment to the team (if it's on and the chat has nobody yet).
   await (await import('@/lib/server/crm-store')).autoAssign(m.from, 'new').catch((e) => console.error('Asignación automática', e));
 
