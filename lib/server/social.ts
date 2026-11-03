@@ -6,7 +6,7 @@ import { decrypt } from '@/lib/server/secrets';
 import { seal, storedIntegrations, updateIntegrations } from '@/lib/server/integrations';
 import { requestOrgSync } from '@/lib/server/tenant';
 import { GRAPH_VERSION } from '@/lib/server/whatsapp';
-import { DEFAULT_SOCIAL, cleanSocial, fillName, matchRule, waLink, type SocialChannel, type SocialRule, type SocialSettings } from '@/lib/social';
+import { DEFAULT_SOCIAL, cleanSocial, fillName, fillProduct, matchRule, waLink, type SocialChannel, type SocialRule, type SocialSettings } from '@/lib/social';
 import type { InboundMessage, SendResult } from '@/lib/server/whatsapp';
 
 const env = (k: string) => (process.env[k] || '').trim();
@@ -174,6 +174,7 @@ export interface SocialLogItem {
   who: string;
   text: string;
   rule: string | null; // rule name, 'IA' or null
+  product?: string | null; // product of the post they commented on
   done: string[]; // "Respuesta pública", "Privado", "Oculto"
   error?: string;
   skipped?: string;
@@ -233,6 +234,7 @@ export interface IncomingComment {
   commentId: string;
   postId: string;
   adId?: string | null;
+  adTitle?: string | null;
   text: string;
   fromId: string;
   fromName: string;
@@ -257,6 +259,7 @@ export function parseSocialWebhook(body: any): IncomingComment[] {
           commentId: String(v.id),
           postId: String(v.media?.id || ''),
           adId: v.media?.ad_id ? String(v.media.ad_id) : null,
+          adTitle: v.media?.ad_title ? String(v.media.ad_title) : null,
           text: String(v.text || ''),
           fromId: String(v.from?.id || ''),
           fromName: String(v.from?.username || ''),
@@ -274,11 +277,136 @@ async function storeWhatsApp(settings: SocialSettings): Promise<string> {
   return (s?.whatsapp?.displayPhone || env('WHATSAPP_DISPLAY_PHONE') || '').replace(/\D/g, '');
 }
 
+// ---------- what the post / ad is about ----------
+// The product is in the post's text: replies and private messages talk about it. Shipping, payment and
+// the store's details stay general (the store's info).
+
+export interface PostContext {
+  copy: string; // the post's / ad's text ('' if Meta didn't share it)
+  product: string | null; // the store's product it is about (matched against the landings)
+  productInfo: string | null; // that product's details for the AI
+}
+const NO_CONTEXT: PostContext = { copy: '', product: null, productInfo: null };
+
+const words = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9ñ ]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+
+// The post's text (kept a week per post, so a busy ad isn't asked again for every comment).
+async function postCopy(c: IncomingComment, token: string): Promise<string> {
+  if (!c.postId) return c.adTitle || '';
+  const cache = (await readSetting<Record<string, { text: string; at: string }>>('social_posts').catch(() => null)) || {};
+  const hit = cache[c.postId];
+  if (hit && Date.now() - new Date(hit.at).getTime() < 7 * 86400000) return hit.text;
+  let text = '';
+  try {
+    if (c.channel === 'facebook') {
+      const d = await graph('GET', c.postId, token, { fields: 'message,attachments{title,description}' });
+      const att = (d.attachments?.data || [])[0] || {};
+      text = [d.message, att.title, att.description].filter(Boolean).join('\n');
+    } else {
+      const d = await graph('GET', c.postId, token, { fields: 'caption' });
+      text = String(d.caption || '');
+    }
+  } catch {
+    text = '';
+  }
+  text = [c.adTitle, text].filter(Boolean).join('\n').slice(0, 1500);
+  cache[c.postId] = { text, at: new Date().toISOString() };
+  const keys = Object.keys(cache);
+  if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete cache[k];
+  await writeSetting('social_posts', cache).catch(() => {});
+  return text;
+}
+
+// Which landing the post talks about: the one whose product name appears most in the text.
+function matchProduct(copy: string, landings: { productName?: string }[]): { productName: string } | null {
+  const text = new Set(words(copy));
+  let best: { productName: string } | null = null;
+  let bestScore = 0;
+  for (const l of landings) {
+    const w = words(l.productName || '');
+    if (!w.length) continue;
+    const score = w.filter((x) => text.has(x)).length / w.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { productName: String(l.productName) };
+    }
+  }
+  return bestScore >= 0.5 ? best : null;
+}
+
+export async function postContext(c: IncomingComment, token: string): Promise<PostContext> {
+  try {
+    const copy = await postCopy(c, token);
+    if (!copy) return NO_CONTEXT;
+    const { storeKnowledge } = await import('@/lib/server/bot');
+    const k = await storeKnowledge();
+    const m = matchProduct(copy, k.landings);
+    const landing = m ? k.landings.find((l) => l.productName === m.productName) : null;
+    const productInfo = landing
+      ? [
+          `Producto: ${landing.productName}`,
+          ...(landing.combos || []).map((x: any) => `- ${x.name}: ${x.promoPrice ? `$${Number(x.promoPrice).toLocaleString('es-CO')}` : ''}`),
+        ].join('\n')
+      : null;
+    return { copy, product: m?.productName || null, productInfo };
+  } catch {
+    return NO_CONTEXT;
+  }
+}
+
+// The AI writes the private message about the post's product (the WhatsApp link is added after).
+async function writePrivate(c: IncomingComment, ctx: PostContext, guide: string): Promise<string> {
+  const { anthropic, getBotSettings, modelParams, storeKnowledge } = await import('@/lib/server/bot');
+  const [ai, bot, k] = await Promise.all([anthropic(), getBotSettings(), storeKnowledge()]);
+  const res: any = await ai.client.beta.messages.create({
+    ...modelParams(bot),
+    max_tokens: 800,
+    output_config: { effort: 'low' },
+    system: [
+      {
+        type: 'text',
+        text: `Eres quien atiende los mensajes privados de ${k.storeName} en ${c.channel === 'instagram' ? 'Instagram' : 'Messenger'}.
+Escribe el primer mensaje privado para alguien que comentó una publicación o anuncio. 2 a 4 frases cortas, cálidas, en español de Colombia, tuteando, con un emoji como mucho.
+- Habla del producto de ESA publicación (está en su texto). Si la persona preguntó algo, respóndelo con la información de la tienda.
+- Datos generales (envío, pago contraentrega, tiempos, ubicación): de la información de la tienda.
+- No inventes precios, tallas ni promociones que no estén en la publicación o en la información de la tienda.
+- Termina invitando a seguir por WhatsApp para hacer el pedido. NO escribas el enlace (se agrega solo).
+- Escribe solo el mensaje, sin comillas.
+
+Información de la tienda y sus productos:
+${k.products}`,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [
+      {
+        role: 'user',
+        content: `Publicación o anuncio donde comentó:\n«${ctx.copy || '(sin texto)'}»\n${ctx.productInfo ? `\nProducto de la tienda que corresponde:\n${ctx.productInfo}\n` : ''}\nNombre: ${(c.fromName || '').split(/\s+/)[0] || '(sin nombre)'}\nSu comentario: ${c.text.slice(0, 500)}\n${guide ? `\nIdea del dueño para este mensaje: ${guide}` : ''}`,
+      },
+    ],
+  });
+  if (ai.source === 'plan') {
+    const org = requestOrgSync();
+    if (org) await (await import('@/lib/server/billing')).addAiReply(org).catch(() => {});
+  }
+  return String((res.content || []).find((b: any) => b.type === 'text')?.text || '').trim().slice(0, 900);
+}
+
 // What the private message says (with the WhatsApp link at the end).
-export async function privateText(rule: SocialRule, name: string, settings: SocialSettings): Promise<string> {
-  const parts = [rule.dm ? fillName(rule.dm, name) : ''];
+export async function privateText(rule: SocialRule, name: string, settings: SocialSettings, ctx: PostContext = NO_CONTEXT, c?: IncomingComment, written?: string): Promise<string> {
+  let body = written || '';
+  if (!body && rule.smartDm && c && (ctx.copy || ctx.product)) body = await writePrivate(c, ctx, rule.dm ? fillName(rule.dm, name) : '').catch(() => '');
+  if (!body && rule.dm) body = fillProduct(fillName(rule.dm, name), ctx.product);
+  const parts = [body];
   if (rule.whatsapp) {
-    const link = waLink(await storeWhatsApp(settings), rule.waText);
+    const link = waLink(await storeWhatsApp(settings), fillProduct(rule.waText, ctx.product));
     if (link) parts.push(`👉 Escríbenos por WhatsApp: ${link}`);
   }
   return parts.filter(Boolean).join('\n\n');
@@ -290,7 +418,7 @@ const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 // and whether the person shows buying interest (then they also get the private message).
 const aiOn = (s: SocialSettings) => s.ai.answer || s.ai.hide; // the private message rides along when the AI already reviews comments
 
-async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise<{ action: 'responder' | 'ocultar' | 'ignorar'; reply: string; interest: boolean }> {
+async function aiDecision(c: IncomingComment, settings: SocialSettings, ctx: PostContext = NO_CONTEXT): Promise<{ action: 'responder' | 'ocultar' | 'ignorar'; reply: string; interest: boolean; dm: string }> {
   const { anthropic, getBotSettings, modelParams, storeKnowledge } = await import('@/lib/server/bot');
   const [ai, bot, k] = await Promise.all([anthropic(), getBotSettings(), storeKnowledge()]);
   const allowed = [settings.ai.answer ? '"responder" (es una pregunta o duda sobre los productos, el precio, el envío o el pago, y la información de la tienda la responde)' : '', settings.ai.hide ? '"ocultar" (insultos, groserías, spam, estafas, enlaces sospechosos o ataques)' : '', '"ignorar" (todo lo demás: elogios, etiquetas a amigos, emojis, quejas que debe ver una persona)'].filter(Boolean);
@@ -303,8 +431,8 @@ async function aiDecision(c: IncomingComment, settings: SocialSettings): Promise
         type: 'json_schema',
         schema: {
           type: 'object',
-          properties: { action: { type: 'string', enum: ['responder', 'ocultar', 'ignorar'] }, reply: { type: 'string' }, interest: { type: 'boolean' } },
-          required: ['action', 'reply', 'interest'],
+          properties: { action: { type: 'string', enum: ['responder', 'ocultar', 'ignorar'] }, reply: { type: 'string' }, interest: { type: 'boolean' }, dm: { type: 'string' } },
+          required: ['action', 'reply', 'interest', 'dm'],
           additionalProperties: false,
         },
       },
@@ -317,13 +445,20 @@ Acciones posibles: ${allowed.join('; ')}.
 Si respondes: una o dos frases en español, cálidas y cortas, sin inventar nada que no esté en la información de la tienda. Si la pregunta es de precio o de cómo comprar, da el dato si está y ${settings.ai.dm ? 'di que le escribiste al privado' : 'termina invitando a escribir por WhatsApp o por mensaje privado'}. Nunca pidas datos personales en público.
 Si no respondes, deja "reply" vacío.
 "interest": true si la persona muestra interés de compra o pide información (info, precio, cuánto vale, cómo compro, quiero, envíos, tallas, disponibilidad); false si no (elogios, etiquetas, quejas, spam).
+"dm": si "interest" es true, el mensaje privado para esa persona: 2 a 4 frases cálidas sobre el producto de la publicación (respondiendo lo que preguntó), terminando con la invitación a seguir por WhatsApp, SIN escribir el enlace (se agrega solo). Si no, vacío.
+El producto del que se habla es el de la publicación o anuncio donde comentó (te paso su texto). Los datos generales (envío, pago, ubicación) salen de la información de la tienda. No inventes precios ni promociones.
 
 Información de la tienda y sus productos:
 ${k.products}`,
         cache_control: { type: 'ephemeral' },
       },
     ],
-    messages: [{ role: 'user', content: `Comentario de "${c.fromName || 'alguien'}": ${c.text.slice(0, 1000)}` }],
+    messages: [
+      {
+        role: 'user',
+        content: `${ctx.copy ? `Publicación o anuncio donde comentó:\n«${ctx.copy}»\n${ctx.productInfo ? `Producto de la tienda que corresponde:\n${ctx.productInfo}\n` : ''}\n` : ''}Comentario de "${c.fromName || 'alguien'}": ${c.text.slice(0, 1000)}`,
+      },
+    ],
   });
   if (ai.source === 'plan') {
     const org = requestOrgSync();
@@ -332,7 +467,7 @@ ${k.products}`,
   const txt = (res.content || []).find((b: any) => b.type === 'text')?.text || '{}';
   const d = JSON.parse(txt);
   const action = d.action === 'responder' && settings.ai.answer ? 'responder' : d.action === 'ocultar' && settings.ai.hide ? 'ocultar' : 'ignorar';
-  return { action, reply: String(d.reply || '').slice(0, 600), interest: action !== 'ocultar' && d.interest === true };
+  return { action, reply: String(d.reply || '').slice(0, 600), interest: action !== 'ocultar' && d.interest === true, dm: String(d.dm || '').trim().slice(0, 900) };
 }
 
 // The private message the AI sends to someone interested (same shape as a rule with the WhatsApp link).
@@ -347,6 +482,7 @@ const aiRule = (s: SocialSettings): SocialRule => ({
   dm: s.ai.dmText,
   whatsapp: true,
   waText: s.ai.waText,
+  smartDm: false, // the AI already wrote it in the same answer
 });
 
 // Handles one comment for the store in context. Never throws.
@@ -375,6 +511,9 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
     };
     const errors: string[] = [];
     const rule = matchRule(settings.rules, c);
+    // What the post is about (only fetched when something will be answered).
+    const ctx = rule || aiOn(settings) ? await postContext(c, token) : NO_CONTEXT;
+    if (ctx.product) item.product = ctx.product;
     let key = 'none';
     if (rule) {
       item.rule = rule.name;
@@ -384,21 +523,21 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
         item.skipped = 'Ya se le respondió en esta publicación.';
       } else {
         if (rule.publicReplies.length) {
-          const message = fillName(pick(rule.publicReplies), c.fromName);
+          const message = fillProduct(fillName(pick(rule.publicReplies), c.fromName), ctx.product);
           await graph('POST', c.channel === 'facebook' ? `${c.commentId}/comments` : `${c.commentId}/replies`, token, { message })
             .then(() => item.done.push('Respuesta pública'))
             .catch((e) => errors.push(`Respuesta pública: ${e.message}`));
         }
-        const text = await privateText(rule, c.fromName, settings);
+        const text = await privateText(rule, c.fromName, settings, ctx, c);
         if (text) {
           await graph('POST', `${page.id}/messages`, token, { recipient: { comment_id: c.commentId }, message: { text } })
-            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text)))
+            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text, ctx)))
             .catch((e) => errors.push(`Privado: ${e.message}`));
         }
       }
     } else if (aiOn(settings)) {
       key = 'ai';
-      const d = await aiDecision(c, settings).catch((e) => {
+      const d = await aiDecision(c, settings, ctx).catch((e) => {
         errors.push(`IA: ${e.message}`);
         return null;
       });
@@ -416,10 +555,10 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
       // Interested: private message with the WhatsApp link (once per person and post).
       if (d?.interest && settings.ai.dm && (await claim([`p:ai:${c.postId}:${c.fromId}`])).size) {
         item.rule = 'IA';
-        const text = await privateText(aiRule(settings), c.fromName, settings);
+        const text = await privateText(aiRule(settings), c.fromName, settings, ctx, c, d.dm);
         if (text)
           await graph('POST', `${page.id}/messages`, token, { recipient: { comment_id: c.commentId }, message: { text } })
-            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text)))
+            .then((r) => (item.done.push('Privado'), privateToChat(c, page.id, r, text, ctx)))
             .catch((e) => errors.push(`Privado: ${e.message}`));
       }
       if (d && !item.done.length && !errors.length) item.skipped = 'La IA lo dejó para una persona.';
@@ -435,27 +574,41 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
   }
 }
 
-// Panel "Probar": what would happen with this comment (nothing is posted).
-export async function previewComment(text: string, channel: SocialChannel, name: string) {
+// Panel "Probar": what would happen with this comment (nothing is posted). postText = the post's text to try.
+export async function previewComment(text: string, channel: SocialChannel, name: string, postText = '') {
   const settings = await getSocialSettings();
+  const c: IncomingComment = { channel, assetId: '', commentId: '', postId: '', text, fromId: '', fromName: name };
+  let ctx = NO_CONTEXT;
+  if (postText.trim()) {
+    const { storeKnowledge } = await import('@/lib/server/bot');
+    const k = await storeKnowledge();
+    const m = matchProduct(postText, k.landings);
+    const landing = m ? k.landings.find((l) => l.productName === m.productName) : null;
+    ctx = {
+      copy: postText.trim().slice(0, 1500),
+      product: m?.productName || null,
+      productInfo: landing ? [`Producto: ${landing.productName}`, ...(landing.combos || []).map((x: any) => `- ${x.name}: $${Number(x.promoPrice || 0).toLocaleString('es-CO')}`)].join('\n') : null,
+    };
+  }
   const rule = matchRule(settings.rules, { channel, text, postId: '' });
   if (rule)
     return {
       rule: rule.name,
-      publicReply: rule.publicReplies.length ? fillName(rule.publicReplies[0], name) : null,
-      privateMessage: (await privateText(rule, name, settings)) || null,
+      product: ctx.product,
+      publicReply: rule.publicReplies.length ? fillProduct(fillName(rule.publicReplies[0], name), ctx.product) : null,
+      privateMessage: (await privateText(rule, name, settings, ctx, c)) || null,
       ai: null,
     };
-  if (!aiOn(settings)) return { rule: null, publicReply: null, privateMessage: null, ai: null };
-  const d = await aiDecision({ channel, assetId: '', commentId: '', postId: '', text, fromId: '', fromName: name }, settings);
+  if (!aiOn(settings)) return { rule: null, product: ctx.product, publicReply: null, privateMessage: null, ai: null };
+  const d = await aiDecision(c, settings, ctx);
   return {
     rule: null,
+    product: ctx.product,
     publicReply: d.action === 'responder' ? d.reply : null,
-    privateMessage: d.interest && settings.ai.dm ? (await privateText(aiRule(settings), name, settings)) || null : null,
+    privateMessage: d.interest && settings.ai.dm ? (await privateText(aiRule(settings), name, settings, ctx, c, d.dm)) || null : null,
     ai: d.action === 'ignorar' && d.interest ? 'privado' : d.action,
   };
 }
-
 
 // ---------- Messenger and Instagram chats in Mensajes ----------
 
@@ -464,6 +617,8 @@ interface ChatMeta {
   pageId: string;
   name?: string;
   username?: string;
+  product?: string | null; // the post / ad they commented on: what the chat is about
+  post?: string;
 }
 async function chatMetas(): Promise<Record<string, ChatMeta>> {
   return (await readSetting<Record<string, ChatMeta>>('social_chats')) || {};
@@ -499,15 +654,22 @@ export async function sendSocialText(chatId: string, text: string): Promise<Send
 }
 
 // The private message sent for a comment starts the chat with that person (with a note of what they commented).
-async function privateToChat(c: IncomingComment, pageId: string, r: any, text: string) {
+async function privateToChat(c: IncomingComment, pageId: string, r: any, text: string, ctx: PostContext = NO_CONTEXT) {
   const rid = String(r?.recipient_id || '');
   if (!rid) return;
   const id = `${c.channel === 'instagram' ? 'i' : 'm'}${rid}`;
-  await saveChatMeta(id, { pageId, ...(c.channel === 'instagram' ? { username: c.fromName } : { name: c.fromName }) }).catch(() => {});
+  await saveChatMeta(id, {
+    pageId,
+    ...(c.channel === 'instagram' ? { username: c.fromName } : { name: c.fromName }),
+    ...(ctx.copy ? { product: ctx.product, post: ctx.copy.slice(0, 600) } : {}),
+  }).catch(() => {});
   const { recordOutbound } = await import('@/lib/server/wa-store');
   const { addNote } = await import('@/lib/server/crm-store');
   await recordOutbound({ phone: id, name: c.fromName, type: 'text', body: text, result: { ok: true, messageId: r?.message_id } }).catch(() => {});
-  await addNote(id, `💬 Comentó "${c.text.slice(0, 200)}" en ${c.adId ? 'un anuncio' : 'una publicación'} de ${c.channel === 'instagram' ? 'Instagram' : 'Facebook'}. Se le escribió por privado.`).catch(() => {});
+  await addNote(
+    id,
+    `💬 Comentó "${c.text.slice(0, 200)}" en ${c.adId ? 'un anuncio' : 'una publicación'} de ${c.channel === 'instagram' ? 'Instagram' : 'Facebook'}${ctx.product ? ` de ${ctx.product}` : ''}. Se le escribió por privado.`,
+  ).catch(() => {});
 }
 
 export interface IncomingChatEvent {

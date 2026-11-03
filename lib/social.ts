@@ -14,6 +14,7 @@ export interface SocialRule {
   dm: string; // private message ('' = none). May use {nombre}
   whatsapp: boolean; // add the WhatsApp link to the private message
   waText: string; // text already written when they open WhatsApp
+  smartDm: boolean; // the AI writes the private message about the product of the post (uses the post's text)
 }
 
 export interface SocialSettings {
@@ -29,7 +30,7 @@ export interface SocialSettings {
 }
 
 export const DEFAULT_AI_DM = 'Hola {nombre} 👋 Gracias por escribirnos. Te atendemos por WhatsApp: ahí te damos precios, envío y tomamos tu pedido.';
-export const DEFAULT_AI_WA = 'Hola, vi su publicación y quiero información';
+export const DEFAULT_AI_WA = 'Hola, vi su publicación de {producto} y quiero información';
 export const DEFAULT_SOCIAL: SocialSettings = { waNumber: '', rules: [], ai: { answer: false, hide: false, dm: true, dmText: DEFAULT_AI_DM, waText: DEFAULT_AI_WA } };
 
 export const SOCIAL_RECIPES: { title: string; hint: string; rule: Omit<SocialRule, 'id'> }[] = [
@@ -43,9 +44,10 @@ export const SOCIAL_RECIPES: { title: string; hint: string; rule: Omit<SocialRul
       keywords: ['info', 'información', 'informacion'],
       postIds: [],
       publicReplies: ['¡Hola {nombre}! Te escribimos al privado 📩', '¡Listo {nombre}! Revisa tus mensajes 💬', 'Te enviamos la info por interno, {nombre} 🙌'],
-      dm: 'Hola {nombre} 👋 Gracias por tu interés. Te dejamos todo por WhatsApp: precios, envío gratis y pago contraentrega.',
+      dm: 'Hola {nombre} 👋 Gracias por tu interés en {producto}. Te dejamos todo por WhatsApp: precio, envío y pago contraentrega.',
       whatsapp: true,
-      waText: 'Hola, vi su anuncio y quiero información',
+      waText: 'Hola, vi su anuncio de {producto} y quiero información',
+      smartDm: true,
     },
   },
   {
@@ -60,7 +62,8 @@ export const SOCIAL_RECIPES: { title: string; hint: string; rule: Omit<SocialRul
       publicReplies: ['¡Hola {nombre}! Te enviamos el precio al privado 📩', 'Revisa tu bandeja, {nombre}: ahí va el precio 💬'],
       dm: 'Hola {nombre} 👋 Te cuento el precio y las promociones por WhatsApp, y ahí mismo puedes hacer tu pedido con pago al recibir.',
       whatsapp: true,
-      waText: 'Hola, quiero saber el precio',
+      waText: 'Hola, quiero saber el precio de {producto}',
+      smartDm: true,
     },
   },
   {
@@ -75,7 +78,8 @@ export const SOCIAL_RECIPES: { title: string; hint: string; rule: Omit<SocialRul
       publicReplies: ['¡Genial {nombre}! Te escribimos para tomar tu pedido 📦'],
       dm: '¡Hola {nombre}! 🙌 Toma tu pedido en 1 minuto por WhatsApp. Pagas al recibir.',
       whatsapp: true,
-      waText: 'Hola, quiero hacer un pedido',
+      waText: 'Hola, quiero hacer un pedido de {producto}',
+      smartDm: true,
     },
   },
 ];
@@ -116,7 +120,8 @@ export function cleanSocial(input: any): SocialSettings | string {
       publicReplies,
       dm,
       whatsapp,
-      waText: str(r?.waText, 200) || 'Hola, vi su publicación y quiero información',
+      waText: str(r?.waText, 200) || 'Hola, vi su publicación de {producto} y quiero información',
+      smartDm: Boolean(r?.smartDm),
     });
   }
   return {
@@ -153,6 +158,17 @@ export function matchRule(rules: SocialRule[], c: { channel: SocialChannel; text
 }
 
 export const fillName = (t: string, name: string) => t.replace(/\{nombre\}/g, (name || '').trim().split(/\s+/)[0] || '').replace(/\s+([!,.?])/g, '$1').replace(/¡\s*([,!])/g, '¡').trim();
+
+// {producto}: the product of the post the person commented on. Without one, the phrase still reads well.
+export function fillProduct(t: string, product: string | null | undefined): string {
+  const p = (product || '').trim();
+  if (p) return t.replace(/\{producto\}/g, p);
+  return t
+    .replace(/\s+(?:(?:sobre|de|del|en|por|para|con)\s+)?(?:(?:la|el|los|las|nuestra|nuestro|tu|su)\s+)?\{producto\}/gi, '')
+    .replace(/\{producto\}/g, 'nuestro producto')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 export function waLink(phone: string, text: string): string {
   const digits = phone.replace(/\D/g, '');
