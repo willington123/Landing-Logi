@@ -3,7 +3,7 @@ import { rawDb } from '@/lib/server/supabase';
 import { userOrgs } from '@/lib/server/accounts';
 import { currentOrgId, integrationsOrg, sessionUserId } from '@/lib/server/tenant';
 import { computeSub, getPlans, type SubRow } from '@/lib/server/billing';
-import { AD_RANGES, rangeDates, type AdRange } from '@/lib/server/ads-report';
+import { rangeFromQuery } from '@/lib/server/ads-report';
 import { failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -18,8 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     await currentOrgId();
     const uid = sessionUserId()!;
-    const range = (AD_RANGES as string[]).includes(req.nextUrl.searchParams.get('range') || '') ? (req.nextUrl.searchParams.get('range') as AdRange) : '7d';
-    const { fromIso, toIso, since, until } = rangeDates(range);
+    const { range, fromIso, toIso, since, until } = rangeFromQuery(req.nextUrl.searchParams);
     const orgs = await userOrgs(uid);
     const ids = orgs.map((o) => o.id);
     if (!ids.length) return ok({ range, since, until, stores: [] });
