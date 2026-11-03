@@ -4,7 +4,7 @@ import { rawDb } from '@/lib/server/supabase';
 import { MAIN_ORG } from '@/lib/server/constants';
 import { emailConfigured } from '@/lib/server/email';
 import { notifyPaymentApproved, notifyPlanEnding, notifyPlanExpired, notifyRenewalFailed, notifyTrialEnding } from '@/lib/server/notify';
-import { DEFAULT_PLANS, GRACE_DAYS, TRIAL_AI_REPLIES, TRIAL_DAYS, TRIAL_PLAN, type Plan, type PlanId, type SubStatus } from '@/lib/plans';
+import { AI_PACK, DEFAULT_PLANS, GRACE_DAYS, PREPAY, TRIAL_AI_REPLIES, TRIAL_DAYS, TRIAL_PLAN, extraStoreAi, prepayTotal, type Plan, type PlanId, type SubStatus } from '@/lib/plans';
 
 const env = (k: string) => (process.env[k] || '').trim();
 const DAY = 86400000;
@@ -16,7 +16,8 @@ export async function getPlans(): Promise<Plan[]> {
   if (plansCache && plansCache.until > Date.now()) return plansCache.plans;
   const { data } = await rawDb().from('platform_settings').select('data').eq('id', 'plans').maybeSingle();
   const saved = (data?.data as { plans?: Plan[] })?.plans;
-  const plans = Array.isArray(saved) && saved.length === DEFAULT_PLANS.length ? saved : DEFAULT_PLANS;
+  // Plans saved before a field existed get it from the defaults.
+  const plans = Array.isArray(saved) && saved.length === DEFAULT_PLANS.length ? saved.map((p) => ({ ...DEFAULT_PLANS.find((d) => d.id === p.id)!, ...p })) : DEFAULT_PLANS;
   plansCache = { plans, until: Date.now() + 30_000 };
   return plans;
 }
@@ -142,6 +143,53 @@ export async function usage(orgId: string) {
   return { landings, ordersThisMonth: orders, members, aiReplies: ai };
 }
 
+// ---------- first store and extra stores ----------
+// The plan's price covers the owner's first store; each other store of the same owner pays the plan's
+// "tienda extra" price and gets half the free AI replies.
+
+async function ownerOf(orgId: string): Promise<string | null> {
+  const { data } = await rawDb().from('memberships').select('user_id, created_at').eq('org_id', orgId).eq('role', 'owner').order('created_at', { ascending: true }).limit(1);
+  return (data?.[0]?.user_id as string) || null;
+}
+
+// The owner's first store (the oldest one that isn't free of charge).
+export async function firstStoreOf(orgId: string): Promise<string> {
+  const owner = await ownerOf(orgId);
+  if (!owner) return orgId;
+  const { data: ms } = await rawDb().from('memberships').select('org_id').eq('user_id', owner).eq('role', 'owner');
+  const ids = (ms || []).map((m) => m.org_id as string);
+  if (ids.length <= 1) return orgId;
+  const [{ data: orgs }, { data: subs }] = await Promise.all([
+    rawDb().from('organizations').select('id, created_at').in('id', ids),
+    rawDb().from('subscriptions').select('org_id, status').in('org_id', ids),
+  ]);
+  const exempt = new Set((subs || []).filter((x) => x.status === 'exempt').map((x) => x.org_id as string));
+  const first = (orgs || []).filter((o) => !exempt.has(o.id as string)).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0];
+  return (first?.id as string) || orgId;
+}
+export const isExtraStore = async (orgId: string) => (await firstStoreOf(orgId)) !== orgId;
+
+export const monthlyPrice = (plan: Plan, extra: boolean) => (extra ? plan.extraStorePrice : plan.price);
+
+// Free AI replies this month for this store.
+async function includedAi(orgId: string, s?: Subscription): Promise<number> {
+  const sub = s || (await getSubscription(orgId));
+  if (sub.effective === 'trialing') return TRIAL_AI_REPLIES;
+  return (await isExtraStore(orgId)) ? extraStoreAi(sub.planInfo) : sub.planInfo.aiReplies;
+}
+
+// Bought replies that don't expire (used after the month's free ones).
+export async function aiCredits(orgId: string): Promise<number> {
+  const { data } = await rawDb().from('settings').select('data').eq('org_id', orgId).eq('id', 'ai_credits').maybeSingle();
+  return Math.max(0, Number((data?.data as { balance?: number })?.balance) || 0);
+}
+async function setAiCredits(orgId: string, balance: number) {
+  await rawDb().from('settings').upsert({ org_id: orgId, id: 'ai_credits', data: { balance: Math.max(0, Math.round(balance * 100) / 100), at: new Date().toISOString() } });
+}
+export async function addAiCredits(orgId: string, replies: number) {
+  await setAiCredits(orgId, (await aiCredits(orgId)) + replies);
+}
+
 async function aiUsed(orgId: string): Promise<number> {
   const { data } = await rawDb().from('settings').select('data').eq('org_id', orgId).eq('id', 'usage').maybeSingle();
   const u = data?.data as { month?: string; aiReplies?: number } | undefined;
@@ -149,9 +197,18 @@ async function aiUsed(orgId: string): Promise<number> {
 }
 
 // count > 1 for heavier jobs (a whole landing page counts as several replies).
+// count can be fractional: replies weigh by model (see MODEL_WEIGHT).
 export async function addAiReply(orgId: string, count = 1) {
   const used = await aiUsed(orgId);
-  await rawDb().from('settings').upsert({ org_id: orgId, id: 'usage', data: { month: monthKey(), aiReplies: used + count } });
+  const next = Math.round((used + count) * 100) / 100;
+  await rawDb().from('settings').upsert({ org_id: orgId, id: 'usage', data: { month: monthKey(), aiReplies: next } });
+  // Past the free ones: take it from the bought replies.
+  const inc = await includedAi(orgId).catch(() => Infinity);
+  const over = Math.max(0, next - inc) - Math.max(0, used - inc);
+  if (over > 0) {
+    const credits = await aiCredits(orgId);
+    if (credits > 0) await setAiCredits(orgId, credits - over);
+  }
 }
 
 // Replies the store may still send this month with the platform's Claude key.
@@ -160,8 +217,8 @@ export async function aiRepliesLeft(orgId: string): Promise<number> {
   if (!s || s.panelLocked) return 0;
   // Stores without charge (the platform owner's own businesses) use the platform's Claude key without a monthly cap.
   if (s.effective === 'exempt') return UNLIMITED_AI;
-  const included = s.effective === 'trialing' ? TRIAL_AI_REPLIES : s.planInfo.aiReplies;
-  return Math.max(0, included - (await aiUsed(orgId)));
+  const [included, used, credits] = await Promise.all([includedAi(orgId, s), aiUsed(orgId), aiCredits(orgId)]);
+  return Math.max(0, included - used) + credits;
 }
 
 export const UNLIMITED_AI = 1_000_000_000;
@@ -275,16 +332,37 @@ const newRef = (orgId: string) => `LP-${orgId.replace(/^org_/, '').slice(0, 10)}
 
 export async function createPayment(orgId: string, planId: PlanId, kind: 'checkout' | 'auto' | 'manual', months = 1) {
   const plan = await planById(planId);
+  if (!PREPAY.some((p) => p.months === months)) months = 1;
+  const monthly = monthlyPrice(plan, await isExtraStore(orgId));
   const row = {
     id: `pay_${randomBytes(9).toString('base64url')}`,
     org_id: orgId,
     plan: plan.id,
-    amount_cents: plan.price * 100 * months,
+    amount_cents: prepayTotal(monthly, months) * 100,
     currency: 'COP',
     reference: newRef(orgId),
     status: 'PENDING',
     kind,
     months,
+  };
+  const { error } = await rawDb().from('payments').insert(row);
+  if (error) throw new Error(error.message);
+  return row;
+}
+
+// A pack of extra AI replies (plan "aipack": approving it adds replies, it doesn't change the plan).
+export const AI_PACK_PLAN = 'aipack';
+export async function createAiPackPayment(orgId: string) {
+  const row = {
+    id: `pay_${randomBytes(9).toString('base64url')}`,
+    org_id: orgId,
+    plan: AI_PACK_PLAN,
+    amount_cents: AI_PACK.price * 100,
+    currency: 'COP',
+    reference: newRef(orgId),
+    status: 'PENDING',
+    kind: 'checkout',
+    months: 0,
   };
   const { error } = await rawDb().from('payments').insert(row);
   if (error) throw new Error(error.message);
@@ -311,6 +389,10 @@ export async function applyTransaction(tx: WompiTx): Promise<{ applied: boolean;
     // Claim the payment first so a webhook and a redirect can't both extend the subscription.
     const { data: claimed } = await rawDb().from('payments').update({ applied_at: now }).eq('id', pay.id).is('applied_at', null).select('id');
     if (!claimed?.length) return { applied: false, status: tx.status, orgId: pay.org_id };
+    if (pay.plan === AI_PACK_PLAN) {
+      await addAiCredits(pay.org_id, AI_PACK.replies);
+      return { applied: true, status: tx.status, orgId: pay.org_id };
+    }
     await extendPeriod(pay.org_id, pay.plan, pay.months || 1);
     const after = await getSubscription(pay.org_id).catch(() => null);
     await notifyPaymentApproved(pay.org_id, { planName: after?.planInfo.name || pay.plan, amountCents: Number(pay.amount_cents), periodEnd: after?.current_period_end || null }).catch(() => {});

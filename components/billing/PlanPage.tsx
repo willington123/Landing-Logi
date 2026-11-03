@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, CheckCircle2, CreditCard, Landmark, Loader2, Lock, X } from 'lucide-react';
-import { STATUS_LABEL, cop, type Plan, type SubStatus } from '@/lib/plans';
+import { STATUS_LABEL, cop, prepayTotal, type Plan, type SubStatus } from '@/lib/plans';
 import { fetchAccount } from '@/lib/account-client';
 
 interface Billing {
@@ -21,6 +21,11 @@ interface Billing {
     retries: number;
   };
   plans: Plan[];
+  extraStore: { firstStoreName: string } | null; // this store is one more of the owner's: it pays the "tienda extra" price
+  prices: { id: string; monthly: number; aiReplies: number }[];
+  prepay: { months: number; discount: number; label: string }[];
+  aiPack: { replies: number; price: number };
+  ai: { credits: number; left: number };
   usage: { landings: number; ordersThisMonth: number; members: number; aiReplies: number };
   payments: { id: string; plan: string; amount_cents: number; status: string; method: string | null; kind: string; created_at: string; error: string | null }[];
   wompi: { configured: boolean; publicKey: string | null; sandbox: boolean; apiUrl: string | null };
@@ -66,7 +71,7 @@ function Meter({ label, used, limit, soft }: { label: string; used: number; limi
 
 // ---------- card payment (tokenized in the browser with Wompi's public key) ----------
 
-function CardForm({ b, plan, onDone, onClose }: { b: Billing; plan: Plan; onDone: (msg: string) => void; onClose: () => void }) {
+function CardForm({ b, plan, monthly, onDone, onClose }: { b: Billing; plan: Plan; monthly: number; onDone: (msg: string) => void; onClose: () => void }) {
   const [terms, setTerms] = useState<{ acceptance: { token: string; permalink: string } | null; personal: { token: string; permalink: string } | null } | null>(null);
   const [f, setF] = useState({ number: '', exp: '', cvc: '', holder: '', email: '' });
   const [accepted, setAccepted] = useState(false);
@@ -172,7 +177,7 @@ function CardForm({ b, plan, onDone, onClose }: { b: Billing; plan: Plan; onDone
         disabled={busy || !accepted || !terms?.acceptance || f.number.replace(/\s/g, '').length < 13 || !/^\d{2}\/\d{2}$/.test(f.exp) || f.cvc.length < 3 || !f.holder || !f.email}
         className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50"
       >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} {laterCharge ? 'Guardar tarjeta' : `Pagar ${cop(plan.price)}`}
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} {laterCharge ? 'Guardar tarjeta' : `Pagar ${cop(monthly)}`}
       </button>
       <p className="text-[10px] text-slate-400 text-center">Los datos de la tarjeta van directo a Wompi (Bancolombia). Konnexa no los guarda.</p>
     </form>
@@ -188,6 +193,7 @@ export default function PlanPage() {
   const [choosing, setChoosing] = useState<Plan | null>(null);
   const [mode, setMode] = useState<'pick' | 'card'>('pick');
   const [busy, setBusy] = useState<string | null>(null);
+  const [months, setMonths] = useState(1);
 
   const load = useCallback(() => call('/api/billing').then(setB).catch((e) => setError(e.message)), []);
   useEffect(() => {
@@ -228,10 +234,12 @@ export default function PlanPage() {
   const s = b.subscription;
   const current = b.plans.find((p) => p.id === s.plan) || b.plans[1];
   const isTrial = s.effective === 'trialing';
+  const priceOf = (p: Plan) => b.prices.find((x) => x.id === p.id) || { id: p.id, monthly: p.price, aiReplies: p.aiReplies };
+  const disc = b.prepay.find((x) => x.months === months)?.discount || 0;
   const payCheckout = async (plan: Plan) => {
     setBusy(`checkout-${plan.id}`);
     try {
-      const d = await call('/api/billing/checkout', 'POST', { plan: plan.id });
+      const d = await call('/api/billing/checkout', 'POST', { plan: plan.id, months });
       window.location.href = d.url;
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -287,12 +295,61 @@ export default function PlanPage() {
             <Meter label="Landings" used={b.usage.landings} limit={current.landings} />
             <Meter label="Pedidos este mes" used={b.usage.ordersThisMonth} limit={current.ordersPerMonth} soft />
             <Meter label="Personas del equipo" used={b.usage.members} limit={current.members} />
-            <Meter label="Respuestas del asistente IA incluidas" used={b.usage.aiReplies} limit={isTrial ? 100 : current.aiReplies} />
+            <Meter label="Respuestas de IA gratis este mes" used={Math.round(b.usage.aiReplies)} limit={isTrial ? 100 : priceOf(current).aiReplies} />
+          </div>
+        )}
+        {s.effective !== 'exempt' && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+            <p className="text-[13px] text-slate-700">
+              Te quedan <b>{Math.floor(b.ai.left).toLocaleString('es-CO')}</b> respuestas de IA
+              {b.ai.credits > 0 ? ` (incluye ${Math.floor(b.ai.credits).toLocaleString('es-CO')} compradas, que no vencen)` : ''}. Con Máxima calidad cada respuesta cuenta doble; con Económico, un cuarto.
+            </p>
+            {b.canManage && (s.effective === 'active' || s.effective === 'past_due') && b.wompi.configured && (
+              <button
+                onClick={async () => {
+                  setBusy('aipack');
+                  try {
+                    const d = await call('/api/billing/aipack', 'POST');
+                    window.location.href = d.url;
+                  } catch (e: any) {
+                    setMsg({ ok: false, text: e.message });
+                    setBusy(null);
+                  }
+                }}
+                disabled={busy !== null}
+                className="h-9 px-3 rounded-lg bg-violet-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {busy === 'aipack' && <Loader2 className="w-4 h-4 animate-spin" />} Sumar {b.aiPack.replies.toLocaleString('es-CO')} respuestas por {cop(b.aiPack.price)}
+              </button>
+            )}
           </div>
         )}
       </div>
 
       {/* Plans */}
+      {s.effective !== 'exempt' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 overflow-x-auto" role="tablist" aria-label="Meses a pagar">
+            {b.prepay.map((x) => (
+              <button
+                key={x.months}
+                role="tab"
+                aria-selected={months === x.months}
+                onClick={() => setMonths(x.months)}
+                className={`h-9 px-3 rounded-lg text-[13px] font-medium whitespace-nowrap ${months === x.months ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                {x.label}
+                {x.discount > 0 && <span className={`ml-1 text-[11px] font-bold ${months === x.months ? 'text-emerald-300' : 'text-emerald-600'}`}>-{Math.round(x.discount * 100)}%</span>}
+              </button>
+            ))}
+          </div>
+          {b.extraStore && (
+            <p className="text-[12px] text-slate-600 sm:text-right">
+              Esta es una <b>tienda extra</b>: tu primera tienda ({b.extraStore.firstStoreName}) paga el plan completo y esta paga menos.
+            </p>
+          )}
+        </div>
+      )}
       {s.effective !== 'exempt' && (
         <div className="grid md:grid-cols-3 gap-4">
           {b.plans.map((p) => {
@@ -303,9 +360,17 @@ export default function PlanPage() {
                 {p.highlight && <span className="self-start text-[11px] font-bold text-white bg-brand-gradient rounded-full px-2.5 py-0.5 mb-2">Más elegido</span>}
                 <h3 className="text-lg font-bold text-slate-900">{p.name}</h3>
                 <p className="mt-1">
-                  <span className="text-3xl font-bold text-slate-900">{cop(p.price)}</span>
+                  <span className="text-3xl font-bold text-slate-900">{cop(prepayTotal(priceOf(p).monthly, months) / months)}</span>
                   <span className="text-sm text-slate-500"> /mes</span>
+                  {disc > 0 && <span className="ml-2 text-sm text-slate-400 line-through">{cop(priceOf(p).monthly)}</span>}
                 </p>
+                {months > 1 && (
+                  <p className="text-[12px] text-emerald-700">
+                    {cop(prepayTotal(priceOf(p).monthly, months))} por {months} meses · ahorras {cop(priceOf(p).monthly * months - prepayTotal(priceOf(p).monthly, months))}
+                  </p>
+                )}
+                {!b.extraStore && p.extraStorePrice > 0 && <p className="text-[12px] text-slate-500 mt-0.5">Cada tienda extra: {cop(p.extraStorePrice)}/mes</p>}
+                {b.extraStore && <p className="text-[12px] text-slate-500 mt-0.5">Precio de tienda extra · {priceOf(p).aiReplies.toLocaleString('es-CO')} respuestas de IA gratis</p>}
                 <ul className="mt-4 space-y-1.5 flex-1">
                   {p.features.map((f) => (
                     <li key={f} className="text-[13px] text-slate-700 flex gap-2">
@@ -350,7 +415,7 @@ export default function PlanPage() {
                   return (
                     <tr key={p.id} className="border-b border-slate-50">
                       <td className="py-2 pr-3 text-slate-700 whitespace-nowrap">{date(p.created_at)}</td>
-                      <td className="py-2 pr-3 text-slate-700">{b.plans.find((x) => x.id === p.plan)?.name || p.plan}</td>
+                      <td className="py-2 pr-3 text-slate-700">{p.plan === 'aipack' ? 'Paquete de IA' : b.plans.find((x) => x.id === p.plan)?.name || p.plan}</td>
                       <td className="py-2 pr-3 text-slate-900 tabular-nums">{cop(p.amount_cents / 100)}</td>
                       <td className="py-2 pr-3 text-slate-600">
                         {METHOD[p.method || ''] || p.method || '—'}
@@ -384,6 +449,7 @@ export default function PlanPage() {
               <CardForm
                 b={b}
                 plan={choosing}
+                monthly={priceOf(choosing).monthly}
                 onClose={() => setChoosing(null)}
                 onDone={(text) => {
                   setChoosing(null);
@@ -396,7 +462,7 @@ export default function PlanPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[15px] font-semibold text-slate-900">
-                    Plan {choosing.name} · {cop(choosing.price)}/mes
+                    Plan {choosing.name} · {cop(priceOf(choosing).monthly)}/mes
                   </p>
                   <button onClick={() => setChoosing(null)} className="text-slate-400 hover:text-slate-700" aria-label="Cerrar">
                     <X className="w-5 h-5" />
@@ -406,14 +472,20 @@ export default function PlanPage() {
                   <CreditCard className="w-5 h-5 text-brand-navy shrink-0" />
                   <span>
                     <span className="block text-sm font-semibold text-slate-900">Tarjeta con cobro automático</span>
-                    <span className="block text-xs text-slate-500">Se cobra cada mes sola. Recomendado para no perder el servicio.</span>
+                    <span className="block text-xs text-slate-500">Se cobra cada mes sola ({cop(priceOf(choosing).monthly)}). Recomendado para no perder el servicio.</span>
                   </span>
                 </button>
                 <button onClick={() => payCheckout(choosing)} disabled={busy !== null} className="w-full text-left rounded-xl border border-slate-200 hover:border-slate-300 p-4 flex gap-3 disabled:opacity-60">
                   {busy?.startsWith('checkout') ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Landmark className="w-5 h-5 text-brand-navy shrink-0" />}
                   <span>
-                    <span className="block text-sm font-semibold text-slate-900">Pagar un mes con PSE, Nequi o tarjeta</span>
-                    <span className="block text-xs text-slate-500">Pagas en la página segura de Wompi. Cada mes pagas de nuevo.</span>
+                    <span className="block text-sm font-semibold text-slate-900">
+                      {months > 1 ? `Pagar ${months} meses: ${cop(prepayTotal(priceOf(choosing).monthly, months))}` : 'Pagar un mes con PSE, Nequi o tarjeta'}
+                    </span>
+                    <span className="block text-xs text-slate-500">
+                      {months > 1
+                        ? `PSE, Nequi o tarjeta en la página segura de Wompi. Ahorras ${cop(priceOf(choosing).monthly * months - prepayTotal(priceOf(choosing).monthly, months))}.`
+                        : 'Pagas en la página segura de Wompi. Cada mes pagas de nuevo.'}
+                    </span>
                   </span>
                 </button>
                 {b.wompi.sandbox && <p className="text-[11px] text-amber-700">Modo de pruebas de Wompi: no se cobra dinero real.</p>}

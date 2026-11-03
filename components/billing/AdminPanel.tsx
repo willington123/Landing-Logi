@@ -178,8 +178,12 @@ function PlansEditor({ plans, onSaved }: { plans: Plan[]; onSaved: (p: Plan[]) =
                 <input type="number" className={`${input} w-full mt-0.5`} value={p.members ?? ''} placeholder="∞" onChange={(e) => set(p.id, { members: numOrNull(e.target.value) })} />
               </label>
               <label className="block text-[11px] text-slate-500">
-                Respuestas IA
+                Respuestas IA gratis
                 <input type="number" className={`${input} w-full mt-0.5`} value={p.aiReplies} onChange={(e) => set(p.id, { aiReplies: Number(e.target.value) })} />
+              </label>
+              <label className="block text-[11px] text-slate-500">
+                Tienda extra ($/mes)
+                <input type="number" className={`${input} w-full mt-0.5`} value={p.extraStorePrice ?? 0} onChange={(e) => set(p.id, { extraStorePrice: Number(e.target.value) })} />
               </label>
             </div>
             <label className="block text-[11px] text-slate-500">

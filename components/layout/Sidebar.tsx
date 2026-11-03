@@ -308,7 +308,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           <InstallApp />
           <div className="relative">
             <button
-              onClick={() => (account && (account.orgs.length > 1 || account.platformAdmin) ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
+              onClick={() => (account ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
               className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
             >
               <img src="/brand/konnexa-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
@@ -318,7 +318,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                   {account?.user ? account.user.name || account.user.email : storeName ? 'Configuración' : 'Pon el nombre de tu tienda'}
                 </p>
               </div>
-              {account && (account.orgs.length > 1 || account.platformAdmin) && <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />}
+              {account && <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />}
             </button>
             {orgMenu && account && (
               <StoreMenu
@@ -428,8 +428,7 @@ function StoreMenu({ account, onSwitch, onClose }: { account: AccountInfo; onSwi
           Ver todas mis tiendas
         </Link>
       )}
-      {account.platformAdmin &&
-        (creating ? (
+      {(creating ? (
           <form onSubmit={create} className="mt-1 border-t border-slate-100 p-2 space-y-2">
             <input
               autoFocus
@@ -442,6 +441,7 @@ function StoreMenu({ account, onSwitch, onClose }: { account: AccountInfo; onSwi
               <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} className="mt-0.5" />
               Copiar respuestas rápidas, etiquetas, respuestas automáticas y asesores de esta tienda
             </label>
+            {!account.platformAdmin && <p className="text-[11px] text-slate-500">Arranca con la prueba gratis. Después paga el precio de tienda extra de tu plan (menos que el plan completo).</p>}
             {error && <p className="text-[11.5px] text-red-600">{error}</p>}
             <button disabled={busy || !name.trim()} className="w-full h-8 rounded-lg bg-slate-900 text-white text-[12.5px] font-semibold disabled:opacity-50">
               {busy ? 'Creando…' : 'Crear tienda'}
