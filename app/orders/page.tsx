@@ -31,9 +31,11 @@ import {
 } from 'lucide-react';
 import { downloadOrdersExcel } from '@/lib/orders-export';
 import { OrderFilterBar } from '@/components/orders/OrderFilterBar';
+import OrdersBoard from '@/components/orders/OrdersBoard';
 import { EMPTY_FILTERS, cleanSavedFilters, dateBounds, inTab, matchesBase, type OrderFilters } from '@/lib/order-filters';
 
 const FILTERS_KEY = 'lp_order_filters';
+const VIEW_KEY = 'lp_orders_view';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -47,6 +49,19 @@ export default function OrdersPage() {
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // List or board (remembered in this browser).
+  const [view, setView] = useState<'list' | 'board'>('list');
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(VIEW_KEY) === 'board') setView('board');
+    } catch {}
+  }, []);
+  const changeView = (v: 'list' | 'board') => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {}
+  };
 
   const refreshData = () => {
     const fresh = logiStore.getOrders();
@@ -231,7 +246,7 @@ export default function OrdersPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header onOpenWizard={() => setIsWizardOpen(true)} title="Pedidos" />
 
-        <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
+        <main className={`px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 ${view === 'board' ? 'max-w-none' : 'max-w-[1280px]'} mx-auto w-full min-w-0`}>
           {/* Intro + filters */}
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div>
@@ -239,6 +254,24 @@ export default function OrdersPage() {
               <p className="text-sm text-slate-500 mt-0.5">Revisa confirmaciones, direcciones y estado de cada pedido.</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
+              <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 self-start sm:self-auto" role="tablist" aria-label="Vista">
+                {(
+                  [
+                    ['list', 'Lista'],
+                    ['board', 'Tablero'],
+                  ] as const
+                ).map(([k, l]) => (
+                  <button
+                    key={k}
+                    role="tab"
+                    aria-selected={view === k}
+                    onClick={() => changeView(k)}
+                    className={`h-8 px-3 rounded-md text-[13px] font-medium transition ${view === k ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
               <label className="relative">
                 <span className="sr-only">Buscar pedidos</span>
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -263,9 +296,11 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          <OrderFilterBar all={orders} base={baseOrders} filters={filters} onChange={changeFilters} landingNames={landingNames} />
+          <OrderFilterBar all={orders} base={baseOrders} filters={filters} onChange={changeFilters} landingNames={landingNames} hideStatus={view === 'board'} />
 
-          {visibleChecked.length > 0 && (
+          {view === 'board' && <OrdersBoard orders={baseOrders} landingNames={landingNames} onOpen={setSelectedOrder} onChanged={refreshData} />}
+
+          {view === 'list' && visibleChecked.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <span className="text-sm text-slate-700">
                 {visibleChecked.length} {visibleChecked.length === 1 ? 'pedido seleccionado' : 'pedidos seleccionados'}
@@ -291,7 +326,7 @@ export default function OrdersPage() {
           )}
 
           {/* Phone: one card per order (the table doesn't fit). */}
-          <div className="md:hidden space-y-2">
+          <div className={`${view === 'list' ? '' : 'hidden'} md:hidden space-y-2`}>
             {filteredOrders.length === 0 && <p className="py-10 text-center text-sm text-slate-500">No hay pedidos con estos filtros.</p>}
             {filteredOrders.map((order) => (
               <div
@@ -332,7 +367,7 @@ export default function OrdersPage() {
             ))}
           </div>
 
-          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+          <div className={`hidden ${view === 'list' ? 'md:block' : ''} bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden`}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
