@@ -77,6 +77,7 @@ export async function setOrderCallState(id: string, status: OrderStatus, opts: {
   if (error) throw new Error(error.message);
   await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
   await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_status', order: data, from });
+  await (await import('@/lib/server/dropi-orders')).autoSendToDropi(data, from);
 }
 
 export async function scheduleOrderCall(id: string, at: string) {

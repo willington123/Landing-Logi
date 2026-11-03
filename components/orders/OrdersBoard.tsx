@@ -193,6 +193,13 @@ export default function OrdersBoard({
                           {[o.carrier, o.trackingNumber].filter(Boolean).join(' · ')}
                         </p>
                       )}
+                      {o.dropi?.orderId ? (
+                        <p className="text-[11px] text-emerald-700 mt-1 truncate">✓ En Dropi #{o.dropi.orderId}</p>
+                      ) : o.dropi?.error ? (
+                        <p className="text-[11px] text-red-600 mt-1 truncate" title={o.dropi.error}>
+                          Dropi: no se pudo enviar
+                        </p>
+                      ) : null}
                       <div className="flex items-center justify-between gap-2 mt-2">
                         {age.alert ? (
                           <span className="text-[11px] font-semibold text-amber-700 inline-flex items-center gap-1">

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import WhatsAppProfile from '@/components/integrations/WhatsAppProfile';
+import DropiConnection from '@/components/integrations/DropiConnection';
 import { KeyConnection, ConversionsCard, MetaAdsConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -96,19 +97,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     docUrl: 'https://twilio.com',
   },
-  {
-    id: 'dropi_logistics',
-    name: 'Dropi / Servientrega / Interrapidísimo',
-    category: 'logistics',
-    description: 'Generación automática de guías de despacho y liquidación de dinero contraentrega directo a tu cuenta.',
-    iconBg: 'bg-amber-600',
-    status: 'coming_soon',
-    requiresKeysText: 'Integrado vía webhook de despacho.',
-    keyFields: [
-      { name: 'dropi_token', label: 'Token de Integración Dropi / Transportadora', placeholder: 'dropi_token_...', isSecret: true },
-    ],
-    docUrl: 'https://dropi.co',
-  },
+
 ];
 
 interface WaStatus {
@@ -703,14 +692,6 @@ export default function IntegrationsPage() {
               >
                 Meta CAPI & Píxeles
               </button>
-              <button
-                onClick={() => setSelectedCategory('logistics')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  selectedCategory === 'logistics' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
-                }`}
-              >
-                Logística & Dropi
-              </button>
             </div>
           </div>
 
@@ -756,6 +737,7 @@ export default function IntegrationsPage() {
               />
               <MetaAdsConnection info={integ} onChanged={reload} />
               <ConversionsCard info={integ} />
+              <DropiConnection />
             </div>
           )}
 
