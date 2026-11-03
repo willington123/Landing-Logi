@@ -31,12 +31,14 @@ export function OrderFilterBar({
   filters,
   onChange,
   landingNames,
+  hideStatus,
 }: {
   all: OrderItem[]; // every order (for the option lists)
   base: OrderItem[]; // orders matching every filter except the status tab
   filters: OrderFilters;
   onChange: (f: OrderFilters) => void;
   landingNames: Record<string, string>;
+  hideStatus?: boolean; // the board shows statuses as columns
 }) {
   const set = (patch: Partial<OrderFilters>) => onChange({ ...filters, ...patch });
 
@@ -184,7 +186,7 @@ export function OrderFilterBar({
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className={`${hideStatus ? 'hidden' : 'flex'} gap-1.5 overflow-x-auto pb-1 -mx-1 px-1`}>
         {STATUS_TABS.map((t) => {
           const on = filters.status === t.id;
           const n = tabCounts[t.id];

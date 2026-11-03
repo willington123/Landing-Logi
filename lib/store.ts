@@ -177,6 +177,15 @@ export const logiStore = {
     }
   },
 
+  // Changes fields of an order in this browser only (the server already has them).
+  patchOrderLocal: (orderId: string, patch: Partial<OrderItem>): void => {
+    const orders = logiStore.getOrders();
+    const index = orders.findIndex((o) => o.id === orderId);
+    if (index < 0) return;
+    orders[index] = { ...orders[index], ...patch };
+    safeSet(STORAGE_KEYS.ORDERS, [...orders]);
+  },
+
   updateOrderStatus: (orderId: string, status: OrderItem['status']): void => {
     const orders = logiStore.getOrders();
     const index = orders.findIndex((o) => o.id === orderId);
