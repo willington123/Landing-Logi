@@ -221,6 +221,7 @@ export default function OmnichannelInbox() {
   // Who is signed in, from the server (team person linked to this account).
   const [serverMe, setServerMe] = useState<{ agentId: string | null; restricted: boolean; role: string | null } | null>(null);
   const [others, setOthers] = useState<{ name: string; typing: boolean }[]>([]);
+  const [socialOn, setSocialOn] = useState<{ messenger: boolean; instagram: boolean }>({ messenger: false, instagram: false });
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
   const typingAt = useRef(0);
   const myId = serverMe?.agentId || me;
@@ -274,12 +275,13 @@ export default function OmnichannelInbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: Agent[]; bot?: BotInfo; whatsapp: WaStatus; me?: { agentId: string | null; restricted: boolean; role: string | null } }>('/api/whatsapp/conversations');
+      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: Agent[]; bot?: BotInfo; whatsapp: WaStatus; me?: { agentId: string | null; restricted: boolean; role: string | null }; social?: { messenger: boolean; instagram: boolean } }>('/api/whatsapp/conversations');
       setBotInfo(d.bot || null);
       setConversations(d.conversations);
       if (d.tags) setTags(d.tags);
       if (d.agents) setAgents(d.agents);
       if (d.me) setServerMe(d.me);
+      if (d.social) setSocialOn(d.social);
       setWa(d.whatsapp);
       setListError(null);
     } catch (e: any) {
@@ -397,7 +399,7 @@ export default function OmnichannelInbox() {
       }),
     [conversations],
   );
-  const showTabs = tabs.some((t) => t.ch !== 'whatsapp' && t.chats > 0);
+  const showTabs = socialOn.messenger || socialOn.instagram || tabs.some((t) => t.ch !== 'whatsapp' && t.chats > 0);
   const counts = useMemo(
     () => ({
       unread: inTab.filter((c) => c.unread_count > 0).length,
@@ -787,7 +789,9 @@ export default function OmnichannelInbox() {
             {listError && <p className="m-3 text-xs text-red-600 bg-red-50 rounded-xl p-3">No se pudieron cargar las conversaciones: {listError}</p>}
             {!listError && filtered.length === 0 && (
               <div className="p-6 text-center text-[13px] text-slate-500">
-                {conversations.length === 0
+                {showTabs && channelFilter !== 'whatsapp' && inTab.length === 0
+                  ? `Aún no hay chats de ${CHANNEL_LABEL[channelFilter]}. Aparecen aquí cuando alguien le escribe a tu ${channelFilter === 'instagram' ? 'cuenta de Instagram' : 'página de Facebook'} o responde el mensaje privado de un comentario.`
+                  : (showTabs ? inTab : conversations).length === 0
                   ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
                   : filter === 'unanswered' && !search && !tagFilter
                     ? '¡Al día! No hay chats esperando respuesta.'
@@ -937,6 +941,12 @@ export default function OmnichannelInbox() {
                         <div className="space-y-1">
                           <MediaView m={m} />
                           {m.media.caption && <p>{m.media.caption}</p>}
+                          {m.transcript && (
+                            <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
+                              <span className="font-semibold text-slate-500">📝 Dijo: </span>
+                              {m.transcript}
+                            </p>
+                          )}
                         </div>
                       ) : (
                         m.body

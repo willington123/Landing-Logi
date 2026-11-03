@@ -336,6 +336,10 @@ async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; lan
 const MEDIA: Record<string, string> = { image: 'una foto', audio: 'una nota de voz', video: 'un video', document: 'un documento', sticker: 'un sticker' };
 
 function asText(m: WaMessage): string {
+  if (m.media?.kind === 'audio')
+    return m.transcript
+      ? `[Nota de voz del cliente] ${m.transcript}`
+      : '[El cliente envió una nota de voz que no se pudo entender. Pídele con amabilidad que la repita o que la escriba.]';
   if (m.media) return `[El cliente envió ${MEDIA[m.media.kind] || 'un archivo'}${m.media.caption ? ` con el texto: "${m.media.caption}"` : ''}. No puedes verlo.]`;
   if (m.type === 'template') return `[Plantilla enviada por la tienda] ${m.body}`;
   return m.body;

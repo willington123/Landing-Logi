@@ -160,3 +160,34 @@ export async function generateImage(
     return `data:${inline.mimeType || inline.mime_type || 'image/png'};base64,${inline.data}`;
   });
 }
+
+// Voice note → text (Spanish, as said). Returns '' when there is nothing to understand.
+export async function transcribeAudio(apiKey: string, base64: string, mimeType: string): Promise<string> {
+  const mime = (mimeType || 'audio/ogg').split(';')[0].trim() || 'audio/ogg';
+  return withFallback(TEXT_MODELS, async (model) => {
+    const body = (thinking: boolean) => ({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: 'Transcribe esta nota de voz de un cliente, palabra por palabra, en el idioma en que habla (normalmente español de Colombia). Escribe solo lo que dice, con puntuación normal, sin comentarios ni comillas. Si no se entiende nada o solo hay ruido, responde exactamente: (inaudible)',
+            },
+            { inline_data: { mime_type: mime, data: base64 } },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0, ...(thinking ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) },
+    });
+    let data;
+    try {
+      data = await callModel(apiKey, model, body(true));
+    } catch (err) {
+      if (!(err instanceof GeminiError && err.status === 400 && /thinking/i.test(err.message))) throw err;
+      data = await callModel(apiKey, model, body(false));
+    }
+    const text: string = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
+    const clean = text.trim();
+    return /^\(?inaudible\)?\.?$/i.test(clean) ? '' : clean.slice(0, 4000);
+  });
+}

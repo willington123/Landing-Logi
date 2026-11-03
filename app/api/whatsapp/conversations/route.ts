@@ -3,7 +3,8 @@ import { cloudEnabled } from '@/lib/server/db';
 import { listConversations } from '@/lib/server/wa-store';
 import { whatsappStatus } from '@/lib/server/whatsapp';
 import { chatScope, getAgents, getAssignments, getConversationAds, getConversationTags, getTags } from '@/lib/server/crm-store';
-import { currentRole } from '@/lib/server/tenant';
+import { currentOrgId, currentRole } from '@/lib/server/tenant';
+import { storedIntegrations } from '@/lib/server/integrations';
 import { botConfigured, getBotSettings, getBotStates } from '@/lib/server/bot';
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,14 @@ export async function GET() {
       agents,
       me: { agentId: scope.agentId, restricted: scope.restricted, role },
       whatsapp: await whatsappStatus(),
+      // Pages connected for Messenger / Instagram (the inbox shows their tabs even before the first chat).
+      social: await currentOrgId()
+        .then(storedIntegrations)
+        .then((s) => {
+          const pages = (s.social?.pages || []).filter((p) => p.active);
+          return { messenger: pages.length > 0, instagram: pages.some((p) => p.ig) };
+        })
+        .catch(() => ({ messenger: false, instagram: false })),
     });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
