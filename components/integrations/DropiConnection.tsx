@@ -20,6 +20,8 @@ interface Info {
   connected: boolean;
   token: string | null;
   autoSend: boolean;
+  domain: string | null;
+  suggestedDomain: string;
   landings: { id: string; name: string; image: string | null; link: Link | null }[];
 }
 interface Product {
@@ -56,6 +58,7 @@ function Thumb({ src, size = 'w-10 h-10' }: { src: string | null; size?: string 
 export default function DropiConnection() {
   const [info, setInfo] = useState<Info | null>(null);
   const [token, setToken] = useState('');
+  const [domain, setDomain] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [picking, setPicking] = useState<{ id: string; name: string } | null>(null);
@@ -63,7 +66,10 @@ export default function DropiConnection() {
 
   const load = useCallback(() => {
     call('/api/integrations/dropi')
-      .then((d) => setInfo(d))
+      .then((d) => {
+        setInfo(d);
+        setDomain((cur) => cur || d.domain || d.suggestedDomain || '');
+      })
       .catch((e) => setMsg({ ok: false, text: e.message }));
   }, []);
   useEffect(load, [load]);
@@ -73,7 +79,7 @@ export default function DropiConnection() {
     setBusy(true);
     setMsg(null);
     try {
-      await call('/api/integrations/dropi', 'PUT', { token });
+      await call('/api/integrations/dropi', 'PUT', { token, domain });
       setToken('');
       setReplace(false);
       setMsg({ ok: true, text: 'Dropi conectado. Ahora vincula cada landing con su producto de Dropi.' });
@@ -151,11 +157,19 @@ export default function DropiConnection() {
             <div className="space-y-2">
               <ol className="list-decimal pl-5 text-[12.5px] text-slate-600 space-y-0.5">
                 <li>
-                  Entra a <b>Dropi</b> → menú <b>Mis Integraciones</b> → crea una tienda (ponle el nombre de tu tienda y guarda). Una sola tienda sirve para todos tus productos.
+                  Entra a <b>Dropi</b> → menú <b>Mis Integraciones</b> → crea una tienda. En <b>Nombre de Tienda</b> escribe exactamente el dominio de abajo
+                  {domain && (
+                    <>
+                      {' '}
+                      (<b className="font-mono">{domain}</b>)
+                    </>
+                  )}
+                  , como pide Dropi, y guarda. Una sola tienda sirve para todos tus productos.
                 </li>
-                <li>Dropi te muestra un <b>token de integración</b>: cópialo y pégalo aquí.</li>
+                <li>Abre esa tienda en la lista y copia su <b>token de integración</b> completo. Pégalo aquí.</li>
               </ol>
-              <form onSubmit={connect} className="flex flex-col sm:flex-row gap-2">
+              <form onSubmit={connect} className="grid sm:grid-cols-[200px_1fr_auto] gap-2">
+                <input className={input} autoComplete="off" placeholder="Dominio (ej. mitienda.com)" value={domain} onChange={(e) => setDomain(e.target.value)} aria-label="Dominio de la tienda" />
                 <input className={input} type="password" autoComplete="off" placeholder="Token de integración de Dropi" value={token} onChange={(e) => setToken(e.target.value)} />
                 <button className={primary} disabled={busy || token.trim().length < 6}>
                   {busy && <Loader2 className="w-4 h-4 animate-spin" />} Conectar

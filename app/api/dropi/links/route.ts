@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest) {
     const b = await req.json().catch(() => ({}));
     const landingId = String(b.landingId || '');
     if (!landingId || !(await getLandingById(landingId))) return fail('Landing no encontrada.', 404);
-    const p = await getProduct(cfg.token, Number(b.productId));
+    const p = await getProduct(cfg, Number(b.productId));
     let variation: { id: number; name: string; salePrice: number | null } | null = null;
     if (p.type === 'VARIABLE') {
       variation = p.variations.find((v) => v.id === Number(b.variationId)) || null;
