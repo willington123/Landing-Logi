@@ -3,9 +3,9 @@
 // Creativos: which ads sell (confirmed cash-on-delivery sales) and which spend without selling.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import DateRangePicker, { RANGE_IDS, rangeQuery, type RangeValue } from './DateRangePicker';
 import { AlertTriangle, Check, ChevronRight, Copy, ExternalLink, Eye, Flame, FlaskConical, LayoutGrid, List, X, Image as ImageIcon, Info, Loader2, Megaphone, PlayCircle, RefreshCw, ShoppingBag, Trophy } from 'lucide-react';
 
-type Range = 'today' | '7d' | '30d' | 'month';
 type Flag = 'winner' | 'waste' | 'cancels';
 interface Row {
   adId: string;
@@ -46,12 +46,6 @@ interface Report {
   creativesError?: string | null;
 }
 
-const RANGES: { id: Range; label: string }[] = [
-  { id: 'today', label: 'Hoy' },
-  { id: '7d', label: '7 días' },
-  { id: '30d', label: '30 días' },
-  { id: 'month', label: 'Este mes' },
-];
 const FILTERS: { id: 'all' | Flag; label: string }[] = [
   { id: 'all', label: 'Todos' },
   { id: 'winner', label: '🏆 Ganadores' },
@@ -204,15 +198,16 @@ function savePref(key: string, v: string) {
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
 
 export default function CreativesPage() {
-  const [range, setRange] = useState<Range>('7d');
+  const [range, setRangeS] = useState<RangeValue>({ range: '7d' });
+  const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<'all' | Flag>('all');
   const [openAd, setOpenAd] = useState<Row | null>(null);
   const [state, setState] = useState<{ loading: boolean; connected?: boolean; pending?: boolean; error?: string; expired?: boolean; report?: Report; account?: { name: string | null; currency: string | null } }>({ loading: true });
 
-  const load = useCallback(async (r: Range) => {
+  const load = useCallback(async (r: RangeValue) => {
     setState((s) => ({ ...s, loading: true, error: undefined }));
     try {
-      const res = await fetch(`/api/ads/report?range=${r}`, { cache: 'no-store' });
+      const res = await fetch(`/api/ads/report?${rangeQuery(r)}`, { cache: 'no-store' });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.success) return setState({ loading: false, error: d.error || `HTTP ${res.status}`, expired: Boolean(d.expired) });
       setState({ loading: false, connected: d.connected, pending: d.pending, report: d.report, account: d.account });
@@ -220,9 +215,21 @@ export default function CreativesPage() {
       setState({ loading: false, error: 'Sin conexión. Intenta de nuevo.' });
     }
   }, []);
+  // The last period chosen is remembered.
   useEffect(() => {
-    load(range);
-  }, [range, load]);
+    try {
+      const v = JSON.parse(localStorage.getItem('kx.creativos.range') || 'null');
+      if (v && RANGE_IDS.includes(v.range)) setRangeS(v.range === 'custom' ? { range: 'custom', since: v.since, until: v.until } : { range: v.range });
+    } catch {}
+    setReady(true);
+  }, []);
+  const setRange = (v: RangeValue) => {
+    setRangeS(v);
+    savePref('kx.creativos.range', JSON.stringify(v));
+  };
+  useEffect(() => {
+    if (ready) load(range);
+  }, [range, ready, load]);
 
   const money = (n: number, cur?: string | null) =>
     !cur || cur.toUpperCase() === 'COP' ? `$${Math.round(n).toLocaleString('es-CO')}` : `${n.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${cur}`;
@@ -299,14 +306,8 @@ export default function CreativesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600">
-            {RANGES.map((r) => (
-              <button key={r.id} onClick={() => setRange(r.id)} className={`px-3 py-1.5 rounded-lg transition ${range === r.id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => load(range)} className="h-9 w-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-900" aria-label="Actualizar">
+          <DateRangePicker value={range} onChange={setRange} shown={state.report ? { since: state.report.since, until: state.report.until } : undefined} />
+          <button onClick={() => load(range)} className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-900" aria-label="Actualizar">
             <RefreshCw className={`w-4 h-4 ${state.loading ? 'animate-spin' : ''}`} />
           </button>
         </div>

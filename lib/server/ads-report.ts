@@ -5,20 +5,49 @@ import { adCreatives, adInsights } from '@/lib/server/meta-ads';
 import type { AdsConfig } from '@/lib/server/integrations';
 import type { OrderItem } from '@/lib/types';
 
-export type AdRange = 'today' | '7d' | '30d' | 'month';
-export const AD_RANGES: AdRange[] = ['today', '7d', '30d', 'month'];
+export type AdRange = 'today' | 'yesterday' | '7d' | '14d' | '30d' | '90d' | 'month' | 'lastmonth' | 'custom';
+export const AD_RANGES: AdRange[] = ['today', 'yesterday', '7d', '14d', '30d', '90d', 'month', 'lastmonth', 'custom'];
+const MAX_DAYS = 400;
 
 const TZ = 'America/Bogota';
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const DAY = 86400000;
+const isDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00-05:00`)) && ymd(new Date(`${v}T12:00:00-05:00`)) === v;
 
 // Days in Colombia time (what Meta uses for COP accounts) and the matching instants for orders.
-export function rangeDates(range: AdRange, now = new Date()) {
-  const until = ymd(now);
-  let since = until;
-  if (range === '7d') since = ymd(new Date(now.getTime() - 6 * 86400000));
-  if (range === '30d') since = ymd(new Date(now.getTime() - 29 * 86400000));
-  if (range === 'month') since = `${until.slice(0, 8)}01`;
+// "custom" uses the given days: never after today and at most MAX_DAYS long.
+export function rangeDates(range: AdRange, now = new Date(), custom?: { since?: string | null; until?: string | null }) {
+  const today = ymd(now);
+  const ago = (n: number) => ymd(new Date(now.getTime() - n * DAY));
+  let since = today;
+  let until = today;
+  if (range === 'yesterday') since = until = ago(1);
+  if (range === '7d') since = ago(6);
+  if (range === '14d') since = ago(13);
+  if (range === '30d') since = ago(29);
+  if (range === '90d') since = ago(89);
+  if (range === 'month') since = `${today.slice(0, 8)}01`;
+  if (range === 'lastmonth') {
+    until = ymd(new Date(new Date(`${today.slice(0, 8)}01T12:00:00-05:00`).getTime() - DAY));
+    since = `${until.slice(0, 8)}01`;
+  }
+  if (range === 'custom') {
+    let a = isDay(custom?.since) ? custom!.since! : ago(6);
+    let b = isDay(custom?.until) ? custom!.until! : today;
+    if (b > today) b = today;
+    if (a > b) [a, b] = [b, a];
+    const minSince = ymd(new Date(new Date(`${b}T12:00:00-05:00`).getTime() - (MAX_DAYS - 1) * DAY));
+    since = a < minSince ? minSince : a;
+    until = b;
+  }
   return { since, until, fromIso: new Date(`${since}T00:00:00-05:00`).toISOString(), toIso: new Date(`${until}T23:59:59.999-05:00`).toISOString() };
+}
+
+// ?range=…  (and &since=YYYY-MM-DD&until=YYYY-MM-DD when range=custom)
+export function rangeFromQuery(q: URLSearchParams, fallback: AdRange = '7d') {
+  const r = q.get('range') || '';
+  const range = (AD_RANGES as string[]).includes(r) ? (r as AdRange) : fallback;
+  return { range, ...rangeDates(range, new Date(), { since: q.get('since'), until: q.get('until') }) };
 }
 
 const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered']);
@@ -66,8 +95,8 @@ export interface AdsReport {
   creativesError: string | null; // why thumbnails could not be read
 }
 
-export async function buildAdsReport(cfg: AdsConfig, range: AdRange): Promise<AdsReport> {
-  const { since, until, fromIso, toIso } = rangeDates(range);
+export async function buildAdsReport(cfg: AdsConfig, range: AdRange, dates = rangeDates(range)): Promise<AdsReport> {
+  const { since, until, fromIso, toIso } = dates;
   const perAccount = await Promise.all(
     cfg.accounts.map(async (a) => {
       try {
