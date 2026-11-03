@@ -9,6 +9,7 @@ import { anthropicKey } from '@/lib/server/integrations';
 import { addAiReply } from '@/lib/server/billing';
 import { requestOrgSync } from '@/lib/server/tenant';
 import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/lib/order-form';
+import { MODEL_WEIGHT } from '@/lib/plans';
 import { DEFAULT_BOT, cleanFollowUp, type BotChatState, type BotModel, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 import { getAgenda } from '@/lib/server/agenda';
@@ -409,7 +410,7 @@ export async function runBot(opts: {
   // Replies paid by the platform count against the plan's monthly allowance.
   const countReply = async () => {
     const org = requestOrgSync();
-    if (ai.source === 'plan' && org) await addAiReply(org).catch(() => {});
+    if (ai.source === 'plan' && org) await addAiReply(org, MODEL_WEIGHT[opts.settings.model] ?? 1).catch(() => {});
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await ai.client.beta.messages.create({
@@ -520,7 +521,7 @@ Responde exactamente SKIP (sin nada más) si: el cliente dijo que no le interesa
     messages: [{ role: 'user', content: `Conversación hasta ahora:\n${lines}\n\nEscribe el mensaje de seguimiento (o SKIP).` }],
   });
   const org = requestOrgSync();
-  if (ai.source === 'plan' && org) await addAiReply(org).catch(() => {});
+  if (ai.source === 'plan' && org) await addAiReply(org, MODEL_WEIGHT[opts.settings.model] ?? 1).catch(() => {});
   if (response.stop_reason === 'refusal') return null;
   const text = response.content
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')

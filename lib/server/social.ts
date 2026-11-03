@@ -394,7 +394,7 @@ ${k.products}`,
   });
   if (ai.source === 'plan') {
     const org = requestOrgSync();
-    if (org) await (await import('@/lib/server/billing')).addAiReply(org).catch(() => {});
+    if (org) await (await import('@/lib/server/billing')).addAiReply(org, (await import('@/lib/plans')).MODEL_WEIGHT[bot.model] ?? 1).catch(() => {});
   }
   return String((res.content || []).find((b: any) => b.type === 'text')?.text || '').trim().slice(0, 900);
 }
@@ -462,7 +462,7 @@ ${k.products}`,
   });
   if (ai.source === 'plan') {
     const org = requestOrgSync();
-    if (org) await (await import('@/lib/server/billing')).addAiReply(org).catch(() => {});
+    if (org) await (await import('@/lib/server/billing')).addAiReply(org, (await import('@/lib/plans')).MODEL_WEIGHT[bot.model] ?? 1).catch(() => {});
   }
   const txt = (res.content || []).find((b: any) => b.type === 'text')?.text || '{}';
   const d = JSON.parse(txt);
