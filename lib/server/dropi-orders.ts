@@ -37,7 +37,7 @@ export async function sendOrderToDropi(orderId: string, opts: { force?: boolean 
   if (!order.address || !order.city) return fail('Al pedido le falta la dirección o la ciudad.');
   await patchDropi(orderId, { ...(prev || {}), sending: new Date().toISOString() });
   try {
-    const id = await createDropiOrder(cfg.token, order, link);
+    const id = await createDropiOrder(cfg, order, link);
     await patchDropi(orderId, { orderId: id, sentAt: new Date().toISOString(), error: null });
     return { ok: true, dropiOrderId: id };
   } catch (e: any) {

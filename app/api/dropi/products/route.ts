@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     if (!cfg) return fail('Conecta Dropi primero.', 400);
     const q = String(req.nextUrl.searchParams.get('q') || '').slice(0, 80);
     const page = Math.max(0, Math.min(50, Number(req.nextUrl.searchParams.get('page')) || 0));
-    return ok({ products: await searchProducts(cfg.token, q, page) });
+    return ok({ products: await searchProducts(cfg, q, page) });
   } catch (e: any) {
     if (e instanceof Forbidden) return fail(e.message, 403);
     if (e instanceof DropiError) return fail(e.message, 502);

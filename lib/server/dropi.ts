@@ -24,8 +24,14 @@ export interface DropiLink {
   image: string | null;
 }
 
-export interface DropiConfig {
+// The token, and the store's domain: Dropi asks to name the store after the site's domain, and
+// WordPress sends that address with each request, so it is sent too.
+export interface DropiAuth {
   token: string;
+  domain?: string | null;
+}
+
+export interface DropiConfig extends DropiAuth {
   autoSend: boolean;
   links: Record<string, DropiLink>; // landing id → product
 }
@@ -36,17 +42,24 @@ export async function dropiConfig(orgId?: string | null): Promise<DropiConfig | 
   const s = (await storedIntegrations(org)).dropi;
   const token = s ? decrypt(s.token) : '';
   if (!s || !token) return null;
-  return { token, autoSend: Boolean(s.autoSend), links: s.links || {} };
+  return { token, domain: s.domain || null, autoSend: Boolean(s.autoSend), links: s.links || {} };
 }
 
-export class DropiError extends Error {}
+export class DropiError extends Error {
+  denied = false; // Dropi said the token (or the store) is not allowed
+}
 
-async function dropi<T = any>(token: string, path: string, body?: unknown): Promise<T> {
+async function dropi<T = any>(auth: DropiAuth, path: string, body?: unknown): Promise<T> {
+  const site = auth.domain ? `https://${auth.domain}` : null;
   let res: Response;
   try {
     res = await fetch(dropiBase() + path, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json;charset=UTF-8', 'dropi-integration-key': token },
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'dropi-integration-key': auth.token,
+        ...(site ? { 'User-Agent': `Konnexa/1.0; ${site}`, Origin: site, Referer: `${site}/` } : {}),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(25000),
       cache: 'no-store',
@@ -57,7 +70,7 @@ async function dropi<T = any>(token: string, path: string, body?: unknown): Prom
   const d: any = await res.json().catch(() => null);
   if (res.status === 401 || res.status === 403) {
     const said = [d?.message, d?.status ? `código ${d.status}` : `HTTP ${res.status}`].filter(Boolean).join(', ');
-    throw new DropiError(`Dropi no aceptó el token (respondió: ${said}). Copia el token de la tienda en Dropi → Mis Integraciones, completo y sin espacios.`);
+    throw Object.assign(new DropiError(`Dropi no aceptó el token (respondió: ${said}).`), { denied: true });
   }
   if (!d || d.isSuccess === false || !res.ok) {
     const msg = d?.message || d?.error || d?.status || `HTTP ${res.status}`;
@@ -110,13 +123,13 @@ export function mapProduct(p: any): DropiProduct {
 }
 
 // Search Dropi's catalog (or paste the product id).
-export async function searchProducts(token: string, q: string, page = 0): Promise<DropiProduct[]> {
+export async function searchProducts(auth: DropiAuth, q: string, page = 0): Promise<DropiProduct[]> {
   const term = q.trim();
   if (/^\d{1,12}$/.test(term)) {
-    const one = await getProduct(token, Number(term)).catch(() => null);
+    const one = await getProduct(auth, Number(term)).catch(() => null);
     if (one) return [one];
   }
-  const d = await dropi<{ objects: any[] }>(token, 'products/index', {
+  const d = await dropi<{ objects: any[] }>(auth, 'products/index', {
     startData: page * 20,
     pageSize: 20,
     order_type: 'desc',
@@ -130,8 +143,8 @@ export async function searchProducts(token: string, q: string, page = 0): Promis
   return (Array.isArray(d.objects) ? d.objects : []).map(mapProduct);
 }
 
-export async function getProduct(token: string, id: number): Promise<DropiProduct> {
-  const d = await dropi<{ objects: any }>(token, `products/v2/${id}`);
+export async function getProduct(auth: DropiAuth, id: number): Promise<DropiProduct> {
+  const d = await dropi<{ objects: any }>(auth, `products/v2/${id}`);
   if (!d.objects) throw new DropiError('Ese producto no existe en Dropi.');
   return mapProduct(d.objects);
 }
@@ -146,8 +159,14 @@ export function cleanToken(v: string) {
     .replace(/\s+/g, '');
 }
 
-export async function checkToken(token: string) {
-  await dropi(token, 'products/index', { startData: 0, pageSize: 1, order_type: 'desc', order_by: 'id', keywords: '', active: true, no_count: true, integration: true, get_stock: false });
+// Domain as typed ("https://www.mitienda.com/" → "mitienda.com"); '' if it doesn't look like one.
+export function cleanDomain(v: string) {
+  const d = v.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) ? d : '';
+}
+
+export async function checkToken(auth: DropiAuth) {
+  await dropi(auth, 'products/index', { startData: 0, pageSize: 1, order_type: 'desc', order_by: 'id', keywords: '', active: true, no_count: true, integration: true, get_stock: false });
 }
 
 // ---------- addresses ----------
@@ -229,7 +248,7 @@ export function buildOrderPayload(order: OrderItem, link: DropiLink) {
 }
 
 // Creates the order in Dropi. Returns Dropi's order id.
-export async function createDropiOrder(token: string, order: OrderItem, link: DropiLink): Promise<number | string | null> {
-  const d = await dropi<{ objects?: { id?: number | string } }>(token, 'orders/myorders', buildOrderPayload(order, link));
+export async function createDropiOrder(auth: DropiAuth, order: OrderItem, link: DropiLink): Promise<number | string | null> {
+  const d = await dropi<{ objects?: { id?: number | string } }>(auth, 'orders/myorders', buildOrderPayload(order, link));
   return d.objects?.id ?? null;
 }
