@@ -1,6 +1,6 @@
 // Dropi (Colombia): send confirmed cash-on-delivery orders to Dropi and link each landing to a Dropi product.
 // Same calls as Dropi's official WooCommerce plugin: https://api.dropi.co/integrations/…, header "dropi-integration-key"
-// (the token Dropi gives when you create a store in "Mis tiendas").
+// (the token Dropi gives when you create a store in "Mis Integraciones").
 import { decrypt } from '@/lib/server/secrets';
 import { storedIntegrations } from '@/lib/server/integrations';
 import { requestOrgSync } from '@/lib/server/tenant';
@@ -55,7 +55,10 @@ async function dropi<T = any>(token: string, path: string, body?: unknown): Prom
     throw new DropiError(e?.name === 'TimeoutError' ? 'Dropi no respondió a tiempo. Intenta de nuevo.' : 'No pudimos conectar con Dropi.');
   }
   const d: any = await res.json().catch(() => null);
-  if (res.status === 401 || res.status === 403) throw new DropiError('Dropi no aceptó el token. Revisa que sea el de tu tienda en Dropi (Mis tiendas).');
+  if (res.status === 401 || res.status === 403) {
+    const said = [d?.message, d?.status ? `código ${d.status}` : `HTTP ${res.status}`].filter(Boolean).join(', ');
+    throw new DropiError(`Dropi no aceptó el token (respondió: ${said}). Copia el token de la tienda en Dropi → Mis Integraciones, completo y sin espacios.`);
+  }
   if (!d || d.isSuccess === false || !res.ok) {
     const msg = d?.message || d?.error || d?.status || `HTTP ${res.status}`;
     throw new DropiError(typeof msg === 'string' ? msg : JSON.stringify(msg).slice(0, 200));
@@ -134,6 +137,15 @@ export async function getProduct(token: string, id: number): Promise<DropiProduc
 }
 
 // The token works (a one-product search).
+// What people paste: spaces, quotes, "Bearer …" or "token: …" around the token.
+export function cleanToken(v: string) {
+  return v
+    .trim()
+    .replace(/^["'`“”]+|["'`“”]+$/g, '')
+    .replace(/^(bearer|token|dropi-integration-key)\s*[:=]?\s*/i, '')
+    .replace(/\s+/g, '');
+}
+
 export async function checkToken(token: string) {
   await dropi(token, 'products/index', { startData: 0, pageSize: 1, order_type: 'desc', order_by: 'id', keywords: '', active: true, no_count: true, integration: true, get_stock: false });
 }

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { seal, storedIntegrations, updateIntegrations } from '@/lib/server/integrations';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
-import { DropiError, checkToken } from '@/lib/server/dropi';
+import { DropiError, checkToken, cleanToken } from '@/lib/server/dropi';
 import { listLandings } from '@/lib/server/db';
 import { currentOrgId, currentRole } from '@/lib/server/tenant';
 import { decrypt, mask } from '@/lib/server/secrets';
@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest) {
   try {
     await requireManager();
     const b = await req.json().catch(() => ({}));
-    const token = String(b.token ?? '').trim().slice(0, 2000);
+    const token = cleanToken(String(b.token ?? '')).slice(0, 2000);
     if (token) {
       await checkToken(token);
       await updateIntegrations((s) => ({ ...s, dropi: { token: seal(token), autoSend: b.autoSend !== undefined ? Boolean(b.autoSend) : (s.dropi?.autoSend ?? false), links: s.dropi?.links || {}, connectedAt: new Date().toISOString() } }));
