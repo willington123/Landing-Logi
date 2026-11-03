@@ -251,6 +251,7 @@ export interface OrderItem {
   shippedAt?: string; // address before the customer corrected it on the call
   whatsapp?: { ok: boolean; to?: string; messageId?: string; error?: string; at: string }; // confirmation template result
   waFallbackAt?: string | null; // when to send the template if the customer hasn't written (mode "customer writes first")
+  dropi?: { orderId?: number | string | null; sentAt?: string; error?: string | null; at?: string; sending?: string }; // order sent to Dropi
 }
 
 export interface VoiceAgentSettings {

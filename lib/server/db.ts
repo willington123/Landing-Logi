@@ -213,6 +213,7 @@ export async function createOrder(order: OrderItem) {
   });
   if (error) throw new Error(error.message);
   await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_created', order });
+  await (await import('@/lib/server/dropi-orders')).autoSendToDropi(order);
   return order;
 }
 
@@ -240,6 +241,7 @@ export async function updateOrderStatus(id: string, status: OrderItem['status'])
   // A confirmed/delivered order is a real sale: tell Meta (never blocks the status change).
   await (await import('@/lib/server/conversions')).reportSale(data).catch((e) => console.error('Conversions API', e));
   await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_status', order: data, from });
+  await (await import('@/lib/server/dropi-orders')).autoSendToDropi(data, from);
 }
 
 // Corrects the delivery address. The first address is kept as previousAddress.

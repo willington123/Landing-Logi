@@ -58,6 +58,8 @@ export interface StoredIntegrations {
     connectedAt: string;
   };
   // Facebook Pages (and their Instagram accounts) for answering comments. Page tokens are encrypted.
+  // Dropi: token of the store in Dropi, whether confirmed orders go there on their own, and the product of each landing.
+  dropi?: { token: string; autoSend: boolean; links?: Record<string, import('@/lib/server/dropi').DropiLink>; connectedAt: string };
   social?: {
     pages: { id: string; name: string; token: string; picture?: string | null; ig?: { id: string; username: string } | null; active: boolean }[];
     connectedAt: string;
