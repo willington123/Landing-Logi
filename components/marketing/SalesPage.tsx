@@ -1,5 +1,6 @@
 // Public sales page of Konnexa (shown at / to visitors who are not signed in).
 import React from 'react';
+import PricingPlans from '@/components/marketing/PricingPlans';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -17,7 +18,7 @@ import {
   Tags,
   Users,
 } from 'lucide-react';
-import { TRIAL_DAYS, cop, type Plan } from '@/lib/plans';
+import { AI_PACK, TRIAL_DAYS, cop, type Plan } from '@/lib/plans';
 
 export interface SalesPageProps {
   plans: Plan[];
@@ -48,8 +49,10 @@ const FAQ = [
   { q: '¿Qué pasa cuando termina la prueba?', a: 'Eliges un plan y pagas con tarjeta, PSE, Nequi o Bancolombia. Si no eliges, tus landings siguen recibiendo pedidos 3 días más y nada se borra.' },
   { q: '¿Puedo cancelar cuando quiera?', a: 'Sí. Apagas la renovación automática desde Plan y pagos y sigues usando lo que ya pagaste hasta el final del periodo.' },
   { q: '¿Necesito la API de WhatsApp?', a: 'Para enviar confirmaciones y responder desde el panel, sí: necesitas un número en la API de WhatsApp Business (Meta). Te guiamos para conectarlo desde Integraciones.' },
-  { q: '¿Qué es una “respuesta del asistente IA”?', a: 'Cada mensaje que el asistente envía a un cliente. Pro y Escala traen respuestas incluidas cada mes; si se acaban, puedes conectar tu propia clave de Claude.' },
-  { q: '¿Qué pasa si paso el límite de pedidos?', a: 'Nunca rechazamos pedidos: tus landings siguen vendiendo y te avisamos para que subas de plan.' },
+  { q: '¿Qué es una “respuesta del asistente IA”?', a: 'Cada mensaje que el asistente envía a un cliente (también responder un comentario). Todos los planes traen respuestas gratis cada mes; si se acaban, sumas un paquete de 1.000 que no vence, o conectas tu propia clave de Claude.' },
+  { q: '¿Cobran por usuario o por pedido?', a: 'No. Las personas de tu equipo y los pedidos son ilimitados en todos los planes.' },
+  { q: '¿Y si tengo varias tiendas o números?', a: 'Tu plan cubre tu primera tienda. Cada tienda extra paga un precio menor (desde $49.000 al mes) y trae la mitad de las respuestas de IA gratis.' },
+  { q: '¿Hay descuento por pagar varios meses?', a: 'Sí: 10% pagando 3 meses, 15% pagando 6 y 25% pagando 12.' },
 ];
 
 function Logo() {
@@ -237,31 +240,10 @@ export default function SalesPage({ plans, signupOpen, contactUrl, operator }: S
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Precios claros, en pesos</h2>
             <p className="mt-3 text-[16px] text-slate-600">Empieza con {TRIAL_DAYS} días gratis del plan Pro. Sin tarjeta y sin permanencia.</p>
           </div>
-          <div className="mt-12 grid md:grid-cols-3 gap-5 items-stretch">
-            {plans.map((p) => (
-              <div
-                key={p.id}
-                className={`relative rounded-2xl bg-white p-6 flex flex-col ${p.highlight ? 'border-2 border-brand-blue/60 shadow-[0_20px_50px_-25px_rgba(10,108,240,0.45)]' : 'border border-slate-200'}`}
-              >
-                {p.highlight && <span className="absolute -top-3 left-6 text-[11px] font-semibold text-white bg-brand-gradient rounded-full px-2.5 py-1">Más elegido</span>}
-                <h3 className="text-lg font-semibold">{p.name}</h3>
-                <p className="mt-2">
-                  <span className="text-4xl font-bold tracking-tight tabular-nums">{cop(p.price)}</span>
-                  <span className="text-slate-500"> /mes</span>
-                </p>
-                <ul className="mt-5 space-y-2 flex-1">
-                  {p.features.map((f) => (
-                    <li key={f} className="text-[14px] text-slate-700 flex gap-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6 [&>*]:w-full">
-                  <Cta signupOpen={signupOpen} contactUrl={contactUrl} size="lg" label="Empezar gratis" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <PricingPlans plans={plans} cta={<Cta signupOpen={signupOpen} contactUrl={contactUrl} size="lg" label="Empezar gratis" />} />
+          <p className="mt-6 text-center text-sm text-slate-600">
+            Todos los planes traen <b>respuestas de IA gratis cada mes</b>, personas del equipo y pedidos <b>ilimitados</b>. ¿Necesitas más IA? Suma 1.000 respuestas por {cop(AI_PACK.price)}.
+          </p>
           <p className="mt-8 text-center text-sm text-slate-500 flex items-center justify-center gap-1.5">
             <ShieldCheck className="w-4 h-4" /> Pagos seguros con Wompi (Bancolombia): tarjeta, PSE, Nequi o Bancolombia.
           </p>

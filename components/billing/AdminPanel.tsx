@@ -3,7 +3,7 @@
 // Admin plataforma: every store, its plan and status, manual actions and the plans editor.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Lock, Save, Search } from 'lucide-react';
-import { STATUS_LABEL, cop, type Plan, type SubStatus } from '@/lib/plans';
+import { DEFAULT_PLANS, STATUS_LABEL, cop, type Plan, type SubStatus } from '@/lib/plans';
 
 interface Store {
   id: string;
@@ -148,10 +148,21 @@ function PlansEditor({ plans, onSaved }: { plans: Plan[]; onSaved: (p: Plan[]) =
           <h2 className="text-[15px] font-semibold text-slate-900">Planes y precios</h2>
           <p className="text-xs text-slate-500">Deja un límite vacío para que sea ilimitado. Los cambios aplican a los próximos cobros.</p>
         </div>
-        <button onClick={save} disabled={busy} className="h-9 px-3 rounded-lg bg-brand-navy text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1.5">
-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Guardar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setDraft(DEFAULT_PLANS.map((p) => ({ ...p, features: [...p.features] })));
+              setMsg('Cargué los planes recomendados. Revísalos y dale Guardar.');
+            }}
+            className="h-9 px-3 rounded-lg border border-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50"
+          >
+            Usar los planes recomendados
+          </button>
+          <button onClick={save} disabled={busy} className="h-9 px-3 rounded-lg bg-brand-navy text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1.5">
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Guardar
+          </button>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         {draft.map((p) => (
