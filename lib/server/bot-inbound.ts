@@ -8,6 +8,7 @@ import { recordOutbound } from '@/lib/server/wa-store';
 import { addNote, getAutoSettings, getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
 import { isWorkingTime } from '@/lib/crm';
+import { shouldResume } from '@/lib/bot';
 import { autoAssign } from '@/lib/server/crm-store';
 
 const DEBOUNCE_MS = Number(process.env.BOT_DEBOUNCE_MS ?? 4000);
@@ -28,7 +29,13 @@ export async function botTakesMessage(m: InboundMessage, fallback: () => Promise
     if (isWorkingTime(auto.away, auto.timezone, new Date(m.timestamp))) return false;
   }
   const state = await getBotState(m.from);
-  if (state.paused) return false; // a person is handling this chat
+  if (state.paused) {
+    // A person is handling this chat, unless nobody has written in it for the hours the store chose.
+    if (!shouldResume(state, settings)) return false;
+    const hours = settings.resumeAfterHours;
+    await setBotState(m.from, { paused: false, pausedAt: undefined, reason: undefined, note: undefined });
+    await addNote(m.from, `🤖 El asistente volvió a atender este chat: nadie del equipo escribió en ${hours} ${hours === 1 ? 'hora' : 'horas'}.`).catch(() => {});
+  }
   // Answer after the webhook has replied to Meta.
   waitUntil(
     answer(m).catch(async (e) => {
