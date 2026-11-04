@@ -159,6 +159,7 @@ export interface ImageSection {
 
 export interface LandingPageConfig {
   id: string;
+  kind?: 'product'; // a product sold only by WhatsApp (no page); see lib/products.ts
   layout?: 'classic' | 'sales-v2';
   country?: string;
   design?: LandingDesign;
@@ -232,7 +233,8 @@ export interface OrderItem {
   notes?: string;
   paymentMethod: PaymentMethodType;
   status: OrderStatus;
-  source?: 'landing' | 'whatsapp_bot'; // where the order was taken (landing form by default)
+  source?: 'landing' | 'whatsapp_bot' | 'manual'; // where the order was taken (landing form by default; manual = typed by the team)
+  createdBy?: string | null; // who typed a manual order
   utmSource?: string;
   utmCampaign?: string;
   utmContent?: string;

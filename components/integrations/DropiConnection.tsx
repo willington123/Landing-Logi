@@ -35,6 +35,7 @@ interface Info {
     id: string;
     name: string;
     image: string | null;
+    kind?: 'landing' | 'product';
     link: Link | null;
   }[];
 }
@@ -329,7 +330,7 @@ export default function DropiConnection() {
                   </span>
                 </p>
                 <p className="text-[12px] text-slate-500">
-                  Cada landing se despacha con el producto de Dropi que elijas.
+                  Cada landing o producto de WhatsApp se despacha con el producto de Dropi que elijas.
                   Las unidades del combo pasan como cantidad.
                 </p>
                 {!info.landings.length ? (
@@ -348,6 +349,7 @@ export default function DropiConnection() {
                           <div className="min-w-0">
                             <p className="text-[13px] font-medium text-slate-900 truncate">
                               {l.name}
+                              {l.kind === 'product' && <span className="ml-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-1.5 py-0.5 align-middle">WhatsApp</span>}
                             </p>
                             {l.link ? (
                               <p className="text-[12px] text-emerald-700 truncate">

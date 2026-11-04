@@ -90,7 +90,8 @@ const money = (v: number, currency = 'COP') => `$${Math.round(v || 0).toLocaleSt
 
 function landingText(l: LandingPageConfig, base: string): string {
   const cur = l.currency || 'COP';
-  const lines = [`## ${l.productName}`, `(landing_id para crear_pedido: ${l.id}; país: ${l.country || 'Colombia'}${base ? `; página con fotos: ${base}/p/${l.slug}` : ''})`];
+  const page = base && l.kind !== 'product' && l.slug ? `; página con fotos: ${base}/p/${l.slug}` : '';
+  const lines = [`## ${l.productName}`, `(landing_id para crear_pedido: ${l.id}; país: ${l.country || 'Colombia'}${page})`];
   if (l.headline) lines.push(l.headline);
   if (l.subheadline) lines.push(l.subheadline);
   const combos = (l.combos || []).filter((c) => c.promoPrice > 0);
@@ -114,11 +115,8 @@ function landingText(l: LandingPageConfig, base: string): string {
 }
 
 export async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
-  const [{ data }, settings] = await Promise.all([
-    (await db()).from('landings').select('data, published').order('updated_at', { ascending: false }).limit(20),
-    getSettings<{ storeName?: string }>().catch(() => null),
-  ]);
-  const landings = (data || []).filter((r: any) => r.published !== false).map((r: any) => r.data as LandingPageConfig);
+  // Published landings and the products sold only by WhatsApp.
+  const [landings, settings] = await Promise.all([(await import('@/lib/server/products')).sellables(20), getSettings<{ storeName?: string }>().catch(() => null)]);
   const base = publicBaseUrl();
   return {
     storeName: settings?.storeName?.trim() || 'nuestra tienda',
