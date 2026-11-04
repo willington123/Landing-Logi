@@ -272,6 +272,18 @@ export async function unreadSummary(opts: { only?: (id: string) => boolean; mine
   };
 }
 
+// Chats the AI assistant passed to a person and nobody has answered yet (the "Esperan asesor" alert and count).
+export async function handoffSummary(only?: (id: string) => boolean) {
+  const { getBotStates } = await import('@/lib/server/bot');
+  const waiting = Object.entries(await getBotStates())
+    .filter(([id, s]) => s.paused && s.reason === 'handoff' && (!only || only(id)))
+    .sort((a, b) => String(b[1].pausedAt || '').localeCompare(String(a[1].pausedAt || '')));
+  if (!waiting.length) return { count: 0, latest: null };
+  const [id, s] = waiting[0];
+  const { data } = await (await db()).from('wa_conversations').select('name').eq('id', id).maybeSingle();
+  return { count: waiting.length, latest: { id, name: (data as any)?.name || (/^\d/.test(id) ? `+${id}` : 'Cliente'), note: s.note || '', at: s.pausedAt || null } };
+}
+
 export async function markConversationRead(id: string) {
   const { error } = await (await db()).from('wa_conversations').update({ unread_count: 0 }).eq('id', id);
   if (error) throw new Error(error.message);

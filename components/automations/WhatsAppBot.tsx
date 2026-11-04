@@ -3,7 +3,7 @@
 // AI assistant for WhatsApp (Claude): settings and a simulator to try it before turning it on.
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, Search, Send, Sparkles, UserRound } from 'lucide-react';
-import { BOT_MODELS, DEFAULT_BOT, FOLLOW_UP_HOURS, type BotSettings } from '@/lib/bot';
+import { BOT_MODELS, DEFAULT_BOT, FOLLOW_UP_HOURS, RESUME_HOURS, type BotSettings } from '@/lib/bot';
 import { isCloud } from '@/lib/cloud';
 
 interface SimMsg {
@@ -272,6 +272,39 @@ export default function WhatsAppBot() {
               </span>
               <textarea value={cfg.businessInfo} onChange={(e) => set({ businessInfo: e.target.value })} rows={9} maxLength={6000} className="mt-1.5 w-full text-[13px] border border-slate-200 rounded-xl px-3 py-2" />
             </label>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2.5">
+              <p className="text-[13px] font-semibold text-slate-900">🙋 Cuándo pasa el chat a un asesor</p>
+              <p className="text-[11px] text-slate-600">
+                Siempre lo pasa cuando el cliente pide hablar con una persona, tiene un reclamo o está molesto, quiere cancelar o cambiar un pedido, pregunta algo que no está en tu
+                información, o habla de devoluciones de dinero o pagos por adelantado. Te avisa con un sonido y aparece en Mensajes → “Esperan asesor”.
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Tus casos (uno por línea, opcional)</span>
+                <textarea
+                  value={cfg.handoffRules}
+                  onChange={(e) => set({ handoffRules: e.target.value })}
+                  rows={3}
+                  maxLength={3000}
+                  placeholder={'Pide precio al por mayor o más de 10 unidades\nPregunta por la garantía de un pedido entregado\nQuiere pagar con transferencia'}
+                  className="mt-1 w-full text-[13px] border border-slate-200 rounded-xl px-3 py-2 bg-white"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">El asistente vuelve a atender el chat</span>
+                <select
+                  value={cfg.resumeAfterHours}
+                  onChange={(e) => set({ resumeAfterHours: Number(e.target.value) })}
+                  className="mt-1 w-full h-9 text-[13px] border border-slate-200 rounded-lg px-2 bg-white"
+                >
+                  {RESUME_HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {h === 0 ? 'Nunca: solo cuando lo devuelvas tú' : `Si nadie del equipo escribe en ${h} horas`}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-[11px] text-slate-500 mt-1">Cuenta desde el último mensaje de una persona del equipo (o desde que el asistente lo pasó). Vuelve cuando el cliente escriba de nuevo.</span>
+              </label>
+            </div>
             <div className="flex items-center gap-3">
               <button onClick={() => save()} disabled={saving} className="h-10 px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Guardar
@@ -282,8 +315,8 @@ export default function WhatsAppBot() {
             </div>
             {msg && <p className={`text-sm ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
             <div className="text-[11px] text-slate-500 bg-slate-50 rounded-xl p-3 space-y-1">
-              <p>• Si respondes tú en un chat, el asistente se calla en esa conversación. Lo devuelves con “Devolver al asistente” en Mensajes.</p>
-              <p>• Cuando pasa un chat a una persona, queda en “Sin responder” con una nota del motivo.</p>
+              <p>• Si respondes tú en un chat, el asistente se calla en esa conversación. Lo devuelves con “Devolver al asistente” en Mensajes{cfg.resumeAfterHours ? `, o vuelve solo si nadie escribe en ${cfg.resumeAfterHours} horas` : ''}.</p>
+              <p>• Cuando pasa un chat a una persona, queda en “Esperan asesor” y “Sin responder” con una nota del motivo.</p>
               <p>• Sus mensajes salen marcados como “Asistente IA” en Mensajes.</p>
             </div>
           </div>

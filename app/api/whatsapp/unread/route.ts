@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { unreadSummary } from '@/lib/server/wa-store';
 import { chatScope, getAssignments } from '@/lib/server/crm-store';
+import { handoffSummary } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,9 @@ export async function GET() {
   try {
     const [scope, assign] = await Promise.all([chatScope(), getAssignments()]);
     const mine = scope.agentId ? (id: string) => assign[id] === scope.agentId : undefined;
-    return NextResponse.json({ success: true, ...(await unreadSummary({ only: scope.restricted ? mine : undefined, mine })), linked: Boolean(scope.agentId) });
+    const only = scope.restricted ? mine : undefined;
+    const [summary, handoff] = await Promise.all([unreadSummary({ only, mine }), handoffSummary(only).catch(() => null)]);
+    return NextResponse.json({ success: true, ...summary, handoff, linked: Boolean(scope.agentId) });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }

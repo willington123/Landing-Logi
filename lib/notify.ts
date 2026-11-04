@@ -24,18 +24,26 @@ export function setSoundOn(on: boolean) {
 
 let ctx: AudioContext | null = null;
 export function playMessageSound() {
+  playTones([880, 1320], 0.14);
+}
+// A chat the assistant passed to a person: three rising tones, different from a normal message.
+export function playHandoffSound() {
+  playTones([660, 880, 1175], 0.16);
+}
+
+function playTones(freqs: number[], step: number) {
   try {
     const AC = window.AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
     ctx = ctx || new AC();
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     const t = ctx.currentTime;
-    [880, 1320].forEach((freq, i) => {
+    freqs.forEach((freq, i) => {
       const osc = ctx!.createOscillator();
       const gain = ctx!.createGain();
       osc.type = 'sine';
       osc.frequency.value = freq;
-      const start = t + i * 0.14;
+      const start = t + i * step;
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);

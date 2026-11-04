@@ -41,7 +41,9 @@ interface BotInfo {
   mode: 'always' | 'away';
   name: string;
 }
-type Filter = 'all' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
+type Filter = 'all' | 'handoff' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
+// The AI assistant passed this chat to a person and nobody has taken it yet.
+const waitsAdvisor = (c: { bot?: { paused: boolean; reason: string | null } | null }) => Boolean(c.bot?.paused && c.bot.reason === 'handoff');
 const ME_KEY = 'lp_agent'; // who is using this browser (for "Míos")
 const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 
@@ -402,6 +404,7 @@ export default function OmnichannelInbox() {
   const showTabs = socialOn.messenger || socialOn.instagram || tabs.some((t) => t.ch !== 'whatsapp' && t.chats > 0);
   const counts = useMemo(
     () => ({
+      handoff: inTab.filter(waitsAdvisor).length,
       unread: inTab.filter((c) => c.unread_count > 0).length,
       unanswered: inTab.filter(isUnanswered).length,
       pending: inTab.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
@@ -415,6 +418,7 @@ export default function OmnichannelInbox() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (showTabs ? inTab : conversations).filter((c) => {
+      if (filter === 'handoff' && !waitsAdvisor(c)) return false;
       if (filter === 'unread' && !(c.unread_count > 0)) return false;
       if (filter === 'unanswered' && !isUnanswered(c)) return false;
       if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
@@ -700,6 +704,7 @@ export default function OmnichannelInbox() {
               {(
                 [
                   ['all', 'Todos', null],
+                  ...(counts.handoff || filter === 'handoff' ? ([['handoff', '🙋 Esperan asesor', counts.handoff]] as [Filter, string, number | null][]) : []),
                   ['unread', 'Sin leer', counts.unread],
                   ['unanswered', 'Sin responder', counts.unanswered],
                   ['pending', 'Pendientes', counts.pending],
@@ -720,7 +725,7 @@ export default function OmnichannelInbox() {
                   }`}
                 >
                   {label}
-                  {n ? <span className={`text-[10px] font-bold ${filter === k ? 'text-white/80' : k === 'unanswered' ? 'text-red-600' : 'text-slate-500'}`}>{n}</span> : null}
+                  {n ? <span className={`text-[10px] font-bold ${filter === k ? 'text-white/80' : k === 'unanswered' ? 'text-red-600' : k === 'handoff' ? 'text-amber-700' : 'text-slate-500'}`}>{n}</span> : null}
                 </button>
               ))}
             </div>
@@ -795,6 +800,8 @@ export default function OmnichannelInbox() {
                   ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
                   : filter === 'unanswered' && !search && !tagFilter
                     ? '¡Al día! No hay chats esperando respuesta.'
+                    : filter === 'handoff' && !search && !tagFilter
+                    ? 'Ningún chat espera asesor. Cuando el asistente pase uno a una persona, aparece aquí.'
                     : 'Sin resultados.'}
               </div>
             )}
@@ -820,6 +827,11 @@ export default function OmnichannelInbox() {
                     <span className="text-xs text-slate-500 truncate">{preview(c.last_message)}</span>
                     {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center">{c.unread_count}</span>}
                   </div>
+                  {waitsAdvisor(c) && (
+                    <p className="mt-1 text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-1.5 py-0.5 truncate" title={c.bot?.note || undefined}>
+                      🙋 Espera asesor{c.bot?.note ? `: ${c.bot.note}` : ''}
+                    </p>
+                  )}
                   {(c.order || isUnanswered(c) || (c.tags || []).length > 0 || c.ad) && (
                     <div className="mt-1.5 flex items-center gap-1 flex-wrap">
                       {c.ad && <AdChip ad={c.ad} />}

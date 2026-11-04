@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOrg } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
-import { UNREAD_REFRESH_EVENT, playMessageSound, showNotice, soundOn } from '@/lib/notify';
+import { UNREAD_REFRESH_EVENT, playHandoffSound, playMessageSound, showNotice, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import InstallApp from '@/components/layout/InstallApp';
 import Link from 'next/link';
@@ -125,10 +125,12 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
   // Unread WhatsApp messages: badge on "Mensajes", count in the tab title and a sound when a new one arrives.
   const [unread, setUnread] = useState(0);
+  const [waiting, setWaiting] = useState(0); // chats the assistant passed to a person
   useEffect(() => {
     let stop = false;
     const SEEN = 'lp_last_inbound_seen';
     const SEEN_MINE = 'lp_last_mine_seen';
+    const SEEN_HANDOFF = 'lp_last_handoff_seen';
     const check = async () => {
       try {
         const d = await fetch('/api/whatsapp/unread', { cache: 'no-store' }).then((r) => r.json());
@@ -144,6 +146,24 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           } catch {}
           const here = window.location.pathname === '/crm' && (window as any).__lpActiveChat === mine.latest?.id && document.visibilityState === 'visible';
           if (seenMine && mine.lastInboundAt > seenMine && mine.latest && !here) showNotice(`${mine.latest.name} te escribió`, mine.latest.preview, `/crm?c=${mine.latest.id}`);
+        }
+        // The assistant passed a chat to a person: its own sound and a notice, from any page.
+        const handoff = d.handoff as { count: number; latest: { id: string; name: string; note: string; at: string | null } | null } | null;
+        setWaiting(handoff?.count || 0);
+        if (handoff?.latest?.at) {
+          let seenHandoff: string | null = null;
+          try {
+            seenHandoff = sessionStorage.getItem(SEEN_HANDOFF);
+            sessionStorage.setItem(SEEN_HANDOFF, handoff.latest.at);
+          } catch {}
+          if (seenHandoff && handoff.latest.at > seenHandoff) {
+            if (soundOn()) playHandoffSound();
+            showNotice(`🙋 ${handoff.latest.name} necesita un asesor`, handoff.latest.note || 'El asistente pasó el chat a una persona.', `/crm?c=${handoff.latest.id}`);
+          }
+        } else {
+          try {
+            if (!sessionStorage.getItem(SEEN_HANDOFF)) sessionStorage.setItem(SEEN_HANDOFF, new Date(0).toISOString());
+          } catch {}
         }
         const last: string | null = d.lastInboundAt;
         let seen: string | null = null;
@@ -280,6 +300,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                       {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-brand-gradient" />}
                       <Icon className={`w-[18px] h-[18px] ${active ? 'text-brand-navy' : 'text-slate-400'}`} strokeWidth={2} />
                       <span className="flex-1">{item.label}</span>
+                      {item.href === '/crm' && waiting > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center" title={`${waiting} ${waiting === 1 ? 'chat espera' : 'chats esperan'} un asesor`}>
+                          🙋 {waiting > 99 ? '99+' : waiting}
+                        </span>
+                      )}
                       {item.href === '/crm' && unread > 0 && (
                         <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
                           {unread > 99 ? '99+' : unread}
@@ -351,6 +376,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
             <Link key={href} href={href} className={`relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${active ? 'text-brand-navy' : 'text-slate-500'}`}>
               <Icon className="w-[22px] h-[22px]" strokeWidth={active ? 2.4 : 2} />
               {label}
+              {href === '/crm' && waiting > 0 && (
+                <span className="absolute top-2 right-1/2 mr-2 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center" aria-label={`${waiting} esperan asesor`}>
+                  {waiting > 99 ? '99+' : waiting}
+                </span>
+              )}
               {href === '/crm' && unread > 0 && (
                 <span className="absolute top-2 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-green text-white text-[10px] font-bold flex items-center justify-center">
                   {unread > 99 ? '99+' : unread}

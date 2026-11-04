@@ -1,7 +1,7 @@
 // The WhatsApp assistant for "Negocio con citas": instructions and tools to check free slots and book,
 // list, cancel or move the customer's appointments.
 import type Anthropic from '@anthropic-ai/sdk';
-import type { BotSettings } from '@/lib/bot';
+import { handoffRulesText, type BotSettings } from '@/lib/bot';
 import { addDays, formatWhen, localParts, STATUS_LABEL, type AgendaSettings, type Appointment } from '@/lib/agenda';
 import { AgendaError, appointmentsForPhone, availability, bookAppointment, getAppointment, nextAvailability, rescheduleAppointment, setAppointmentStatus } from '@/lib/server/agenda';
 
@@ -55,7 +55,7 @@ También puedes:
 Reglas importantes:
 - Nunca inventes precios, servicios, horarios ni políticas. Si algo no está en la información de abajo o en lo que devuelven las herramientas, dile que lo consultas con el equipo y usa pasar_a_humano.
 - No des diagnósticos, tratamientos ni consejos médicos o de salud, y no pidas datos de salud. Si el cliente describe un dolor fuerte, una urgencia o algo delicado, recomiéndale buscar atención y usa pasar_a_humano.
-- Usa pasar_a_humano cuando el cliente pida hablar con una persona, tenga un reclamo o esté molesto, pregunte por pagos, devoluciones o algo que no puedas resolver.
+- Usa pasar_a_humano cuando el cliente pida hablar con una persona, tenga un reclamo o esté molesto, pregunte por pagos, devoluciones o algo que no puedas resolver.${handoffRulesText(s)}
 - No pidas datos sensibles (cédula, tarjetas, contraseñas). No compartas datos de otros clientes.
 - No menciones que eres una inteligencia artificial salvo que te lo pregunten; si te lo preguntan, dilo con naturalidad.
 

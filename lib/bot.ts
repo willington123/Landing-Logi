@@ -11,6 +11,8 @@ export interface BotSettings {
   followUp: FollowUpSettings; // one message to customers who stopped answering without ordering
   model: BotModel; // which Claude model answers the chats
   social: boolean; // also answer Messenger and Instagram chats
+  handoffRules: string; // extra cases, written by the store, when the assistant passes the chat to a person (one per line)
+  resumeAfterHours: number; // a chat a person took over goes back to the assistant after this many hours without a person writing (0 = never)
 }
 
 export type BotModel = 'quality' | 'balanced' | 'economy';
@@ -26,6 +28,7 @@ export interface FollowUpSettings {
   onlyAds: boolean; // only chats that came from a WhatsApp ad
 }
 export const FOLLOW_UP_HOURS = [1, 2, 3, 4, 6, 12, 20];
+export const RESUME_HOURS = [0, 2, 4, 8, 12, 24, 48];
 export const DEFAULT_FOLLOW_UP: FollowUpSettings = { enabled: false, afterHours: 3, onlyAds: true };
 
 export const DEFAULT_BOT: BotSettings = {
@@ -45,6 +48,8 @@ export const DEFAULT_BOT: BotSettings = {
   followUp: DEFAULT_FOLLOW_UP,
   model: 'balanced',
   social: true,
+  handoffRules: '',
+  resumeAfterHours: 12,
 };
 
 export function cleanFollowUp(f: any): FollowUpSettings {
@@ -73,6 +78,13 @@ export function cleanBot(input: any): BotSettings | string {
     followUp: cleanFollowUp(input?.followUp),
     model: BOT_MODELS.some((m) => m.id === input?.model) ? input.model : DEFAULT_BOT.model,
     social: input?.social === undefined ? DEFAULT_BOT.social : Boolean(input.social),
+    handoffRules: String(input?.handoffRules ?? '')
+      .split('\n')
+      .map((l) => l.replace(/^[\s\-•*\d.)]+/, '').trim().slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 15)
+      .join('\n'),
+    resumeAfterHours: RESUME_HOURS.includes(Number(input?.resumeAfterHours)) ? Number(input.resumeAfterHours) : DEFAULT_BOT.resumeAfterHours,
   };
 }
 
@@ -85,6 +97,24 @@ export interface BotChatState {
   day?: string; // yyyy-mm-dd of the counter below
   replies?: number; // bot replies that day
 }
+
+// A paused chat goes back to the assistant: a person took it (or the assistant handed it over) and no person
+// has written in it for the hours the store chose. Limit and error pauses are not resumed here.
+export function shouldResume(state: BotChatState, s: Pick<BotSettings, 'resumeAfterHours'>, now = Date.now()): boolean {
+  if (!state.paused || !s.resumeAfterHours || (state.reason !== 'handoff' && state.reason !== 'human')) return false;
+  const at = state.pausedAt ? new Date(state.pausedAt).getTime() : NaN;
+  return Number.isFinite(at) && now - at >= s.resumeAfterHours * 3600_000;
+}
+
+// The store's own handoff cases, as lines for the assistant's instructions.
+export const handoffRulesText = (s: Pick<BotSettings, 'handoffRules'>) =>
+  s.handoffRules
+    ? `\n- La tienda también pide usar pasar_a_humano en estos casos:\n${s.handoffRules
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => `  • ${l}`)
+        .join('\n')}`
+    : '';
 
 export const PAUSE_REASON: Record<NonNullable<BotChatState['reason']>, string> = {
   human: 'Respondiste tú',
