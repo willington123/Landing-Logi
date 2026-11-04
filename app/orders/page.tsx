@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
 import DropiOrderStatus from '@/components/orders/DropiOrderStatus';
+import DropiBulkModal from '@/components/orders/DropiBulkModal';
 import { WaFallbackBadge, WhatsAppOrderStatus, useNow, waFallbackPending } from '@/components/orders/WhatsAppOrderStatus';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT, deleteOrders, pullFromCloud } from '@/lib/cloud';
@@ -44,6 +45,7 @@ export default function OrdersPage() {
   const [landingNames, setLandingNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
+  const [dropiBulk, setDropiBulk] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   // Deleting: checked rows, and the ids waiting for confirmation.
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -294,6 +296,15 @@ export default function OrdersPage() {
                 <Download className="w-4 h-4" />
                 Descargar Excel
               </button>
+              <button
+                type="button"
+                onClick={() => setDropiBulk(true)}
+                title="Pedidos confirmados en el Excel de carga masiva de Dropi"
+                className="h-9 px-3 text-sm font-medium whitespace-nowrap shrink-0 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 transition"
+              >
+                <Truck className="w-4 h-4" />
+                Para Dropi
+              </button>
             </div>
           </div>
 
@@ -447,6 +458,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Order Detail Modal */}
+      {dropiBulk && <DropiBulkModal orders={orders} onClose={() => setDropiBulk(false)} onDone={() => pullFromCloud()} />}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 ring-1 ring-inset ring-slate-600/15 max-h-[92vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">

@@ -7,16 +7,37 @@ import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
 
-// Link a landing to a Dropi product: { landingId, productId, variationId? }. The product is read from Dropi.
+const saveLink = (landingId: string, link: DropiLink) =>
+  updateIntegrations((s) => ({ ...s, dropi: { token: s.dropi?.token || '', autoSend: s.dropi?.autoSend ?? false, connectedAt: s.dropi?.connectedAt || new Date().toISOString(), ...s.dropi, links: { ...(s.dropi?.links || {}), [landingId]: link } } }));
+
+// Link a landing to a Dropi product: { landingId, productId, variationId? }. With Dropi connected the product is
+// read from Dropi; without it (or { manual: true }) the ids are saved as typed (for the Excel upload).
 export async function PUT(req: NextRequest) {
   try {
     await requireManager();
-    const cfg = await dropiConfig();
-    if (!cfg) return fail('Conecta Dropi primero.', 400);
     const b = await req.json().catch(() => ({}));
     const landingId = String(b.landingId || '');
     if (!landingId || !(await getLandingById(landingId))) return fail('Landing no encontrada.', 404);
-    const p = await getProduct(cfg, Number(b.productId));
+    const productId = Number(String(b.productId ?? '').replace(/\D/g, ''));
+    if (!productId) return fail('Escribe el ID del producto en Dropi (el número que sale en el producto).', 400);
+    const cfg = await dropiConfig();
+    if (!cfg || b.manual) {
+      const variationId = Number(String(b.variationId ?? '').replace(/\D/g, '')) || null;
+      const link: DropiLink = {
+        productId,
+        name: String(b.name ?? '').trim().slice(0, 120) || `Producto ${productId}`,
+        type: variationId ? 'VARIABLE' : 'SIMPLE',
+        supplierId: null,
+        supplierName: null,
+        variationId,
+        variationName: variationId ? `Variante ${variationId}` : null,
+        salePrice: null,
+        image: null,
+      };
+      await saveLink(landingId, link);
+      return ok({ link });
+    }
+    const p = await getProduct(cfg, productId);
     let variation: { id: number; name: string; salePrice: number | null } | null = null;
     if (p.type === 'VARIABLE') {
       variation = p.variations.find((v) => v.id === Number(b.variationId)) || null;
@@ -33,7 +54,7 @@ export async function PUT(req: NextRequest) {
       salePrice: variation?.salePrice ?? p.salePrice,
       image: p.image,
     };
-    await updateIntegrations((s) => ({ ...s, dropi: { ...s.dropi!, links: { ...(s.dropi?.links || {}), [landingId]: link } } }));
+    await saveLink(landingId, link);
     return ok({ link });
   } catch (e: any) {
     if (e instanceof Forbidden) return fail(e.message, 403);
