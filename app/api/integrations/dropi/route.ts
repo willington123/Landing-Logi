@@ -4,6 +4,7 @@ import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { DropiError, checkToken, cleanDomain, cleanToken } from '@/lib/server/dropi';
 import { publicBaseUrl } from '@/lib/server/vapi';
 import { listLandings } from '@/lib/server/db';
+import { getProducts } from '@/lib/server/products';
 import { currentOrgId, currentRole } from '@/lib/server/tenant';
 import { decrypt, mask } from '@/lib/server/secrets';
 import { fail, failFrom, ok } from '@/lib/server/http';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     const role = await currentRole();
     const s = (await storedIntegrations(orgId)).dropi;
     const token = s ? decrypt(s.token) : '';
-    const landings = await listLandings().catch(() => []);
+    const [landings, products] = await Promise.all([listLandings().catch(() => []), getProducts().catch(() => [])]);
     return ok({
       canManage: role === 'owner' || role === 'admin',
       connected: Boolean(token),
@@ -29,7 +30,10 @@ export async function GET(req: NextRequest) {
       autoSend: Boolean(s?.autoSend),
       domain: s?.domain || null,
       suggestedDomain: hostOf(req),
-      landings: landings.map((l) => ({ id: l.id, name: l.productName || l.title, image: l.mainImage || null, link: s?.links?.[l.id] || null })),
+      landings: [
+        ...landings.map((l) => ({ id: l.id, name: l.productName || l.title, image: l.mainImage || null, kind: 'landing', link: s?.links?.[l.id] || null })),
+        ...products.map((p) => ({ id: p.id, name: p.name, image: p.image || null, kind: 'product', link: s?.links?.[p.id] || null })),
+      ],
     });
   } catch (e) {
     return handle(e);

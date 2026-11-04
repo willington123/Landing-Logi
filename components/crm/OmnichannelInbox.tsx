@@ -3,7 +3,8 @@
 // WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, User, X, Zap, Megaphone } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, ShoppingBag, User, X, Zap, Megaphone } from 'lucide-react';
+import NewOrderModal from '@/components/orders/NewOrderModal';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
@@ -251,6 +252,7 @@ export default function OmnichannelInbox() {
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
   const [orderOpen, setOrderOpen] = useState(false); // customer drawer on small screens
+  const [newOrder, setNewOrder] = useState(false); // "Crear pedido" for the open chat
   const [now, setNow] = useState(() => Date.now());
   const [sound, setSound] = useState(true);
   const [tplBusy, setTplBusy] = useState(false);
@@ -877,6 +879,13 @@ export default function OmnichannelInbox() {
                   </div>
                 </div>
                 <button
+                  onClick={() => setNewOrder(true)}
+                  title="Crear un pedido confirmado para este cliente"
+                  className="h-8 px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center gap-1.5"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pedido</span>
+                </button>
+                <button
                   onClick={() => setOrderOpen(true)}
                   className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
                 >
@@ -1075,6 +1084,13 @@ export default function OmnichannelInbox() {
       {manage === 'tags' && <TagManager tags={tags} onClose={() => setManage(null)} onSaved={(t) => (setTags(t), loadConversations())} />}
       {manage === 'team' && <TeamManager onClose={() => setManage(null)} onSaved={(a) => (setAgents(a), loadConversations())} />}
       {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
+      {newOrder && active && (
+        <NewOrderModal
+          prefill={{ name: active.name && !active.name.startsWith('@') ? active.name : '', phone: /^\d+$/.test(active.id) ? active.id : '', conversationId: active.id }}
+          onClose={() => setNewOrder(false)}
+          onCreated={() => loadConversations()}
+        />
+      )}
     </div>
   );
 }

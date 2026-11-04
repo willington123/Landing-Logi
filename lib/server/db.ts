@@ -206,7 +206,7 @@ export async function createOrder(order: OrderItem) {
   const { error } = await (await db()).from('orders').insert({
     id: order.id,
     order_number: order.orderNumber,
-    landing_id: order.landingPageId || null,
+    landing_id: order.landingPageId && !order.landingPageId.startsWith('prd-') ? order.landingPageId : null, // WhatsApp products have no landing row
     data: order,
     status: order.status,
     created_at: order.createdAt,

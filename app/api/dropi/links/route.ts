@@ -3,6 +3,7 @@ import { updateIntegrations } from '@/lib/server/integrations';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { DropiError, dropiConfig, getProduct, type DropiLink } from '@/lib/server/dropi';
 import { getLandingById } from '@/lib/server/db';
+import { getProduct as getCatalogProduct } from '@/lib/server/products';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,8 @@ export async function PUT(req: NextRequest) {
     await requireManager();
     const b = await req.json().catch(() => ({}));
     const landingId = String(b.landingId || '');
-    if (!landingId || !(await getLandingById(landingId))) return fail('Landing no encontrada.', 404);
+    const exists = landingId.startsWith('prd-') ? await getCatalogProduct(landingId) : await getLandingById(landingId);
+    if (!landingId || !exists) return fail('Producto no encontrado.', 404);
     const productId = Number(String(b.productId ?? '').replace(/\D/g, ''));
     if (!productId) return fail('Escribe el ID del producto en Dropi (el número que sale en el producto).', 400);
     const cfg = await dropiConfig();
