@@ -4,7 +4,7 @@ import type { AdRef } from '@/lib/ads';
 import { waitUntil } from '@vercel/functions';
 import { db } from '@/lib/server/db';
 import { sendText, whatsappEnabled, type InboundMessage } from '@/lib/server/whatsapp';
-import { recordOutbound } from '@/lib/server/wa-store';
+import { markConversationRead, recordOutbound } from '@/lib/server/wa-store';
 import { addNote, getAutoSettings, getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
 import { isWorkingTime } from '@/lib/crm';
@@ -86,6 +86,9 @@ async function answer(m: InboundMessage) {
     const result = await sendText(m.from, run.reply);
     // A handed-over chat stays in "Sin responder" for the team.
     await recordOutbound({ phone: m.from, type: 'bot', body: run.reply, result, auto: Boolean(run.handoff) });
+    // The assistant answered: the chat no longer counts as unread for the team (unless it was handed to a person,
+    // the reply failed, or the customer wrote again meanwhile).
+    if (result.ok && !run.handoff && (await isLatestInbound(m.from, m.waMessageId))) await markConversationRead(m.from).catch(() => {});
   }
   state = await setBotState(m.from, { day, replies: replies + (run.reply ? 1 : 0), ...(run.handoff ? {} : { reason: undefined, note: undefined }) });
 

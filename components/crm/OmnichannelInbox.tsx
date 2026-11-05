@@ -731,6 +731,20 @@ export default function OmnichannelInbox() {
                 </button>
               ))}
             </div>
+            {counts.unread > 0 && (filter === 'unread' || counts.unread >= 3) && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch('/api/whatsapp/conversations/read-all', { method: 'POST' }).catch(() => null);
+                  await loadConversations();
+                  window.dispatchEvent(new Event(UNREAD_REFRESH_EVENT));
+                }}
+                className="mt-2 text-[11.5px] font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
+                title="No marca los chats que esperan asesor"
+              >
+                <CheckCheck className="w-3.5 h-3.5" /> Marcar todo como leído
+              </button>
+            )}
             {tags.length > 0 && (
               <div className="mt-2 flex items-center gap-2">
                 <select
