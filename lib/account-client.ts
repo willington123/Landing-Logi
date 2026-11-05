@@ -3,8 +3,8 @@
 // The signed-in account (one request per page load, shared by the menu and the plan banner).
 export interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
-  org: { id: string; name: string; role: string } | null;
-  orgs: { id: string; name: string; role: string }[];
+  org: { id: string; name: string; role: string; logo?: string | null } | null;
+  orgs: { id: string; name: string; role: string; logo?: string | null }[];
   platformAdmin?: boolean;
   businessType?: 'store' | 'appointments';
   plan?: {

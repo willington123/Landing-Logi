@@ -110,6 +110,7 @@ export interface OrgInfo {
   id: string;
   name: string;
   role: Role;
+  logo: string | null; // the store's logo (settings row "store_logo")
 }
 
 export async function createOrg(name: string, id = newId('org')): Promise<string> {
@@ -135,7 +136,17 @@ export async function userOrgs(uid: string): Promise<OrgInfo[]> {
   if (!ms?.length) return [];
   const { data: orgs } = await rawDb().from('organizations').select('id, name').in('id', ms.map((m) => m.org_id));
   const names = Object.fromEntries((orgs || []).map((o) => [o.id, o.name]));
-  return ms.map((m) => ({ id: m.org_id as string, name: (names[m.org_id] as string) || 'Mi tienda', role: m.role as Role }));
+  const logos = await orgLogos(ms.map((m) => m.org_id as string));
+  return ms.map((m) => ({ id: m.org_id as string, name: (names[m.org_id] as string) || 'Mi tienda', role: m.role as Role, logo: logos[m.org_id as string] || null }));
+}
+
+// Each store's logo, to tell stores apart in the menu and in "Mis tiendas".
+export async function orgLogos(orgIds: string[]): Promise<Record<string, string>> {
+  if (!orgIds.length) return {};
+  const { data } = await rawDb().from('settings').select('org_id, data').eq('id', 'store_logo').in('org_id', orgIds);
+  const out: Record<string, string> = {};
+  for (const r of data || []) if ((r.data as any)?.url) out[r.org_id as string] = (r.data as any).url;
+  return out;
 }
 
 export async function roleIn(orgId: string, uid: string): Promise<Role | null> {

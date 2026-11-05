@@ -16,8 +16,8 @@ export async function GET() {
     const org = orgs.find((o) => o.id === orgId);
     return ok({
       user: user ? { id: user.id, email: user.email, name: user.name } : null,
-      org: org ? { id: org.id, name: org.name, role } : null,
-      orgs: orgs.map((o) => ({ id: o.id, name: o.name, role: o.role })),
+      org: org ? { id: org.id, name: org.name, role, logo: org.logo } : null,
+      orgs: orgs.map((o) => ({ id: o.id, name: o.name, role: o.role, logo: o.logo })),
       integrationsManaged: envIntegrationsAllowed(),
       platformAdmin: isPlatformAdmin(user?.email),
       businessType: appointments ? 'appointments' : 'store',

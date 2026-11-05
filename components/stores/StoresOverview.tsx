@@ -4,12 +4,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpDown, Bot, Loader2, Megaphone, MessageCircle, RefreshCw, Search } from 'lucide-react';
 import { clearLocalData } from '@/lib/cloud';
+import StoreAvatar from '@/components/layout/StoreAvatar';
 
 type Range = 'today' | '7d' | '30d' | 'month';
 interface Store {
   id: string;
   name: string;
   role: string;
+  logo?: string | null;
   plan: { status: string; daysLeft: number | null } | null;
   whatsapp: boolean;
   whatsappPhone: string | null;
@@ -201,8 +203,13 @@ export default function StoresOverview() {
                   {rows.map((r) => (
                     <tr key={r.id} onClick={() => open(r.id)} className="cursor-pointer hover:bg-slate-50">
                       <td className="px-3 py-3">
-                        <p className="font-medium text-slate-900">{r.name}</p>
-                        {r.plan && PLAN[r.plan.status] && <span className={`inline-flex mt-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PLAN[r.plan.status].cls}`}>{PLAN[r.plan.status].label}</span>}
+                        <div className="flex items-center gap-2.5">
+                          <StoreAvatar name={r.name} logo={r.logo} id={r.id} className="w-8 h-8 rounded-lg text-xs" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-900">{r.name}</p>
+                            {r.plan && PLAN[r.plan.status] && <span className={`inline-flex mt-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PLAN[r.plan.status].cls}`}>{PLAN[r.plan.status].label}</span>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <Conn r={r} />
@@ -228,7 +235,10 @@ export default function StoresOverview() {
               {rows.map((r) => (
                 <li key={r.id} onClick={() => open(r.id)} className="p-4 space-y-2 cursor-pointer active:bg-slate-50">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-slate-900 truncate">{r.name}</p>
+                    <span className="flex items-center gap-2 min-w-0">
+                      <StoreAvatar name={r.name} logo={r.logo} id={r.id} className="w-7 h-7 rounded-md text-xs" />
+                      <p className="font-semibold text-slate-900 truncate">{r.name}</p>
+                    </span>
                     <Conn r={r} />
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
