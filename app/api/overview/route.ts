@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
     const [{ data: subs }, { data: sets }, plans] = await Promise.all([
       rawDb().from('subscriptions').select('*').in('org_id', ids),
-      rawDb().from('settings').select('org_id, id, data').in('org_id', ids).in('id', ['integrations', 'wa_bot']),
+      rawDb().from('settings').select('org_id, id, data').in('org_id', ids).in('id', ['integrations', 'wa_bot', 'store_logo']),
       getPlans(),
     ]);
     const subBy = Object.fromEntries((subs || []).map((s) => [s.org_id, s as SubRow]));
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
         id: o.id,
         name: o.name,
         role: o.role,
+        logo: setting(o.id, 'store_logo')?.url || null,
         plan: sub ? { status: sub.effective, daysLeft: sub.daysLeft } : null,
         whatsapp: Boolean(integ.whatsapp?.phoneNumberId) || envWa,
         whatsappPhone: integ.whatsapp?.displayPhone || null,

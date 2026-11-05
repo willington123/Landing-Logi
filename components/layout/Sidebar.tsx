@@ -6,14 +6,15 @@ import { logiStore } from '@/lib/store';
 import { UNREAD_REFRESH_EVENT, playHandoffSound, playMessageSound, showNotice, soundOn } from '@/lib/notify';
 import { fetchAccount } from '@/lib/account-client';
 import InstallApp from '@/components/layout/InstallApp';
+import StoreAvatar, { STORE_LOGO_EVENT } from '@/components/layout/StoreAvatar';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
-  org: { id: string; name: string; role: string } | null;
-  orgs: { id: string; name: string; role: string }[];
+  org: { id: string; name: string; role: string; logo?: string | null } | null;
+  orgs: { id: string; name: string; role: string; logo?: string | null }[];
   platformAdmin?: boolean;
   businessType?: 'store' | 'appointments';
 }
@@ -128,6 +129,15 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
   // Unread WhatsApp messages: badge on "Mensajes", count in the tab title and a sound when a new one arrives.
   const [unread, setUnread] = useState(0);
   const [waiting, setWaiting] = useState(0); // chats the assistant passed to a person
+  // The store's logo was changed in Configuración: show it right away.
+  useEffect(() => {
+    const refresh = () =>
+      fetchAccount(true).then((r: any) => {
+        if (r.data?.success && r.data.org) setAccount(r.data);
+      });
+    window.addEventListener(STORE_LOGO_EVENT, refresh);
+    return () => window.removeEventListener(STORE_LOGO_EVENT, refresh);
+  }, []);
   useEffect(() => {
     let stop = false;
     const SEEN = 'lp_last_inbound_seen';
@@ -338,7 +348,11 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               onClick={() => (account ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
               className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
             >
-              <img src="/brand/konnexa-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
+              {account?.org ? (
+                <StoreAvatar name={account.org.name} logo={account.org.logo} id={account.org.id} />
+              ) : (
+                <img src="/brand/konnexa-icon.png" alt="" className="w-9 h-9 rounded-lg border border-slate-200" />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-slate-900 truncate">{account?.org?.name || storeName || 'Mi tienda'}</p>
                 <p className="text-xs text-slate-500 truncate">
@@ -449,6 +463,7 @@ function StoreMenu({ account, onSwitch, onClose }: { account: AccountInfo; onSwi
             onClick={() => (o.id === account.org?.id ? onClose() : onSwitch(o.id))}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left text-[13px] text-slate-800"
           >
+            <StoreAvatar name={o.name} logo={o.logo} id={o.id} className="w-6 h-6 rounded-md text-[11px]" />
             <span className="truncate flex-1">{o.name}</span>
             {o.id === account.org?.id && <Check className="w-3.5 h-3.5 text-slate-900" />}
           </button>

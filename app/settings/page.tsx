@@ -8,6 +8,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import TeamSettings from '@/components/account/TeamSettings';
+import StoreLogo from '@/components/account/StoreLogo';
 import {
   Settings,
   Store,
@@ -96,6 +97,8 @@ export default function SettingsPage() {
                 <Store className="w-4 h-4 text-brand-navy" />
                 <h3 className="text-[15px] font-semibold text-slate-900">Identidad del Negocio</h3>
               </div>
+
+              <StoreLogo />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>

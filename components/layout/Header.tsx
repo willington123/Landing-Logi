@@ -7,6 +7,8 @@ import { Menu, Globe } from 'lucide-react';
 import { SIDEBAR_TOGGLE_EVENT } from './Sidebar';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT } from '@/lib/cloud';
+import { fetchAccount } from '@/lib/account-client';
+import StoreAvatar, { STORE_LOGO_EVENT } from '@/components/layout/StoreAvatar';
 
 interface HeaderProps {
   onOpenWizard?: () => void;
@@ -15,6 +17,15 @@ interface HeaderProps {
 
 export default function Header({ title }: HeaderProps) {
   const [currency, setCurrency] = useState('');
+  const [store, setStore] = useState<{ id: string; name: string; logo?: string | null } | null>(null);
+  // On phones the header shows which store you are in.
+  useEffect(() => {
+    const load = (fresh = false) => fetchAccount(fresh).then((r: any) => r.data?.org && setStore(r.data.org));
+    load();
+    const again = () => load(true);
+    window.addEventListener(STORE_LOGO_EVENT, again);
+    return () => window.removeEventListener(STORE_LOGO_EVENT, again);
+  }, []);
 
   useEffect(() => {
     const read = () => setCurrency(logiStore.getStoreSettings().currency || 'COP');
@@ -33,7 +44,13 @@ export default function Header({ title }: HeaderProps) {
       >
         <Menu className="w-5 h-5" />
       </button>
-      <img src="/brand/konnexa-icon.png" alt="" className="lg:hidden w-7 h-7 rounded-md" />
+      {store ? (
+        <span className="lg:hidden" title={store.name}>
+          <StoreAvatar name={store.name} logo={store.logo} id={store.id} className="w-7 h-7 rounded-md text-xs" />
+        </span>
+      ) : (
+        <img src="/brand/konnexa-icon.png" alt="" className="lg:hidden w-7 h-7 rounded-md" />
+      )}
 
       <h1 className="text-[17px] font-semibold text-slate-900 tracking-tight truncate">{title || 'Inicio'}</h1>
 
