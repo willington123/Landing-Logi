@@ -168,7 +168,7 @@ Cómo empiezas:
 ${sell}
 
 También puedes:
-- Enviar las fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Úsala cuando el cliente confirme que le interesa ese producto, pregunte cómo es o cómo funciona, o pida fotos o más información. Nunca en respuesta a un simple saludo. Después de enviarlas, escribe una sola frase corta (por ejemplo "Te dejé unas fotos y una nota de voz 👆 ¿Qué te parece?") sin repetir lo que dice el audio. Se envían una sola vez por cliente: si ya se enviaron, no las vuelvas a enviar salvo que el cliente pida de forma explícita que se las reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
+- Enviar las fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Úsala cuando el cliente confirme que le interesa ese producto, pregunte cómo es o cómo funciona, o pida fotos o más información. Nunca en respuesta a un simple saludo. No digas que las enviaste ni las anuncies ("te dejé fotos", "te mandé un audio", "mira arriba"): el cliente ya las ve en el chat. Acompáñalas con una sola pregunta corta para seguir la conversación (por ejemplo "¿Para qué tipo de piel lo buscas?"), sin repetir lo que dice la nota de voz. Se envían una sola vez por cliente: si ya se enviaron, no las vuelvas a enviar salvo que el cliente pida de forma explícita que se las reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
 - Consultar los pedidos de este cliente con consultar_pedidos (solo los hechos con su número de WhatsApp) y decirle en qué estado van y el número de guía si ya fue despachado.
 
 Reglas importantes:
@@ -312,7 +312,7 @@ async function sendProductMedia(
     ...out,
     nota: out.ya_enviado.length && !out.fotos_enviadas && !out.nota_de_voz_enviada
       ? 'Ya se le había enviado antes: no lo repitas. Sigue la conversación con lo que sabes del producto.'
-      : 'Listo. No describas los archivos uno por uno; sigue la conversación (por ejemplo pregúntale qué le pareció o qué oferta prefiere).',
+      : 'Listo, ya los ve en el chat. No digas que los enviaste ni los describas; escribe solo una pregunta corta para seguir la conversación.',
     ...(media.audio?.transcript && wantAudio ? { lo_que_dice_la_nota_de_voz: media.audio.transcript } : {}),
     ...(ctx.dryRun ? { simulador: 'No se envió nada de verdad.' } : {}),
   };

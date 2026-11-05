@@ -74,7 +74,7 @@ export async function toVoiceNote(input: Buffer): Promise<{ data: Buffer; second
   const out = path.join(dir, 'out.ogg');
   try {
     await fs.writeFile(src, input);
-    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-t', String(MAX_AUDIO_SECONDS), '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-f', 'ogg', out]);
+    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-t', String(MAX_AUDIO_SECONDS), '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '64k', '-vbr', 'on', '-application', 'audio', '-f', 'ogg', out]);
     if (r.code !== 0) throw userError('No pudimos leer ese audio. Prueba con un mp3, m4a u ogg.');
     const m = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(r.err);
     const total = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
