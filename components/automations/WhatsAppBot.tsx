@@ -101,6 +101,12 @@ export default function WhatsAppBot() {
       const notes: string[] = [];
       for (const t of d.toolCalls || []) {
         if (t.name === 'consultar_pedidos') notes.push(`🔎 Consultó los pedidos del cliente (${t.result?.pedidos?.length ?? 0} encontrados)`);
+        if (t.name === 'enviar_medios' && !t.result?.error)
+          notes.push(
+            t.result?.fotos_enviadas || t.result?.nota_de_voz_enviada
+              ? `📎 Envió ${[t.result.fotos_enviadas ? `${t.result.fotos_enviadas} ${t.result.fotos_enviadas === 1 ? 'foto' : 'fotos'}` : '', t.result.nota_de_voz_enviada ? 'la nota de voz' : ''].filter(Boolean).join(' y ')} (simulación: en WhatsApp llegan antes de este mensaje, una sola vez por cliente)`
+              : '📎 No reenvió las fotos ni la nota de voz: ya se las había enviado',
+          );
         if (t.name === 'pasar_a_humano') notes.push(`👤 Pasó el chat a una persona: ${t.input?.motivo || ''}`);
         if (t.name === 'crear_pedido')
           notes.push(
