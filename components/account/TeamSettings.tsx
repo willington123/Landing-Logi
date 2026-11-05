@@ -2,15 +2,16 @@
 
 // Configuración → My account (password) and Team (members, roles, invitation links).
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, KeyRound, Link2, Loader2, MessageCircle, Trash2, UserPlus, Users } from 'lucide-react';
+import { Check, Copy, KeyRound, Link2, Loader2, Mail, MessageCircle, Trash2, UserPlus, Users } from 'lucide-react';
 import { isCloud, clearLocalData } from '@/lib/cloud';
 
 type Role = 'owner' | 'admin' | 'member';
 const ROLE_LABEL: Record<Role, string> = { owner: 'Dueño', admin: 'Administrador', member: 'Equipo' };
+const PLURAL: Record<Role, [string, string]> = { owner: ['dueño', 'dueños'], admin: ['administrador', 'administradores'], member: ['del equipo', 'del equipo'] };
 const ROLE_HELP: Record<Role, string> = {
-  owner: 'Todo, incluido cambiar dueños',
-  admin: 'Todo, e invitar o quitar personas',
-  member: 'Usa el panel (pedidos, mensajes, landings)',
+  owner: 'Control total, incluido manejar a otros dueños',
+  admin: 'Todo: conectar WhatsApp e integraciones, plantillas, pagos e invitar personas (menos dueños)',
+  member: 'Atiende mensajes y pedidos; no cambia conexiones ni pagos',
 };
 
 interface Member {
@@ -18,6 +19,7 @@ interface Member {
   role: Role;
   email: string;
   name: string | null;
+  since?: string;
 }
 interface Invite {
   token: string;
@@ -58,7 +60,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export default function TeamSettings() {
+export default function TeamSettings({ only }: { only?: 'team' } = {}) {
   const [cloud, setCloud] = useState<boolean | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
@@ -68,7 +70,9 @@ export default function TeamSettings() {
   const [newRole, setNewRole] = useState<Role>('member');
   const [newEmail, setNewEmail] = useState('');
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<Invite | null>(null);
+  const [created, setCreated] = useState<(Invite & { emailed?: string | null; emailError?: string | null }) | null>(null);
+  const [emailOn, setEmailOn] = useState(false);
+  const [resent, setResent] = useState<string | null>(null);
   // password
   const [pw, setPw] = useState({ current: '', next: '' });
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -81,6 +85,7 @@ export default function TeamSettings() {
         setRole(d.role);
         setMembers(d.members);
         setInvites(d.invites);
+        setEmailOn(Boolean(d.emailEnabled));
       })
       .catch((e) => setError(e.message));
 
@@ -100,7 +105,7 @@ export default function TeamSettings() {
     setError(null);
     try {
       const d = await api('/api/team', { method: 'POST', body: JSON.stringify({ role: newRole, email: newEmail.trim() || undefined }) });
-      setCreated(d.invite);
+      setCreated({ ...d.invite, emailed: d.emailed, emailError: d.emailError });
       setNewEmail('');
       load();
     } catch (err: any) {
@@ -143,7 +148,15 @@ export default function TeamSettings() {
           <Users className="w-4 h-4 text-brand-navy" />
           <h3 className="text-[15px] font-semibold text-slate-900">Equipo</h3>
         </div>
-        <p className="text-xs text-slate-500">Cada persona entra con su propio correo y contraseña. Todos ven los datos de esta tienda.</p>
+        <p className="text-xs text-slate-500">
+          {members.length} {members.length === 1 ? 'persona' : 'personas'} en esta tienda
+          {(['owner', 'admin', 'member'] as Role[])
+            .map((r) => [r, members.filter((m) => m.role === r).length] as const)
+            .filter(([, n]) => n)
+            .map(([r, n]) => ` · ${n} ${n === 1 ? PLURAL[r][0] : PLURAL[r][1]}`)
+            .join('')}
+          . Cada una entra con su propio correo y contraseña.
+        </p>
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2.5">{error}</p>}
 
         <div className="divide-y divide-slate-100">
@@ -156,7 +169,11 @@ export default function TeamSettings() {
                 <p className="text-[13px] font-medium text-slate-900 truncate">
                   {m.name || m.email} {m.userId === me && <span className="text-xs text-slate-400">(tú)</span>}
                 </p>
-                <p className="text-xs text-slate-500 truncate">{m.email}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {m.email}
+                  {m.since && <span className="text-slate-400"> · desde {new Date(m.since).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">{ROLE_HELP[m.role]}</p>
               </div>
               {manage && m.userId !== me ? (
                 <>
@@ -193,7 +210,7 @@ export default function TeamSettings() {
               <UserPlus className="w-4 h-4" /> Invitar a alguien
             </p>
             <form onSubmit={createInvite} className="grid sm:grid-cols-[1fr_160px_auto] gap-2">
-              <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Correo (opcional)" type="email" className={input} />
+              <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder={emailOn ? 'Correo (le llega la invitación)' : 'Correo (opcional)'} type="email" className={input} />
               <select value={newRole} onChange={(e) => setNewRole(e.target.value as Role)} className={input} aria-label="Rol de la persona invitada">
                 <option value="member">Equipo</option>
                 <option value="admin">Administrador</option>
@@ -208,7 +225,15 @@ export default function TeamSettings() {
             </p>
             {created && (
               <div className="rounded-lg bg-white border border-emerald-200 p-3 space-y-2">
-                <p className="text-xs font-semibold text-emerald-800">Enlace listo. Envíaselo a la persona:</p>
+                {created.emailed === 'sent' ? (
+                  <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 shrink-0" /> Le enviamos la invitación a {created.email}. Si no la ve, que revise spam, o mándale el enlace:
+                  </p>
+                ) : created.emailed === 'failed' ? (
+                  <p className="text-xs font-semibold text-amber-800">No pudimos enviar el correo{created.emailError ? ` (${created.emailError})` : ''}. Envíale el enlace:</p>
+                ) : (
+                  <p className="text-xs font-semibold text-emerald-800">Enlace listo. Envíaselo a la persona:</p>
+                )}
                 <p className="text-[11px] font-mono break-all text-slate-700 bg-slate-50 rounded p-2">{created.url}</p>
                 <div className="flex gap-2">
                   <CopyButton text={created.url} />
@@ -226,6 +251,20 @@ export default function TeamSettings() {
                     <span className="flex-1 min-w-0 truncate text-slate-700">
                       {i.email || 'Cualquier persona con el enlace'} · {ROLE_LABEL[i.role]} · vence {new Date(i.expiresAt).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
                     </span>
+                    {i.email && emailOn && (
+                      <button
+                        onClick={() =>
+                          act(async () => {
+                            await api('/api/team', { method: 'POST', body: JSON.stringify({ resend: i.token }) });
+                            setResent(i.token);
+                            setTimeout(() => setResent(null), 2500);
+                          })
+                        }
+                        className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                      >
+                        {resent === i.token ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Mail className="w-3.5 h-3.5" />} {resent === i.token ? 'Enviado' : 'Reenviar correo'}
+                      </button>
+                    )}
                     <CopyButton text={i.url} />
                     <button onClick={() => act(() => api(`/api/team?invite=${encodeURIComponent(i.token)}`, { method: 'DELETE' }))} className="p-1.5 text-slate-400 hover:text-red-600" aria-label="Cancelar invitación">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -239,6 +278,7 @@ export default function TeamSettings() {
       </div>
 
       {/* My account */}
+      {only !== 'team' && (
       <div className={card}>
         <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
           <KeyRound className="w-4 h-4 text-brand-navy" />
@@ -268,6 +308,7 @@ export default function TeamSettings() {
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }
