@@ -84,6 +84,18 @@ export async function sendText(to: string, text: string): Promise<SendResult> {
   return send({ to, type: 'text', text: { preview_url: false, body: text.slice(0, 4096) } });
 }
 
+// A photo by link (public URL), with an optional caption. WhatsApp only.
+export async function sendImage(to: string, link: string, caption?: string): Promise<SendResult> {
+  if (social(to)) return { ok: false, error: 'Las fotos solo se envían por WhatsApp por ahora.' };
+  return send({ to, type: 'image', image: { link, ...(caption ? { caption: caption.slice(0, 1024) } : {}) } });
+}
+
+// An audio by link. An OGG/Opus file shows in the chat as a voice note. WhatsApp only.
+export async function sendAudio(to: string, link: string): Promise<SendResult> {
+  if (social(to)) return { ok: false, error: 'Las notas de voz solo se envían por WhatsApp por ahora.' };
+  return send({ to, type: 'audio', audio: { link } });
+}
+
 // Template params can't contain newlines, tabs or more than 4 spaces in a row.
 const param = (v: string) => ({ type: 'text', text: (v || '-').replace(/[\n\t\r]+/g, ' ').replace(/ {4,}/g, '   ').trim().slice(0, 200) || '-' });
 

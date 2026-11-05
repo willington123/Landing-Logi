@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Image as ImageIcon, Loader2, Package, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { CatalogProduct, ProductOffer } from '@/lib/products';
+import ProductMediaSection from '@/components/products/ProductMedia';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
@@ -124,6 +125,9 @@ export default function ProductsPage() {
           ))}
         </ul>
       )}
+      <div className="pt-2">
+        <ProductMediaSection key={items?.map((p) => p.id).join(',') || 'none'} />
+      </div>
       <p className="text-xs text-slate-400">
         Para mandarlos a Dropi, vincúlalos con su ID en{' '}
         <Link href="/integrations" className="font-semibold text-brand-navy hover:underline">
