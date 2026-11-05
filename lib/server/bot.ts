@@ -147,7 +147,7 @@ Cómo cierras la venta:
 4. Solo cuando diga que lo quiere ("lo quiero", "quiero pedirlo", "cómo lo pido", "me lo mandas"), pide los datos del envío en un solo mensaje corto. Si solo pregunta algo (precio, envío a su ciudad, cómo se usa), respóndele eso y pregúntale si quiere pedirlo; no le pidas los datos todavía. Los datos son: nombre y apellido; celular (puede ser este mismo WhatsApp); departamento y ciudad; dirección completa con tipo de vía (calle, carrera, avenida, transversal, diagonal…), números y barrio, y si aplica apartamento o casa. Luego pide solo lo que falte o esté incompleto.
 5. Con todo listo, muéstrale un resumen corto (producto y oferta, total a pagar al recibir, nombre, ciudad y dirección) y pregúntale si confirmas el pedido.
 6. Solo cuando diga que sí, usa crear_pedido con cliente_confirmo = true. Si la herramienta devuelve un error de datos, pídele al cliente exactamente lo que falta.
-7. Cuando el pedido quede creado, dale el número de pedido, cuándo le llega y recuérdale tener el dinero listo para pagar al recibir. Agradécele.
+7. Cuando el pedido quede creado, confírmale que quedó listo, cuándo le llega y recuérdale tener el dinero listo para pagar al recibir. Agradécele. No le des el número del pedido (es interno); solo si el cliente lo pide.
 - Si el cliente quiere ver fotos o más detalles, puedes compartir el enlace de la página del producto, pero sigue tomando el pedido aquí.
 - Nunca inventes urgencia, descuentos, stock limitado ni regalos que no estén en la información. No presiones: si el cliente no quiere, despídete con amabilidad.
 - No crees dos pedidos para lo mismo. Si ya hizo un pedido y quiere otro producto o más unidades, confírmalo antes de crearlo.`
@@ -287,7 +287,7 @@ async function sendProductMedia(
           continue;
         }
         const r = await sendImage(ctx.phone, img.url, img.caption || undefined);
-        await recordOutbound({ phone: ctx.phone, type: 'image', body: `📷 ${img.caption || `Foto de ${name}`}`, result: r }).catch(() => {});
+        await recordOutbound({ phone: ctx.phone, type: 'image', body: `📷 ${img.caption || `Foto de ${name}`}`, result: r, payload: { type: 'image', image: { link: img.url, caption: img.caption || undefined } } }).catch(() => {});
         if (r.ok) out.fotos_enviadas++;
         else failed.push(`foto: ${r.error}`);
       }
@@ -299,7 +299,7 @@ async function sendProductMedia(
     else if (ctx.dryRun) out.nota_de_voz_enviada = true;
     else {
       const r = await sendAudio(ctx.phone, media.audio!.url);
-      await recordOutbound({ phone: ctx.phone, type: 'audio', body: `🎤 Nota de voz de ${name}`, result: r }).catch(() => {});
+      await recordOutbound({ phone: ctx.phone, type: 'audio', body: `🎤 Nota de voz de ${name}`, result: r, payload: { type: 'audio', audio: { link: media.audio!.url } } }).catch(() => {});
       if (r.ok) {
         out.nota_de_voz_enviada = true;
         mark.audio = now;

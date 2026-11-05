@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link';
 import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, ShoppingBag, User, X, Zap, Megaphone } from 'lucide-react';
 import NewOrderModal from '@/components/orders/NewOrderModal';
+import ChatAttach from '@/components/crm/ChatAttach';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
@@ -153,19 +154,19 @@ function Ticks({ m }: { m: WaMessage }) {
 function MediaView({ m }: { m: WaMessage }) {
   const [failed, setFailed] = useState(false);
   const media = m.media!;
-  const src = `/api/whatsapp/media/${media.id}`;
+  const src = media.url || `/api/whatsapp/media/${media.id}`;
   if (failed) return <p className="text-xs text-slate-500 italic">El archivo ya no está disponible en WhatsApp (se guarda unos 30 días).</p>;
   if (media.kind === 'image' || media.kind === 'sticker')
     return (
       <a href={src} target="_blank" rel="noreferrer" className="block">
-        <img src={src} alt={media.caption || 'Foto del cliente'} onError={() => setFailed(true)} className={`rounded-xl ${media.kind === 'sticker' ? 'w-28 h-28 object-contain' : 'max-h-72 w-auto max-w-full object-cover'}`} />
+        <img src={src} alt={media.caption || (m.direction === 'out' ? 'Foto enviada' : 'Foto del cliente')} onError={() => setFailed(true)} className={`rounded-xl ${media.kind === 'sticker' ? 'w-28 h-28 object-contain' : 'max-h-72 w-auto max-w-full object-cover'}`} />
       </a>
     );
   if (media.kind === 'audio') return <audio controls preload="none" src={src} onError={() => setFailed(true)} className="w-64 max-w-full h-10" />;
   if (media.kind === 'video') return <video controls preload="metadata" src={src} onError={() => setFailed(true)} className="rounded-xl max-h-72 max-w-full" />;
   const name = media.filename || 'documento';
   return (
-    <a href={`${src}?name=${encodeURIComponent(name)}`} className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 hover:bg-slate-100">
+    <a href={media.url ? src : `${src}?name=${encodeURIComponent(name)}`} target={media.url ? '_blank' : undefined} rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 hover:bg-slate-100">
       <FileText className="w-5 h-5 text-slate-500 shrink-0" />
       <span className="text-[13px] text-slate-800 truncate">{name}</span>
       <span className="text-[11px] font-semibold text-slate-500 shrink-0">Descargar</span>
@@ -1051,6 +1052,20 @@ export default function OmnichannelInbox() {
                       >
                         <Zap className="w-4 h-4" />
                       </button>
+                      {!isSocialChat(active.id) && (
+                        <ChatAttach
+                          chatId={active.id}
+                          onError={setSendError}
+                          onSent={async () => {
+                            if (botInfo?.enabled) {
+                              const id = active.id;
+                              setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: { paused: true, reason: 'human', note: null } } : c)));
+                            }
+                            await loadMessages(active.id);
+                            loadConversations();
+                          }}
+                        />
+                      )}
                       <textarea
                         ref={inputRef}
                         value={text}

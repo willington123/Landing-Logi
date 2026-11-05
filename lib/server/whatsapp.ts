@@ -90,6 +90,14 @@ export async function sendImage(to: string, link: string, caption?: string): Pro
   return send({ to, type: 'image', image: { link, ...(caption ? { caption: caption.slice(0, 1024) } : {}) } });
 }
 
+// Any file by link: photo, video, audio (OGG/Opus shows as a voice note) or document. WhatsApp only.
+export async function sendMedia(to: string, kind: 'image' | 'video' | 'audio' | 'document', link: string, opts: { caption?: string; filename?: string } = {}): Promise<SendResult> {
+  if (social(to)) return { ok: false, error: 'Por ahora los archivos solo se envían por WhatsApp.' };
+  const caption = opts.caption && kind !== 'audio' ? { caption: opts.caption.slice(0, 1024) } : {};
+  const filename = kind === 'document' && opts.filename ? { filename: opts.filename.slice(0, 120) } : {};
+  return send({ to, type: kind, [kind]: { link, ...caption, ...filename } });
+}
+
 // An audio by link. An OGG/Opus file shows in the chat as a voice note. WhatsApp only.
 export async function sendAudio(to: string, link: string): Promise<SendResult> {
   if (social(to)) return { ok: false, error: 'Las notas de voz solo se envían por WhatsApp por ahora.' };
