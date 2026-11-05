@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
     }
     if (!(await roleIn(invite.org_id, user.id))) await assertCanAddMember(invite.org_id);
     await useInvite(invite, user.id);
+    // They show up in Mensajes → Equipo, linked to their account (chats, "Míos" and notices work right away).
+    await (await import('@/lib/server/crm-store')).ensureAgentFor(invite.org_id, user, { again: true }).catch((e) => console.error('Asesor:', e));
     return withSession(NextResponse.json({ success: true }), user, invite.org_id);
   } catch (e) {
     return failFrom(e);

@@ -280,8 +280,13 @@ export async function handoffSummary(only?: (id: string) => boolean) {
     .sort((a, b) => String(b[1].pausedAt || '').localeCompare(String(a[1].pausedAt || '')));
   if (!waiting.length) return { count: 0, latest: null };
   const [id, s] = waiting[0];
-  const { data } = await (await db()).from('wa_conversations').select('name').eq('id', id).maybeSingle();
-  return { count: waiting.length, latest: { id, name: (data as any)?.name || (/^\d/.test(id) ? `+${id}` : 'Cliente'), note: s.note || '', at: s.pausedAt || null } };
+  const { getAgents, getAssignments } = await import('@/lib/server/crm-store');
+  const [{ data }, agents, assign] = await Promise.all([(await db()).from('wa_conversations').select('name').eq('id', id).maybeSingle(), getAgents().catch(() => []), getAssignments().catch(() => ({}) as Record<string, string>)]);
+  const assignee = agents.find((a) => a.id === assign[id]) || null;
+  return {
+    count: waiting.length,
+    latest: { id, name: (data as any)?.name || (/^\d/.test(id) ? `+${id}` : 'Cliente'), note: s.note || '', at: s.pausedAt || null, assignee: assignee ? { id: assignee.id, name: assignee.name, userId: assignee.userId || null } : null },
+  };
 }
 
 export async function markConversationRead(id: string) {
