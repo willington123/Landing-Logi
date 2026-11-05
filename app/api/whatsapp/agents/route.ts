@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
-import { getAgents, getRouting, myAgent, saveAgents, saveRouting, setMyAvailability } from '@/lib/server/crm-store';
+import { ensureAgentFor, getAgents, getRouting, myAgent, saveAgents, saveRouting, setMyAvailability } from '@/lib/server/crm-store';
 import { cleanAgents, cleanRouting } from '@/lib/crm';
 import { currentOrgId, currentRole, sessionUserId } from '@/lib/server/tenant';
 import { listMembers } from '@/lib/server/accounts';
@@ -16,7 +16,13 @@ export async function GET() {
   if (!cloudEnabled()) return noDb();
   try {
     const orgId = await currentOrgId();
-    const [items, routing, role, members] = await Promise.all([getAgents(), getRouting(), currentRole(), listMembers(orgId)]);
+    let [items, routing, role, members] = await Promise.all([getAgents(), getRouting(), currentRole(), listMembers(orgId)]);
+    // Team members who joined before advisors were created on their own (owners stay out unless added by hand).
+    const missing = members.filter((m) => m.role !== 'owner' && !items.some((a) => a.userId === m.userId));
+    if (missing.length && manager(role)) {
+      for (const m of missing) await ensureAgentFor(orgId, { id: m.userId, name: m.name, email: m.email }).catch(() => null);
+      items = await getAgents();
+    }
     const me = await myAgent(items);
     return NextResponse.json({
       success: true,

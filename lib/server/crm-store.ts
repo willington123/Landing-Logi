@@ -1,5 +1,6 @@
 // Server-only storage for CRM quick replies and tags (Supabase "settings" table, no extra migration).
 import { db } from '@/lib/server/db';
+import { rawDb } from '@/lib/server/supabase';
 import type { AdRef } from '@/lib/ads';
 import { DEFAULT_AUTO, DEFAULT_QUICK_REPLIES, DEFAULT_TAGS, cleanRouting, type Agent, type AutoSettings, type CrmTag, type QuickReply, type RoutingSettings } from '@/lib/crm';
 import { currentRole, sessionUserId } from '@/lib/server/tenant';
@@ -257,4 +258,61 @@ export async function setConversationAd(conversationId: string, ad: AdRef) {
     keys.sort((a, b) => (all[a].at < all[b].at ? -1 : 1)).slice(0, keys.length - 5000).forEach((k) => delete all[k]);
   }
   await writeSetting('wa_conv_ads', all);
+}
+
+// ---------- team members as advisors ----------
+// Someone who joins the store shows up in Mensajes → Equipo already linked to their account, so "Míos",
+// automatic assignment and their notices work from day one. Works for any store (not only the current one).
+const AGENT_COLORS: Agent['color'][] = ['blue', 'green', 'violet', 'amber', 'pink', 'sky', 'red', 'slate'];
+
+async function agentsOf(orgId: string): Promise<Agent[]> {
+  const { data } = await rawDb().from('settings').select('data').eq('org_id', orgId).eq('id', 'wa_agents').maybeSingle();
+  const items = (data?.data as { items?: Agent[] } | null)?.items;
+  return Array.isArray(items) ? items : [];
+}
+async function writeAgentsOf(orgId: string, items: Agent[]) {
+  const { error } = await rawDb().from('settings').upsert({ org_id: orgId, id: 'wa_agents', data: { items } });
+  if (error) throw new Error(error.message);
+}
+
+// Each person is added only once: if the store deletes their advisor on purpose, it doesn't come back.
+async function autoAdded(orgId: string): Promise<string[]> {
+  const { data } = await rawDb().from('settings').select('data').eq('org_id', orgId).eq('id', 'wa_agents_auto').maybeSingle();
+  return Array.isArray((data?.data as any)?.users) ? (data!.data as any).users : [];
+}
+
+export async function ensureAgentFor(orgId: string, user: { id: string; name?: string | null; email: string }, opts: { again?: boolean } = {}): Promise<Agent | null> {
+  const items = await agentsOf(orgId);
+  if (items.some((a) => a.userId === user.id)) return null;
+  const done = await autoAdded(orgId);
+  if (done.includes(user.id) && !opts.again) return null;
+  if (items.length >= 30) return null;
+  const base = (user.name || user.email.split('@')[0] || 'Asesor').trim().slice(0, 30);
+  // Came back to the store: their old advisor (unlinked when they left) is theirs again.
+  const prev = items.find((a) => !a.userId && a.name.toLowerCase() === base.toLowerCase());
+  if (prev) {
+    const back = { ...prev, userId: user.id, available: true };
+    await writeAgentsOf(orgId, items.map((a) => (a.id === prev.id ? back : a)));
+    return back;
+  }
+  let name = base;
+  for (let i = 2; items.some((a) => a.name.toLowerCase() === name.toLowerCase()); i++) name = `${base.slice(0, 27)} ${i}`;
+  const agent: Agent = {
+    id: `${base.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'asesor'}-${Math.random().toString(36).slice(2, 6)}`,
+    name,
+    color: AGENT_COLORS[items.length % AGENT_COLORS.length],
+    userId: user.id,
+    onlyAssigned: false,
+    available: true,
+  };
+  await writeAgentsOf(orgId, [...items, agent]);
+  await rawDb().from('settings').upsert({ org_id: orgId, id: 'wa_agents_auto', data: { users: [...done.filter((u) => u !== user.id), user.id].slice(-500) } });
+  return agent;
+}
+
+// Someone left the store: their advisor stays (old chats keep the name) but is unlinked and gets no new chats.
+export async function releaseAgentOf(orgId: string, userId: string) {
+  const items = await agentsOf(orgId);
+  if (!items.some((a) => a.userId === userId)) return;
+  await writeAgentsOf(orgId, items.map((a) => (a.userId === userId ? { ...a, userId: null, available: false, onlyAssigned: false } : a)));
 }

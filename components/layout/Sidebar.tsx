@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { isCloud, pullFromCloud, CLOUD_SYNC_EVENT, clearLocalData, ensureLocalOrg } from '@/lib/cloud';
 import { logiStore } from '@/lib/store';
 import { UNREAD_REFRESH_EVENT, playHandoffSound, playMessageSound, showNotice, soundOn } from '@/lib/notify';
@@ -117,6 +117,8 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
   }, []);
 
   const [account, setAccount] = useState<AccountInfo | null>(null);
+  const accountRef = useRef<AccountInfo | null>(null);
+  accountRef.current = account;
   const [orgMenu, setOrgMenu] = useState(false);
   const switchOrg = async (orgId: string) => {
     const res = await fetch('/api/account/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId }) });
@@ -160,7 +162,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           if (seenMine && mine.lastInboundAt > seenMine && mine.latest && !here) showNotice(`${mine.latest.name} te escribió`, mine.latest.preview, `/crm?c=${mine.latest.id}`);
         }
         // The assistant passed a chat to a person: its own sound and a notice, from any page.
-        const handoff = d.handoff as { count: number; latest: { id: string; name: string; note: string; at: string | null } | null } | null;
+        const handoff = d.handoff as { count: number; latest: { id: string; name: string; note: string; at: string | null; assignee?: { name: string; userId: string | null } | null } | null } | null;
         setWaiting(handoff?.count || 0);
         if (handoff?.latest?.at) {
           let seenHandoff: string | null = null;
@@ -170,7 +172,13 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
           } catch {}
           if (seenHandoff && handoff.latest.at > seenHandoff) {
             if (soundOn()) playHandoffSound();
-            showNotice(`🙋 ${handoff.latest.name} necesita un asesor`, handoff.latest.note || 'El asistente pasó el chat a una persona.', `/crm?c=${handoff.latest.id}`);
+            const who = handoff.latest.assignee;
+            const mine = who?.userId && who.userId === accountRef.current?.user?.id;
+            showNotice(
+              mine ? `🙋 ${handoff.latest.name} te necesita` : `🙋 ${handoff.latest.name} necesita un asesor`,
+              [handoff.latest.note || 'El asistente pasó el chat a una persona.', who && !mine ? `Asignado a ${who.name}.` : ''].filter(Boolean).join(' '),
+              `/crm?c=${handoff.latest.id}`,
+            );
           }
         } else {
           try {

@@ -96,7 +96,10 @@ export async function DELETE(req: NextRequest) {
       if (!canManage(role)) return fail('Solo el dueño o un administrador pueden cancelar invitaciones.', 403);
       await revokeInvite(orgId, invite);
     }
-    if (userId) await removeMember(orgId, (role as Role) || 'member', userId);
+    if (userId) {
+      await removeMember(orgId, (role as Role) || 'member', userId);
+      await (await import('@/lib/server/crm-store')).releaseAgentOf(orgId, String(userId)).catch(() => {});
+    }
     return ok();
   } catch (e: any) {
     if (/dueño/.test(String(e?.message))) return fail(e.message, 400);
