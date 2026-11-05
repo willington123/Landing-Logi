@@ -4,6 +4,8 @@ import { currentOrgId, currentRole, sessionUserId } from '@/lib/server/tenant';
 import { publicBaseUrl } from '@/lib/server/vapi';
 import { fail, failFrom, ok } from '@/lib/server/http';
 import { assertCanAddMember } from '@/lib/server/billing';
+import { sendInviteEmail } from '@/lib/server/invite-email';
+import { emailConfigured } from '@/lib/server/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,7 @@ export async function GET(req: NextRequest) {
     return ok({
       me: sessionUserId(),
       role,
+      emailEnabled: emailConfigured(),
       members,
       invites: invites.map((i) => ({ token: i.token, role: i.role, email: i.email, expiresAt: i.expires_at, url: `${base}/invitacion/${i.token}` })),
     });
@@ -34,13 +37,31 @@ export async function POST(req: NextRequest) {
     const role = await currentRole();
     if (!canManage(role)) return fail('Solo el dueño o un administrador pueden invitar.', 403);
     const body = await req.json().catch(() => ({}));
+    const base = publicBaseUrl(req.nextUrl.origin);
+    // Send the email again for an open invitation: { resend: token }
+    if (body.resend) {
+      const inv = (await listInvites(orgId)).find((i) => i.token === String(body.resend));
+      if (!inv) return fail('Esa invitación ya no existe o venció. Crea una nueva.', 404);
+      if (!inv.email) return fail('Esa invitación no tiene correo: copia el enlace y envíaselo.', 400);
+      const sent = await sendInviteEmail({ to: inv.email, url: `${base}/invitacion/${inv.token}`, orgId, role: inv.role, invitedBy: sessionUserId(), expiresAt: inv.expires_at });
+      return sent.ok ? ok({ emailed: 'sent' }) : fail(sent.skipped ? 'El envío de correos no está configurado.' : `No pudimos enviar el correo: ${sent.error || 'error'}`, 502);
+    }
     const newRole = ROLES.includes(body.role) ? (body.role as Role) : 'member';
     if (newRole === 'owner' && role !== 'owner') return fail('Solo un dueño puede invitar a otro dueño.', 403);
     const email = body.email ? normalizeEmail(body.email) : null;
     if (email && !validEmail(email)) return fail('El correo no es válido.');
     await assertCanAddMember(orgId);
     const invite = await createInvite(orgId, newRole, email, sessionUserId()!);
-    return ok({ invite: { token: invite.token, role: invite.role, email: invite.email, expiresAt: invite.expires_at, url: `${publicBaseUrl(req.nextUrl.origin)}/invitacion/${invite.token}` } });
+    const url = `${base}/invitacion/${invite.token}`;
+    // With an email, the invitation also goes to their inbox.
+    let emailed: 'sent' | 'failed' | 'skipped' | null = null;
+    let emailError: string | null = null;
+    if (email) {
+      const sent = await sendInviteEmail({ to: email, url, orgId, role: newRole, invitedBy: sessionUserId(), expiresAt: invite.expires_at }).catch((e) => ({ ok: false, error: String(e?.message || e) }) as { ok: boolean; skipped?: boolean; error?: string });
+      emailed = sent.ok ? 'sent' : sent.skipped ? 'skipped' : 'failed';
+      emailError = sent.ok ? null : sent.error || null;
+    }
+    return ok({ invite: { token: invite.token, role: invite.role, email: invite.email, expiresAt: invite.expires_at, url }, emailed, emailError });
   } catch (e) {
     return failFrom(e);
   }

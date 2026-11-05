@@ -8,7 +8,7 @@ import { fetchAccount } from '@/lib/account-client';
 import InstallApp from '@/components/layout/InstallApp';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -51,6 +51,7 @@ const NAV_GROUPS = [
     label: 'Cuenta',
     items: [
       { href: '/integrations', label: 'Integraciones', icon: Plug },
+      { href: '/equipo', label: 'Equipo', icon: Users },
       { href: '/plan', label: 'Plan y pagos', icon: CreditCard },
       { href: '/settings', label: 'Configuración', icon: Settings },
     ],
