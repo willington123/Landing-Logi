@@ -1,0 +1,112 @@
+// Photos and the voice note of each product, saved per store in the "settings" table (row "wa_product_media").
+import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { db, uploadPublicFile, uploadPublicImage } from '@/lib/server/db';
+import { transcribeAudio } from '@/lib/gemini';
+import { EMPTY_MEDIA, MAX_AUDIO_SECONDS, MAX_MEDIA_IMAGES, type MediaImage, type ProductMedia } from '@/lib/product-media';
+
+const ROW = 'wa_product_media';
+const userError = (m: string) => Object.assign(new Error(m), { userFacing: true });
+
+export async function getAllMedia(): Promise<Record<string, ProductMedia>> {
+  const { data, error } = await (await db()).from('settings').select('data').eq('id', ROW).maybeSingle();
+  if (error && !/does not exist|schema cache/i.test(error.message)) throw new Error(error.message);
+  return ((data?.data as any)?.items as Record<string, ProductMedia>) || {};
+}
+export async function getMedia(productId: string): Promise<ProductMedia> {
+  return (await getAllMedia())[productId] || EMPTY_MEDIA;
+}
+async function save(productId: string, media: ProductMedia) {
+  const all = await getAllMedia();
+  if (!media.images.length && !media.audio) delete all[productId];
+  else all[productId] = media;
+  const { error } = await (await db()).from('settings').upsert({ id: ROW, data: { items: all } });
+  if (error) throw new Error(error.message);
+}
+
+// Photos: kept URLs stay; pasted ones (data URLs) are uploaded.
+export async function saveImages(productId: string, images: { url: string; caption?: string }[]): Promise<MediaImage[]> {
+  const cur = await getMedia(productId);
+  const keep = new Set(cur.images.map((i) => i.url));
+  const out: MediaImage[] = [];
+  for (const img of images.slice(0, MAX_MEDIA_IMAGES)) {
+    const caption = String(img.caption || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (img.url.startsWith('data:image/')) out.push({ url: await uploadPublicImage(`media/${productId}`, img.url), caption });
+    else if (keep.has(img.url)) out.push({ url: img.url, caption });
+  }
+  await save(productId, { ...cur, images: out });
+  return out;
+}
+
+// ---------- voice note ----------
+
+function ffmpegPath(): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const p = require('ffmpeg-static') as string | null;
+  if (!p) throw new Error('No se encontró el convertidor de audio.');
+  return p;
+}
+
+function run(bin: string, args: string[]): Promise<{ code: number; err: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', (d) => (err = (err + d.toString()).slice(-4000)));
+    const timer = setTimeout(() => child.kill('SIGKILL'), 45000);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, err });
+    });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      resolve({ code: 1, err: String(e) });
+    });
+  });
+}
+
+// Any audio (mp3, m4a, ogg, webm from the panel's recorder…) → OGG/Opus mono, the format WhatsApp plays as a voice note.
+export async function toVoiceNote(input: Buffer): Promise<{ data: Buffer; seconds: number | null }> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vn-'));
+  const src = path.join(dir, `in-${randomUUID()}`);
+  const out = path.join(dir, 'out.ogg');
+  try {
+    await fs.writeFile(src, input);
+    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-t', String(MAX_AUDIO_SECONDS), '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-f', 'ogg', out]);
+    if (r.code !== 0) throw userError('No pudimos leer ese audio. Prueba con un mp3, m4a u ogg.');
+    const m = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(r.err);
+    const total = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
+    return { data: await fs.readFile(out), seconds: total === null ? null : Math.min(MAX_AUDIO_SECONDS, Math.round(total)) };
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export async function saveAudio(productId: string, dataUrl: string): Promise<ProductMedia> {
+  const m = /^data:([\w/+.-]+)(?:;[^,]*)?;base64,([\s\S]+)$/.exec(dataUrl || '');
+  if (!m || !/^(audio|video)\//.test(m[1])) throw userError('Elige un archivo de audio.');
+  const raw = Buffer.from(m[2], 'base64');
+  if (raw.length > 3.2 * 1024 * 1024) throw userError('El audio pesa más de 3 MB. Usa uno más corto (hasta unos 3 minutos) o grábalo aquí mismo.');
+  const { data, seconds } = await toVoiceNote(raw);
+  const url = await uploadPublicFile(`media/${productId}`, data, 'audio/ogg', 'ogg');
+  // What it says, once, so the assistant answers with that context (blank if Gemini isn't set up: it can be typed).
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  const transcript = key ? await transcribeAudio(key, data.toString('base64'), 'audio/ogg').catch(() => '') : '';
+  const cur = await getMedia(productId);
+  const next = { ...cur, audio: { url, transcript: (transcript || '').trim().slice(0, 4000), seconds, updatedAt: new Date().toISOString() } };
+  await save(productId, next);
+  return next;
+}
+
+export async function saveTranscript(productId: string, transcript: string) {
+  const cur = await getMedia(productId);
+  if (!cur.audio) throw userError('Primero sube el audio.');
+  await save(productId, { ...cur, audio: { ...cur.audio, transcript: transcript.trim().slice(0, 4000) } });
+}
+
+export async function removeAudio(productId: string) {
+  const cur = await getMedia(productId);
+  await save(productId, { ...cur, audio: null });
+}

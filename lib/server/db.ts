@@ -74,6 +74,14 @@ export async function uploadPublicImage(folder: string, dataUrl: string): Promis
   return rawDb().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+// Uploads any file (e.g. a product's voice note) to the public bucket; returns its URL.
+export async function uploadPublicFile(folder: string, data: Buffer, contentType: string, ext: string): Promise<string> {
+  const path = `${folder}/${createHash('sha1').update(data).digest('hex').slice(0, 20)}.${ext}`;
+  const { error } = await rawDb().storage.from(BUCKET).upload(path, data, { contentType, upsert: false, cacheControl: '31536000' });
+  if (error && !/exists|duplicate/i.test(error.message)) throw new Error(`No se pudo subir el archivo: ${error.message}`);
+  return rawDb().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
 async function uploadInlineImages(landing: LandingPageConfig): Promise<{ landing: LandingPageConfig; replaced: Record<string, string> }> {
   const found = new Set<string>();
   const walk = (v: unknown) => {

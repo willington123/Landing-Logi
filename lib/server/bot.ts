@@ -12,6 +12,7 @@ import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/l
 import { MODEL_WEIGHT } from '@/lib/plans';
 import { DEFAULT_BOT, cleanFollowUp, handoffRulesText, type BotChatState, type BotModel, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
+import type { ProductMedia } from '@/lib/product-media';
 import { getAgenda } from '@/lib/server/agenda';
 import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
 
@@ -88,7 +89,7 @@ const STATUS_TEXT: Record<OrderStatus, string> = {
 
 const money = (v: number, currency = 'COP') => `$${Math.round(v || 0).toLocaleString('es-CO')} ${currency}`;
 
-function landingText(l: LandingPageConfig, base: string): string {
+function landingText(l: LandingPageConfig, base: string, media?: ProductMedia): string {
   const cur = l.currency || 'COP';
   const page = base && l.kind !== 'product' && l.slug ? `; página con fotos: ${base}/p/${l.slug}` : '';
   const lines = [`## ${l.productName}`, `(landing_id para crear_pedido: ${l.id}; país: ${l.country || 'Colombia'}${page})`];
@@ -111,17 +112,27 @@ function landingText(l: LandingPageConfig, base: string): string {
   if (l.guaranteeText || l.guaranteeDays) lines.push(`Garantía: ${l.guaranteeText || ''}${l.guaranteeDays ? ` (${l.guaranteeDays} días)` : ''}`.trim());
   const faqs = (l.faqs || []).filter((f) => f.question && f.answer);
   if (faqs.length) lines.push('Preguntas frecuentes:', ...faqs.map((f) => `- ${f.question} → ${f.answer}`));
+  if (media?.images.length || media?.audio) {
+    lines.push('Material para enviar al cliente con enviar_medios:');
+    if (media.images.length) lines.push(`- ${media.images.length} ${media.images.length === 1 ? 'foto' : 'fotos'}: ${media.images.map((m, i) => `[${i + 1}] ${m.caption || 'foto del producto'}`).join('; ')}`);
+    if (media.audio) lines.push(`- Nota de voz de la tienda explicando el producto${media.audio.seconds ? ` (${media.audio.seconds} s)` : ''}.${media.audio.transcript ? ` Lo que dice: "${media.audio.transcript.replace(/\s+/g, ' ')}"` : ''}`);
+  }
   return lines.join('\n');
 }
 
-export async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[] }> {
+export async function storeKnowledge(): Promise<{ storeName: string; products: string; landings: LandingPageConfig[]; media: Record<string, ProductMedia> }> {
   // Published landings and the products sold only by WhatsApp.
-  const [landings, settings] = await Promise.all([(await import('@/lib/server/products')).sellables(20), getSettings<{ storeName?: string }>().catch(() => null)]);
+  const [landings, settings, media] = await Promise.all([
+    (await import('@/lib/server/products')).sellables(20),
+    getSettings<{ storeName?: string }>().catch(() => null),
+    (await import('@/lib/server/product-media')).getAllMedia().catch(() => ({}) as Record<string, ProductMedia>),
+  ]);
   const base = publicBaseUrl();
   return {
     storeName: settings?.storeName?.trim() || 'nuestra tienda',
-    products: landings.length ? landings.map((l) => landingText(l, base)).join('\n\n') : '(No hay productos publicados todavía.)',
+    products: landings.length ? landings.map((l) => landingText(l, base, media[l.id])).join('\n\n') : '(No hay productos publicados todavía.)',
     landings,
+    media,
   };
 }
 
@@ -151,6 +162,7 @@ Cómo escribes:
 ${sell}
 
 También puedes:
+- Enviar las fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Úsala cuando el cliente muestre interés en ese producto o pida fotos o más información, normalmente al inicio. Se envían una sola vez por cliente: si ya se enviaron, no las vuelvas a enviar salvo que el cliente pida de forma explícita que se las reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
 - Consultar los pedidos de este cliente con consultar_pedidos (solo los hechos con su número de WhatsApp) y decirle en qué estado van y el número de guía si ya fue despachado.
 
 Reglas importantes:
@@ -218,6 +230,87 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
     strict: true,
   },
 ];
+
+// Photos and voice note of a product (WhatsApp chats, products that have them).
+const MEDIA_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'enviar_medios',
+  description:
+    'Envía al cliente por WhatsApp las fotos y/o la nota de voz de un producto que tenga "Material para enviar". Cada cosa se envía una sola vez por cliente; si ya se envió, no se repite salvo que el cliente pida explícitamente que se la reenvíes.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      landing_id: { type: 'string', description: 'landing_id del producto (sección Productos).' },
+      que: { type: 'string', enum: ['fotos', 'nota_de_voz', 'ambos'] },
+      fotos: { type: 'array', items: { type: 'integer' }, description: 'Números de las fotos a enviar según la lista del producto. Vacío = todas.' },
+      reenviar: { type: 'boolean', description: 'true solo si el cliente pidió de forma explícita que se las vuelvas a enviar.' },
+    },
+    required: ['landing_id', 'que', 'fotos', 'reenviar'],
+    additionalProperties: false,
+  },
+  strict: true,
+};
+
+async function sendProductMedia(
+  input: { landing_id?: string; que?: string; fotos?: number[]; reenviar?: boolean },
+  ctx: { phone: string; landings: LandingPageConfig[]; media: Record<string, ProductMedia>; dryRun: boolean },
+) {
+  const product = ctx.landings.find((l) => l.id === input.landing_id);
+  const media = product ? ctx.media[product.id] : undefined;
+  if (!product || !media || (!media.images.length && !media.audio)) return { error: 'Ese producto no tiene fotos ni nota de voz para enviar.' };
+  if (/^[mi]\d/.test(ctx.phone)) return { error: 'Las fotos y notas de voz solo se envían por WhatsApp. Describe el producto con palabras.' };
+  const wantPhotos = input.que !== 'nota_de_voz' && media.images.length > 0;
+  const wantAudio = input.que !== 'fotos' && Boolean(media.audio);
+  const state = await getBotState(ctx.phone);
+  const sent = state.mediaSent?.[product.id] || {};
+  const again = Boolean(input.reenviar);
+  const out: { fotos_enviadas: number; nota_de_voz_enviada: boolean; ya_enviado: string[]; fallo?: string[] } = { fotos_enviadas: 0, nota_de_voz_enviada: false, ya_enviado: [] };
+  const name = product.productName || product.title;
+  const picks = (input.fotos || []).filter((n) => Number.isInteger(n) && n >= 1 && n <= media.images.length);
+  const images = picks.length ? picks.map((n) => media.images[n - 1]) : media.images;
+  const { sendAudio, sendImage } = await import('@/lib/server/whatsapp');
+  const { recordOutbound } = await import('@/lib/server/wa-store');
+  const now = new Date().toISOString();
+  const mark: { photos?: string; audio?: string } = { ...sent };
+  const failed: string[] = [];
+  if (wantPhotos) {
+    if (sent.photos && !again) out.ya_enviado.push('fotos');
+    else {
+      for (const img of images) {
+        if (ctx.dryRun) {
+          out.fotos_enviadas++;
+          continue;
+        }
+        const r = await sendImage(ctx.phone, img.url, img.caption || undefined);
+        await recordOutbound({ phone: ctx.phone, type: 'image', body: `📷 ${img.caption || `Foto de ${name}`}`, result: r }).catch(() => {});
+        if (r.ok) out.fotos_enviadas++;
+        else failed.push(`foto: ${r.error}`);
+      }
+      if (out.fotos_enviadas) mark.photos = now;
+    }
+  }
+  if (wantAudio) {
+    if (sent.audio && !again) out.ya_enviado.push('nota de voz');
+    else if (ctx.dryRun) out.nota_de_voz_enviada = true;
+    else {
+      const r = await sendAudio(ctx.phone, media.audio!.url);
+      await recordOutbound({ phone: ctx.phone, type: 'audio', body: `🎤 Nota de voz de ${name}`, result: r }).catch(() => {});
+      if (r.ok) {
+        out.nota_de_voz_enviada = true;
+        mark.audio = now;
+      } else failed.push(`nota de voz: ${r.error}`);
+    }
+  }
+  if (failed.length) out.fallo = failed;
+  if (!ctx.dryRun && (mark.photos !== sent.photos || mark.audio !== sent.audio)) await setBotState(ctx.phone, { mediaSent: { ...(state.mediaSent || {}), [product.id]: mark } });
+  return {
+    ...out,
+    nota: out.ya_enviado.length && !out.fotos_enviadas && !out.nota_de_voz_enviada
+      ? 'Ya se le había enviado antes: no lo repitas. Sigue la conversación con lo que sabes del producto.'
+      : 'Listo. No describas los archivos uno por uno; sigue la conversación (por ejemplo pregúntale qué le pareció o qué oferta prefiere).',
+    ...(media.audio?.transcript && wantAudio ? { lo_que_dice_la_nota_de_voz: media.audio.transcript } : {}),
+    ...(ctx.dryRun ? { simulador: 'No se envió nada de verdad.' } : {}),
+  };
+}
 
 async function ordersFor(phone: string) {
   const { data, error } = await (await db()).from('orders').select('data, status').order('created_at', { ascending: false }).limit(500);
@@ -384,6 +477,7 @@ export async function runBot(opts: {
   // "Negocio con citas": the assistant books appointments instead of taking orders.
   const appointments = agenda?.businessType === 'appointments' ? agenda : null;
   const messages = toMessages(opts.history);
+  const hasMedia = Object.values(knowledge.media || {}).some((m) => m.images.length || m.audio);
   const run: BotRun = { reply: null, handoff: null, toolCalls: [], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   if (!messages.length) return run;
 
@@ -416,7 +510,10 @@ export async function runBot(opts: {
       max_tokens: 8000,
       output_config: { effort: 'low' }, // short chat replies
       system,
-      tools: appointments ? [...AGENDA_TOOLS, ...TOOLS.filter((t) => t.name === 'pasar_a_humano')] : opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS,
+      tools: [
+        ...(appointments ? [...AGENDA_TOOLS, ...TOOLS.filter((t) => t.name === 'pasar_a_humano')] : opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS),
+        ...(hasMedia && !/^[mi]\d/.test(opts.phone) ? [MEDIA_TOOL] : []),
+      ],
       messages,
     });
     run.usage.input += response.usage.input_tokens || 0;
@@ -454,6 +551,8 @@ export async function runBot(opts: {
           const r = await runAgendaTool(t.name, t.input, { a: appointments, phone: opts.phone, dryRun: Boolean(opts.dryRun) });
           result = r.result;
           if (r.booked) run.booked = r.booked;
+        } else if (t.name === 'enviar_medios') {
+          result = await sendProductMedia(t.input as any, { phone: opts.phone, landings: knowledge.landings, media: knowledge.media || {}, dryRun: Boolean(opts.dryRun) });
         } else if (t.name === 'consultar_pedidos') {
           const orders = await ordersFor(opts.phone);
           result = orders.length ? { pedidos: orders } : { pedidos: [], nota: 'No hay pedidos con este número de WhatsApp. Puede que el cliente haya usado otro número en el formulario: pídele el número del pedido (empieza por LP-) o pásalo a una persona.' };
