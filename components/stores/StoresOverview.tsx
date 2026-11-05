@@ -2,11 +2,11 @@
 
 // "Mis tiendas": every store of the person in one table (orders, confirmed sales, ad spend, ROAS, setup).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpDown, Bot, Loader2, Megaphone, MessageCircle, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpDown, Bot, LayoutGrid, List, Loader2, Megaphone, MessageCircle, RefreshCw, Search } from 'lucide-react';
+import DateRangePicker, { RANGE_IDS, rangeQuery, type RangeValue } from '@/components/ads/DateRangePicker';
 import { clearLocalData } from '@/lib/cloud';
 import StoreAvatar from '@/components/layout/StoreAvatar';
 
-type Range = 'today' | '7d' | '30d' | 'month';
 interface Store {
   id: string;
   name: string;
@@ -32,12 +32,37 @@ interface Spend {
 }
 type SortKey = 'name' | 'orders' | 'confirmed' | 'revenue' | 'spend' | 'roas';
 
-const RANGES: { id: Range; label: string }[] = [
-  { id: 'today', label: 'Hoy' },
-  { id: '7d', label: '7 días' },
-  { id: '30d', label: '30 días' },
-  { id: 'month', label: 'Este mes' },
+// Board view: each store in the column that says what it needs most.
+type Lane = 'selling' | 'lowRoas' | 'noSales' | 'setup' | 'plan';
+const LANES: { id: Lane; label: string; hint: string; dot: string }[] = [
+  { id: 'selling', label: '✅ Vendiendo', hint: 'Tienen ventas confirmadas', dot: 'bg-emerald-500' },
+  { id: 'lowRoas', label: '📉 ROAS bajo', hint: 'Gastan más en anuncios de lo que venden', dot: 'bg-amber-500' },
+  { id: 'noSales', label: '😴 Sin ventas', hint: 'Ninguna venta confirmada en el periodo', dot: 'bg-slate-400' },
+  { id: 'setup', label: '🔧 Por configurar', hint: 'Falta conectar WhatsApp', dot: 'bg-sky-500' },
+  { id: 'plan', label: '⚠️ Revisar plan', hint: 'Plan vencido, pago pendiente o prueba por terminar', dot: 'bg-red-500' },
 ];
+const laneOf = (r: { plan: Store['plan']; whatsapp: boolean; confirmed: number; roas: number | null }): Lane =>
+  r.plan && (['expired', 'past_due', 'canceled'].includes(r.plan.status) || (r.plan.status === 'trialing' && (r.plan.daysLeft ?? 99) <= 3))
+    ? 'plan'
+    : !r.whatsapp
+      ? 'setup'
+      : !r.confirmed
+        ? 'noSales'
+        : r.roas !== null && r.roas < 1
+          ? 'lowRoas'
+          : 'selling';
+const prefRead = (k: string) => {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+};
+const prefSave = (k: string, v: string) => {
+  try {
+    localStorage.setItem(k, v);
+  } catch {}
+};
 const PLAN: Record<string, { label: string; cls: string }> = {
   exempt: { label: 'Sin costo', cls: 'bg-violet-50 text-violet-700' },
   active: { label: 'Activo', cls: 'bg-emerald-50 text-emerald-700' },
@@ -50,27 +75,47 @@ const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_
 const cop = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
 export default function StoresOverview() {
-  const [range, setRange] = useState<Range>('7d');
+  const [range, setRangeS] = useState<RangeValue>({ range: '7d' });
+  const [ready, setReady] = useState(false);
+  const [layout, setLayoutS] = useState<'table' | 'board'>('table');
+  useEffect(() => {
+    try {
+      const v = JSON.parse(prefRead('kx.tiendas.range') || 'null');
+      if (v && RANGE_IDS.includes(v.range)) setRangeS(v);
+    } catch {}
+    if (prefRead('kx.tiendas.layout') === 'board') setLayoutS('board');
+    setReady(true);
+  }, []);
+  const setRange = (v: RangeValue) => {
+    setRangeS(v);
+    prefSave('kx.tiendas.range', JSON.stringify(v));
+  };
+  const setLayout = (v: 'table' | 'board') => {
+    setLayoutS(v);
+    prefSave('kx.tiendas.layout', v);
+  };
+  const [shown, setShown] = useState<{ since?: string; until?: string }>({});
   const [stores, setStores] = useState<Store[] | null>(null);
   const [error, setError] = useState('');
   const [spend, setSpend] = useState<Record<string, Spend>>({});
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'revenue', desc: true });
 
-  const load = useCallback(async (r: Range) => {
+  const load = useCallback(async (r: RangeValue) => {
     setError('');
     setStores(null);
     setSpend({});
     try {
-      const d = await fetch(`/api/overview?range=${r}`, { cache: 'no-store' }).then((res) => res.json());
+      const d = await fetch(`/api/overview?${rangeQuery(r)}`, { cache: 'no-store' }).then((res) => res.json());
       if (!d.success) return setError(d.error || 'No se pudo cargar.');
       setStores(d.stores);
+      setShown({ since: d.since, until: d.until });
       // Spend per store with ads, a few at a time.
       const queue = (d.stores as Store[]).filter((s) => s.ads).map((s) => s.id);
       setSpend(Object.fromEntries(queue.map((id) => [id, { loading: true }])));
       const worker = async () => {
         for (let id = queue.shift(); id; id = queue.shift()) {
-          const v = await fetch(`/api/overview/spend?org=${id}&range=${r}`, { cache: 'no-store' })
+          const v = await fetch(`/api/overview/spend?org=${id}&${rangeQuery(r)}`, { cache: 'no-store' })
             .then((res) => res.json())
             .catch(() => ({ success: false }));
           setSpend((s) => ({ ...s, [id!]: v.success ? { loading: false, ...v } : { loading: false, errors: [v.error || 'Error'] } }));
@@ -82,8 +127,8 @@ export default function StoresOverview() {
     }
   }, []);
   useEffect(() => {
-    load(range);
-  }, [range, load]);
+    if (ready) load(range);
+  }, [range, ready, load]);
 
   const open = async (id: string, to = '/dashboard') => {
     const res = await fetch('/api/account/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId: id }) });
@@ -137,14 +182,8 @@ export default function StoresOverview() {
           <p className="text-sm text-slate-500">Todos tus negocios en un vistazo. Haz clic en una tienda para entrar.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600">
-            {RANGES.map((r) => (
-              <button key={r.id} onClick={() => setRange(r.id)} className={`px-3 py-1.5 rounded-lg transition ${range === r.id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => load(range)} className="h-9 w-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-900" aria-label="Actualizar">
+          <DateRangePicker value={range} onChange={setRange} shown={shown.since ? shown : undefined} />
+          <button onClick={() => load(range)} className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-900" aria-label="Actualizar">
             <RefreshCw className={`w-4 h-4 ${!stores || loadingSpend ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -169,8 +208,8 @@ export default function StoresOverview() {
       </div>
 
       <section className={card}>
-        <div className="p-3 border-b border-slate-100">
-          <div className="relative max-w-xs">
+        <div className="p-3 border-b border-slate-100 flex items-center gap-2 justify-between">
+          <div className="relative max-w-xs flex-1">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               value={q}
@@ -179,11 +218,25 @@ export default function StoresOverview() {
               className="w-full h-9 pl-8 pr-3 text-[13px] rounded-lg border border-slate-200 outline-none focus:border-brand-navy/40"
             />
           </div>
+          <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600 shrink-0">
+            {(
+              [
+                ['table', 'Tabla', List],
+                ['board', 'Tablero', LayoutGrid],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button key={id} onClick={() => setLayout(id)} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition inline-flex items-center gap-1.5 ${layout === id ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'}`}>
+                <Icon className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
         {!stores ? (
           <div className="py-16 flex justify-center">
             <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
           </div>
+        ) : layout === 'board' ? (
+          <StoresBoard rows={rows} spend={spend} onOpen={open} />
         ) : (
           <>
             <div className="hidden md:block overflow-x-auto">
@@ -266,6 +319,76 @@ export default function StoresOverview() {
         )}
       </section>
       <p className="text-xs text-slate-400">Ventas = pedidos confirmados, enviados o entregados. El gasto se suma solo de las cuentas en pesos (COP).</p>
+    </div>
+  );
+}
+
+type Row = Store & { spent: number | null; roas: number | null };
+
+function StoresBoard({ rows, spend, onOpen }: { rows: Row[]; spend: Record<string, Spend>; onOpen: (id: string) => void }) {
+  const lanes = LANES.map((l) => ({ ...l, items: rows.filter((r) => laneOf(r) === l.id) }));
+  return (
+    <div className="overflow-x-auto p-3">
+      <div className="flex gap-3 items-start min-w-max xl:min-w-0">
+        {lanes.map((l) => (
+          <div key={l.id} className="w-[240px] shrink-0 xl:w-0 xl:flex-1 xl:min-w-[180px] rounded-2xl bg-slate-100/80 border border-slate-200/70 flex flex-col max-h-[calc(100vh-260px)]">
+            <div className="px-3 pt-3 pb-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${l.dot}`} />
+                <p className="text-[13px] font-semibold text-slate-800 flex-1">{l.label}</p>
+                <span className="text-[11px] font-semibold text-slate-500 bg-white rounded-full px-2 py-0.5">{l.items.length}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">{l.hint}</p>
+            </div>
+            <div className="px-2 pb-2 space-y-2 overflow-y-auto">
+              {l.items.length ? (
+                l.items.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => onOpen(r.id)}
+                    className="w-full text-left bg-white rounded-xl border border-slate-200 p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:border-brand-blue/50 hover:shadow-md transition space-y-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <StoreAvatar name={r.name} logo={r.logo} id={r.id} className="w-9 h-9 rounded-lg text-sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-slate-900 truncate">{r.name}</p>
+                        {r.plan && PLAN[r.plan.status] && (
+                          <span className={`inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PLAN[r.plan.status].cls}`}>
+                            {PLAN[r.plan.status].label}
+                            {r.plan.status === 'trialing' && r.plan.daysLeft !== null ? ` · ${r.plan.daysLeft} d` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Conn r={r} />
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                      {[
+                        ['Pedidos', `${r.orders}${r.cancelled ? ` (${r.cancelled} canc.)` : ''}`],
+                        ['Confirmados', String(r.confirmed)],
+                        ['Ventas', cop(r.revenue)],
+                        ['ROAS', r.roas === null ? '—' : `${r.roas.toFixed(2)}x`],
+                      ].map(([k, v]) => (
+                        <div key={k} className="rounded-md bg-slate-50 px-2 py-1">
+                          <p className="text-[10px] text-slate-500">{k}</p>
+                          <p className={`font-semibold tabular-nums truncate ${k === 'ROAS' && r.roas !== null ? (r.roas >= 2 ? 'text-emerald-700' : r.roas < 1 ? 'text-red-600' : 'text-slate-900') : 'text-slate-900'}`}>{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {r.ads && (
+                      <p className="text-[11px] text-slate-500">
+                        Gasto: <SpendCell s={spend[r.id]} ads={r.ads} />
+                      </p>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <p className="text-[12px] text-slate-400 text-center py-6 px-2">Ninguna tienda aquí</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
