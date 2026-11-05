@@ -35,7 +35,8 @@ export interface WaMessage {
 }
 
 export interface WaMedia {
-  id: string;
+  id: string; // WhatsApp media id ('' for files the store sent by link)
+  url?: string; // public link of a file the store sent (photo, video, voice note, document)
   kind: 'image' | 'audio' | 'video' | 'document' | 'sticker';
   mime?: string;
   caption?: string;
@@ -48,6 +49,8 @@ const MEDIA_KINDS = ['image', 'audio', 'video', 'document', 'sticker'] as const;
 export function mediaFromPayload(payload: any): WaMedia | null {
   const kind = MEDIA_KINDS.find((k) => k === payload?.type);
   const m = kind && payload?.[kind];
+  // Sent by the store: a public link.
+  if (kind && typeof m?.link === 'string' && /^https?:\/\//.test(m.link)) return { id: '', url: m.link, kind, mime: m.mime_type, caption: m.caption, filename: m.filename };
   if (!kind || !m?.id || !/^\d{5,40}$/.test(String(m.id))) return null;
   return { id: String(m.id), kind, mime: m.mime_type, caption: m.caption, filename: m.filename };
 }
@@ -79,7 +82,7 @@ async function existingOrderId(id?: string): Promise<string | null> {
 
 // Saves a message we sent (template, auto-reply or manual reply).
 // auto: an automatic reply. It doesn't count as answered, so the chat stays in "Sin responder".
-export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult; auto?: boolean; by?: { uid: string; name: string } }) {
+export async function recordOutbound(p: { phone: string; name?: string; orderId?: string; type: string; body: string; result: SendResult; auto?: boolean; by?: { uid: string; name: string }; payload?: Record<string, unknown> }) {
   const now = new Date().toISOString();
   const existing = await getConversation(p.phone);
   const orderId = await existingOrderId(p.orderId);
@@ -99,7 +102,7 @@ export async function recordOutbound(p: { phone: string; name?: string; orderId?
     status: p.result.ok ? 'sent' : 'failed',
     error: p.result.error || null,
     order_id: orderId || existing?.order_id || null,
-    ...(p.by ? { payload: { by: p.by } } : {}),
+    ...(p.by || p.payload ? { payload: { ...(p.payload || {}), ...(p.by ? { by: p.by } : {}) } } : {}),
     created_at: now,
   });
   if (error) throw new Error(error.message);
@@ -249,7 +252,7 @@ export async function listMessages(conversationId: string, limit = 300): Promise
     .limit(limit);
   if (error) throw new Error(error.message);
   return (data || [])
-    .map(({ payload, ...m }: any) => ({ ...m, media: m.direction === 'in' ? mediaFromPayload(payload) : null, by: m.direction === 'out' && payload?.by?.name ? String(payload.by.name) : null, transcript: m.direction === 'in' && payload?.transcript ? String(payload.transcript) : null }) as WaMessage)
+    .map(({ payload, ...m }: any) => ({ ...m, media: mediaFromPayload(payload), by: m.direction === 'out' && payload?.by?.name ? String(payload.by.name) : null, transcript: m.direction === 'in' && payload?.transcript ? String(payload.transcript) : null }) as WaMessage)
     .reverse();
 }
 

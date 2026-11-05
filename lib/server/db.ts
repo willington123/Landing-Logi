@@ -74,6 +74,19 @@ export async function uploadPublicImage(folder: string, dataUrl: string): Promis
   return rawDb().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+// A one-time link the browser uploads a file to directly (big videos never pass through our server).
+export async function signedUpload(path: string): Promise<{ uploadUrl: string; path: string }> {
+  const { data, error } = await rawDb().storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error || !data) throw new Error(`No se pudo preparar la subida: ${error?.message || 'sin respuesta'}`);
+  return { uploadUrl: data.signedUrl, path: data.path || path };
+}
+export const publicFileUrl = (path: string) => rawDb().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+export async function downloadFile(path: string): Promise<Buffer> {
+  const { data, error } = await rawDb().storage.from(BUCKET).download(path);
+  if (error || !data) throw new Error(`No se pudo leer el archivo: ${error?.message || 'sin respuesta'}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
 // Uploads any file (e.g. a product's voice note) to the public bucket; returns its URL.
 export async function uploadPublicFile(folder: string, data: Buffer, contentType: string, ext: string): Promise<string> {
   const path = `${folder}/${createHash('sha1').update(data).digest('hex').slice(0, 20)}.${ext}`;
