@@ -136,6 +136,11 @@ async function api<T = any>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+// A tag that says the same as the order chip next to it (e.g. "Confirmado") is not shown twice.
+const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+const sameAsOrder = (tagName: string | undefined, orderStatus: string | undefined) =>
+  Boolean(tagName && orderStatus && ORDER_STATUS[orderStatus] && norm(ORDER_STATUS[orderStatus].label) === norm(tagName));
+
 function OrderChip({ status }: { status: string }) {
   const s = ORDER_STATUS[status] || { label: status, cls: 'bg-slate-100 text-slate-600 ring-slate-500/15' };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${s.cls}`}>{s.label}</span>;
@@ -863,7 +868,7 @@ export default function OmnichannelInbox() {
                           <OrderChip status={c.order.status} />
                         </>
                       )}
-                      {(c.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
+                      {(c.tags || []).map((id) => tagById[id] && !sameAsOrder(tagById[id].name, c.order?.status) && <TagChip key={id} tag={tagById[id]} small />)}
                     </div>
                   )}
                 </div>
@@ -890,7 +895,7 @@ export default function OmnichannelInbox() {
                     </span>
                     <WindowChip left={left} />
                     {active.ad && <AdChip ad={active.ad} full />}
-                    {(active.tags || []).map((id) => tagById[id] && <TagChip key={id} tag={tagById[id]} small />)}
+                    {(active.tags || []).map((id) => tagById[id] && !sameAsOrder(tagById[id].name, active.order?.status) && <TagChip key={id} tag={tagById[id]} small />)}
                   </div>
                 </div>
                 <button
