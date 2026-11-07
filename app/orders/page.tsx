@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
 import DropiOrderStatus from '@/components/orders/DropiOrderStatus';
+import ShippingBox, { ShipBadges } from '@/components/orders/ShippingBox';
 import DropiBulkModal from '@/components/orders/DropiBulkModal';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import { WaFallbackBadge, WhatsAppOrderStatus, useNow, waFallbackPending } from '@/components/orders/WhatsAppOrderStatus';
@@ -374,7 +375,9 @@ export default function OrdersPage() {
                     <p className="text-xs text-slate-500 truncate">
                       {order.city} · {order.comboName}
                     </p>
-                    <p className="text-[11px] font-mono text-slate-400">{order.orderNumber}</p>
+                    <p className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
+                      {order.orderNumber} <ShipBadges order={order} />
+                    </p>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <div className="flex flex-col items-start">
                         {getStatusBadge(order.status)}
@@ -434,7 +437,12 @@ export default function OrdersPage() {
                           className="w-4 h-4 rounded border-slate-300 align-middle cursor-pointer"
                         />
                       </td>
-                      <td className="py-3.5 px-3 font-mono text-[13px] text-slate-500 whitespace-nowrap">{order.orderNumber}</td>
+                      <td className="py-3.5 px-3 font-mono text-[13px] text-slate-500 whitespace-nowrap">
+                        {order.orderNumber}
+                        <div className="mt-1 flex gap-1 font-sans">
+                          <ShipBadges order={order} />
+                        </div>
+                      </td>
                       <td className="py-3.5 px-3">
                         <p className="font-medium text-slate-900 whitespace-nowrap">{order.customerName}</p>
                         <p className="text-xs text-slate-500">{order.phone}</p>
@@ -523,22 +531,9 @@ export default function OrdersPage() {
                 </p>
               )}
 
-              {(selectedOrder.trackingNumber || selectedOrder.carrier) && (
-                <div className="p-3 rounded-xl bg-sky-50/60 border border-sky-100">
-                  <span className="text-sky-800 text-xs font-semibold">Envío</span>
-                  <p className="text-slate-700">
-                    {selectedOrder.carrier || 'Transportadora'}
-                    {selectedOrder.trackingNumber && (
-                      <>
-                        {' '}· guía <span className="font-mono">{selectedOrder.trackingNumber}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              )}
-
               <WhatsAppOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
               <DropiOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
+              <ShippingBox order={selectedOrder} onChanged={() => pullFromCloud()} />
 
               {(selectedOrder.callNotes || selectedOrder.previousAddress) && (
                 <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">

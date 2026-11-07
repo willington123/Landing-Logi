@@ -15,9 +15,10 @@ export interface OrderFilters {
   wa: WaFilter;
   utm: string; // utmCampaign, "(sin campaña)" for none
   noGuide: boolean;
+  noDropi: boolean; // confirmed orders not yet in Dropi
 }
 
-export const EMPTY_FILTERS: OrderFilters = { date: 'all', from: '', to: '', status: 'all', landing: '', place: '', wa: '', utm: '', noGuide: false };
+export const EMPTY_FILTERS: OrderFilters = { date: 'all', from: '', to: '', status: 'all', landing: '', place: '', wa: '', utm: '', noGuide: false, noDropi: false };
 
 export const DATE_LABEL: Record<DateRange, string> = {
   all: 'Todas las fechas',
@@ -114,6 +115,7 @@ export function matchesBase(o: OrderItem, f: OrderFilters, search: string, bound
   if (!matchesWa(o, f.wa)) return false;
   if (f.utm && (o.utmCampaign || NO_CAMPAIGN) !== f.utm) return false;
   if (f.noGuide && (o.trackingNumber || !['confirmed_by_voice', 'shipped'].includes(o.status))) return false;
+  if (f.noDropi && (o.inDropi || o.dropi?.orderId || o.status !== 'confirmed_by_voice')) return false;
   const q = norm(search.trim());
   if (q) {
     const hay = [o.orderNumber, o.customerName, o.city, o.department, o.address, o.productName, o.trackingNumber || ''].map(norm);
@@ -145,7 +147,7 @@ export function summarize(list: OrderItem[]) {
 }
 
 export function activeFilterCount(f: OrderFilters) {
-  return (f.date !== 'all' ? 1 : 0) + (f.landing ? 1 : 0) + (f.place ? 1 : 0) + (f.wa ? 1 : 0) + (f.utm ? 1 : 0) + (f.noGuide ? 1 : 0);
+  return (f.date !== 'all' ? 1 : 0) + (f.landing ? 1 : 0) + (f.place ? 1 : 0) + (f.wa ? 1 : 0) + (f.utm ? 1 : 0) + (f.noGuide ? 1 : 0) + (f.noDropi ? 1 : 0);
 }
 
 export function cleanSavedFilters(raw: unknown): OrderFilters {
@@ -160,5 +162,6 @@ export function cleanSavedFilters(raw: unknown): OrderFilters {
   if (r.wa && r.wa in WA_LABEL) f.wa = r.wa;
   if (typeof r.utm === 'string') f.utm = r.utm;
   f.noGuide = Boolean(r.noGuide);
+  f.noDropi = Boolean(r.noDropi);
   return f;
 }

@@ -2,7 +2,7 @@
 
 // Pedidos: filter bar, summary cards and status tabs.
 import React, { useMemo } from 'react';
-import { CalendarDays, FilterX, Truck } from 'lucide-react';
+import { CalendarDays, FilterX, Package, Truck } from 'lucide-react';
 import type { OrderItem } from '@/lib/types';
 import {
   DATE_LABEL,
@@ -169,8 +169,17 @@ export function OrderFilterBar({
         >
           <Truck className="w-4 h-4" /> Sin guía
         </button>
+        <button
+          type="button"
+          onClick={() => set({ noDropi: !filters.noDropi })}
+          aria-pressed={filters.noDropi}
+          title="Confirmados que todavía no están marcados como subidos a Dropi"
+          className={`h-9 px-3 rounded-lg border text-[13px] inline-flex items-center gap-1.5 transition ${filters.noDropi ? `${selectOn}` : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Package className="w-4 h-4" /> Falta en Dropi
+        </button>
         {(nFilters > 0 || filters.status !== 'all') && (
-          <button type="button" onClick={() => onChange({ date: 'all', from: '', to: '', status: 'all', landing: '', place: '', wa: '', utm: '', noGuide: false })} className="h-9 px-2.5 rounded-lg text-[13px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center gap-1.5">
+          <button type="button" onClick={() => onChange({ date: 'all', from: '', to: '', status: 'all', landing: '', place: '', wa: '', utm: '', noGuide: false, noDropi: false })} className="h-9 px-2.5 rounded-lg text-[13px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center gap-1.5">
             <FilterX className="w-4 h-4" /> Limpiar filtros
           </button>
         )}
