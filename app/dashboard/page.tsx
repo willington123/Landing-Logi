@@ -7,6 +7,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 import AppointmentsHome from '@/components/agenda/AppointmentsHome';
+import AttentionHome from '@/components/dashboard/AttentionHome';
 import { fetchAccount } from '@/lib/account-client';
 import { CallButton, useVapiReady } from '@/components/voice/CallButton';
 import { logiStore } from '@/lib/store';
@@ -38,10 +39,14 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [bizType, setBizType] = useState<'store' | 'appointments' | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const vapiReady = useVapiReady();
 
   useEffect(() => {
-    fetchAccount().then((r) => setBizType(r.data?.businessType === 'appointments' ? 'appointments' : 'store'));
+    fetchAccount().then((r) => {
+      setBizType(r.data?.businessType === 'appointments' ? 'appointments' : 'store');
+      setUserName(r.data?.user?.name || r.data?.user?.email?.split('@')[0] || null);
+    });
   }, []);
 
   const refreshData = () => {
@@ -94,9 +99,12 @@ export default function DashboardPage() {
 
           {bizType === 'appointments' ? (
             <AppointmentsHome />
-          ) : (
+          ) : bizType === 'store' ? (
             <>
-
+          <AttentionHome
+            name={userName}
+            fallback={
+              <>
           {/* Welcome */}
           <section className={`${card} relative overflow-hidden p-6 sm:p-8`}>
             <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-brand-green/10 blur-3xl pointer-events-none" />
@@ -145,6 +153,9 @@ export default function DashboardPage() {
               </div>
             ))}
           </section>
+              </>
+            }
+          />
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
@@ -304,7 +315,7 @@ export default function DashboardPage() {
             </div>
           </div>
             </>
-          )}
+          ) : null}
         </main>
       </div>
 
