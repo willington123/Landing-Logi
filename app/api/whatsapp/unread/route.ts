@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { unreadSummary } from '@/lib/server/wa-store';
-import { chatScope, getAssignments } from '@/lib/server/crm-store';
+import { chatScope, getAssignments, noteSeen } from '@/lib/server/crm-store';
 import { handoffSummary } from '@/lib/server/wa-store';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,7 @@ export async function GET() {
   if (!cloudEnabled()) return NextResponse.json({ success: true, unread: 0, chats: 0, lastInboundAt: null, mine: null });
   try {
     const [scope, assign] = await Promise.all([chatScope(), getAssignments()]);
+    await noteSeen().catch(() => {}); // Oficina: this person has the panel open
     const mine = scope.agentId ? (id: string) => assign[id] === scope.agentId : undefined;
     const only = scope.restricted ? mine : undefined;
     const [summary, handoff] = await Promise.all([unreadSummary({ only, mine }), handoffSummary(only).catch(() => null)]);

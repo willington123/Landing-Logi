@@ -208,6 +208,28 @@ export async function othersOnChat(conversationId: string): Promise<{ name: stri
   return list.filter((x) => x.uid !== uid && now - new Date(x.at).getTime() < PRESENCE_MS).map((x) => ({ name: x.name, typing: x.typing }));
 }
 
+// ---------- who on the team has the panel open (for Oficina) ----------
+// The menu asks for unread messages every 20 s; that request notes the person as seen (at most once a minute per server).
+
+const seenWrites = new Map<string, number>();
+export async function noteSeen() {
+  const uid = sessionUserId();
+  if (!uid) return;
+  const d = await db();
+  const key = `${d.orgId}|${uid}`;
+  if (Date.now() - (seenWrites.get(key) || 0) < 60_000) return;
+  seenWrites.set(key, Date.now());
+  const all = (await readSetting<Record<string, string>>('team_seen')) || {};
+  all[uid] = new Date().toISOString();
+  await writeSetting('team_seen', all);
+}
+export async function getSeen(): Promise<Record<string, string>> {
+  return (await readSetting<Record<string, string>>('team_seen')) || {};
+}
+export async function getPresence(): Promise<Record<string, Presence[]>> {
+  return (await readSetting<Record<string, Presence[]>>('wa_presence')) || {};
+}
+
 // ---------- automatic replies ----------
 
 export async function getAutoSettings(): Promise<AutoSettings> {
