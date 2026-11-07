@@ -235,7 +235,12 @@ export default function OmnichannelInbox() {
   const typingAt = useRef(0);
   const myId = serverMe?.agentId || me;
   const [replies, setReplies] = useState<QuickReply[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
+  // /crm?f=handoff (or mine, unanswered…) opens with that filter (links from Inicio).
+  const [filter, setFilter] = useState<Filter>(() => {
+    if (typeof window === 'undefined') return 'all';
+    const f = new URLSearchParams(window.location.search).get('f') || '';
+    return (['handoff', 'unread', 'unanswered', 'pending', 'confirmed', 'mine', 'unassigned'] as string[]).includes(f) ? (f as Filter) : 'all';
+  });
   const [tagFilter, setTagFilter] = useState('');
   // One tab per channel (WhatsApp / Messenger / Instagram). Remembered in this browser; a link to a chat opens its tab.
   const [channelFilter, setChannelFilterState] = useState<ChatChannel>(() => {
