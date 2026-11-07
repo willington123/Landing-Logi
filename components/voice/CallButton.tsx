@@ -2,6 +2,7 @@
 
 // "Llamar" button: places a real AI call (Vapi) for an order, after a confirmation step.
 import React, { useEffect, useState } from 'react';
+import { orderOrgHeaders } from '@/lib/inbox-stores';
 import { Loader2, PhoneCall } from 'lucide-react';
 import type { OrderItem } from '@/lib/types';
 
@@ -46,7 +47,7 @@ export function CallButton({ order, variant = 'button', onCalled }: Props) {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await fetch('/api/calls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: order.id }) });
+      const res = await fetch('/api/calls', { method: 'POST', headers: { 'Content-Type': 'application/json', ...orderOrgHeaders(order) }, body: JSON.stringify({ orderId: order.id }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
       setMsg({ ok: true, text: 'Llamando…' });

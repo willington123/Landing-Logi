@@ -22,6 +22,8 @@ export const setChatOrg = (org: string | null) => {
 };
 // Headers for a request about the open chat (none when it's the session's store).
 export const chatOrgHeaders = (org: string | null = chatOrg): Record<string, string> => (org ? { 'x-kx-org': org } : {});
+// An order from another store (Pedidos with several stores) carries it in _org.
+export const orderOrgHeaders = (o: { _org?: string | null }): Record<string, string> => (o._org ? { 'x-kx-org': o._org } : {});
 // For files the browser loads by itself (photos, audio).
 export const withChatOrg = (url: string, org: string | null = chatOrg) => (org ? `${url}${url.includes('?') ? '&' : '?'}kxorg=${encodeURIComponent(org)}` : url);
 

@@ -2,6 +2,7 @@
 
 // Order detail: WhatsApp confirmation status (with a countdown to the fallback template) and a button to send it by hand.
 import React, { useEffect, useState } from 'react';
+import { orderOrgHeaders } from '@/lib/inbox-stores';
 import { Clock, Loader2, MessageCircle } from 'lucide-react';
 import type { OrderItem } from '@/lib/types';
 
@@ -107,7 +108,7 @@ export function WhatsAppOrderStatus({ order, onSent }: { order: OrderItem; onSen
     setBusy(true);
     setMsg(null);
     try {
-      const res = await fetch('/api/whatsapp/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: order.id }) });
+      const res = await fetch('/api/whatsapp/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json', ...orderOrgHeaders(order) }, body: JSON.stringify({ orderId: order.id }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
       setMsg({ ok: true, text: 'Enviada. Cuando el cliente toque un botón, el pedido se actualiza solo.' });

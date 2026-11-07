@@ -3,6 +3,7 @@
 // In the order detail: "Ya está en Dropi" (marked by hand) and the tracking number. After typing the number, the
 // store sees the WhatsApp message for the customer, can edit it, and only sends it after confirming.
 import React, { useEffect, useState } from 'react';
+import { orderOrgHeaders } from '@/lib/inbox-stores';
 import { AlertTriangle, CheckCircle2, Loader2, Package, Send, Truck } from 'lucide-react';
 import { CARRIERS } from '@/lib/crm';
 import type { OrderItem } from '@/lib/types';
@@ -17,7 +18,7 @@ interface Preview {
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
 async function call<T = any>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json' } });
+  const res = await fetch(url, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...((init?.headers as Record<string, string>) || {}) } });
   const d = await res.json().catch(() => ({}));
   if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
   return d;
@@ -59,7 +60,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     setDropiBusy(true);
     setError(null);
     try {
-      const d = await call<{ inDropi: OrderItem['inDropi'] }>(`/api/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify({ inDropi: on, dropiRef: on ? dropiRef : '' }) });
+      const d = await call<{ inDropi: OrderItem['inDropi'] }>(`/api/orders/${order.id}`, { method: 'PATCH', headers: orderOrgHeaders(order), body: JSON.stringify({ inDropi: on, dropiRef: on ? dropiRef : '' }) });
       setInDropi(d.inDropi || null);
       setAskRef(false);
       setDropiRef('');
@@ -77,7 +78,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     setError(null);
     setDone(null);
     try {
-      const d = await call<Preview>(`/api/orders/${order.id}/guide?carrier=${encodeURIComponent(carrier)}&tracking=${encodeURIComponent(tracking.trim())}`);
+      const d = await call<Preview>(`/api/orders/${order.id}/guide?carrier=${encodeURIComponent(carrier)}&tracking=${encodeURIComponent(tracking.trim())}`, { headers: orderOrgHeaders(order) });
       setPreview(d);
       setMessage(d.message);
       setMarkShipped(!['shipped', 'delivered', 'cancelled'].includes(order.status));
@@ -94,6 +95,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     try {
       const d = await call<{ sent: boolean; error?: string }>(`/api/orders/${order.id}/guide`, {
         method: 'POST',
+        headers: orderOrgHeaders(order),
         body: JSON.stringify({ carrier, trackingNumber: tracking.trim(), markShipped, send, message }),
       });
       setPreview(null);

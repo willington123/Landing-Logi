@@ -3,6 +3,7 @@
 // Pedidos as a board: one column per stage, cards you drag from one to the next (on phones, "Mover a…").
 // Moving a card changes the order's status like everywhere else (flows, Meta sales, reports follow).
 import React, { useMemo, useState } from 'react';
+import { orderOrgHeaders, storeColor } from '@/lib/inbox-stores';
 import { AlertTriangle, Loader2, MapPin, Truck, X } from 'lucide-react';
 import { logiStore } from '@/lib/store';
 import { CARRIERS } from '@/lib/crm';
@@ -44,8 +45,8 @@ export function stageAge(o: OrderItem, now = Date.now()): { days: number; since:
 
 const ageLabel = (d: number) => (d <= 0 ? 'hoy' : d === 1 ? '1 día' : `${d} días`);
 
-async function patchOrder(id: string, body: Record<string, unknown>) {
-  const r = await fetch(`/api/orders/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function patchOrder(o: OrderItem, body: Record<string, unknown>) {
+  const r = await fetch(`/api/orders/${encodeURIComponent(o.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...orderOrgHeaders(o) }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || d.success === false) throw new Error(d.error || `HTTP ${r.status}`);
 }
@@ -55,11 +56,13 @@ export default function OrdersBoard({
   landingNames,
   onOpen,
   onChanged,
+  currentStoreId,
 }: {
   orders: OrderItem[]; // already filtered (every filter except the status tab)
   landingNames: Record<string, string>;
   onOpen: (o: OrderItem) => void;
   onChanged: () => void;
+  currentStoreId?: string; // color of the session's store chip
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -92,7 +95,7 @@ export default function OrdersBoard({
   const apply = async (o: OrderItem, status: OrderStatus, extra?: { carrier: string; trackingNumber: string }) => {
     setBusy(o.id);
     try {
-      if (cloud) await patchOrder(o.id, { status, ...(extra || {}) });
+      if (cloud) await patchOrder(o, { status, ...(extra || {}) });
       logiStore.patchOrderLocal(o.id, {
         status,
         ...(status === 'confirmed_by_voice' && !o.confirmedAt ? { confirmedAt: new Date().toISOString() } : {}),
@@ -156,7 +159,7 @@ export default function OrdersBoard({
                   const age = stageAge(o);
                   return (
                     <article
-                      key={o.id}
+                      key={`${o._org || ''}|${o.id}`}
                       draggable={busy !== o.id}
                       onDragStart={(e) => {
                         setDragId(o.id);
@@ -176,6 +179,7 @@ export default function OrdersBoard({
                         <p className="text-[13px] font-semibold text-slate-900 truncate">{o.customerName || 'Sin nombre'}</p>
                         {busy === o.id ? <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" /> : <span className="text-[11px] text-slate-400 shrink-0 font-mono">{o.orderNumber}</span>}
                       </div>
+                      {o._store && <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded max-w-full truncate ${storeColor(o._org || currentStoreId || '')}`}>{o._store}</span>}
                       <p className="text-[12px] text-slate-600 truncate mt-0.5">
                         {landingNames[o.landingPageId] || o.productName}
                         {o.comboName ? ` · ${o.comboName}` : ''}
@@ -193,8 +197,8 @@ export default function OrdersBoard({
                           {[o.carrier, o.trackingNumber].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                      {o.dropi?.orderId ? (
-                        <p className="text-[11px] text-emerald-700 mt-1 truncate">✓ En Dropi #{o.dropi.orderId}</p>
+                      {o.dropi?.orderId || o.inDropi ? (
+                        <p className="text-[11px] text-emerald-700 mt-1 truncate">✓ En Dropi{o.dropi?.orderId || o.inDropi?.ref ? ` #${o.dropi?.orderId || o.inDropi?.ref}` : ''}</p>
                       ) : o.dropi?.exportedAt ? (
                         <p className="text-[11px] text-slate-500 mt-1 truncate">✓ En Excel para Dropi</p>
                       ) : o.dropi?.error ? (

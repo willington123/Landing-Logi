@@ -72,7 +72,7 @@ export const DEFAULT_QUICK_REPLIES: QuickReply[] = [
     id: 'guia',
     shortcut: 'guia',
     title: 'Número de guía',
-    body: 'Hola {nombre} 🚚 Tu pedido {pedido} va con {transportadora}. Tu número de guía es {guia}. Ten listo el pago de {total} para cuando lo recibas.',
+    body: 'Hola {nombre} 🚚 Tu pedido va con {transportadora}. Tu número de guía es {guia}. Ten listo el pago de {total} para cuando lo recibas.',
   },
   { id: 'gracias', shortcut: 'gracias', title: 'Gracias', body: '¡Gracias por tu compra, {nombre}! Cualquier duda, aquí estamos 🙌' },
 ];

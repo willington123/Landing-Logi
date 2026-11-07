@@ -29,7 +29,7 @@ async function guideMessage(o: OrderItem, carrier: string, trackingNumber: strin
   const body = (replies.find((r) => r.shortcut === 'guia') || DEFAULT_QUICK_REPLIES.find((r) => r.shortcut === 'guia')!).body;
   return fillQuickReply(body, {
     nombre: ((o.customerName || '').trim().split(/\s+/)[0] || '').replace(/^./, (x) => x.toUpperCase()),
-    pedido: o.orderNumber,
+    pedido: '', // the tracking notice doesn't show the order number (also when the store's own text has {pedido})
     producto: [o.productName, o.comboName].filter(Boolean).join(' - '),
     total: `$${(o.totalAmount || 0).toLocaleString('es-CO')}`,
     ciudad: o.city,

@@ -805,11 +805,11 @@ export default function OmnichannelInbox() {
     await loadConversations();
     // After shipping, leave the "despachado" message (with the tracking number if given) ready to review and send.
     if (action === 'shipped' && canReply && !text.trim()) {
-      const vars = { ...replyVars(active), transportadora: extra?.carrier || '', guia: extra?.trackingNumber || '' };
+      const vars = { ...replyVars(active), pedido: '', transportadora: extra?.carrier || '', guia: extra?.trackingNumber || '' };
       const withGuide = extra?.trackingNumber ? replies.find((x) => x.shortcut === 'guia') : null;
       const r = withGuide || replies.find((x) => x.shortcut === 'envio');
       if (r) setText(fillQuickReply(r.body, vars));
-      else if (extra?.trackingNumber) setText(fillQuickReply('Hola {nombre} 🚚 Tu pedido {pedido} ya va en camino con {transportadora}. Número de guía: {guia}.', vars));
+      else if (extra?.trackingNumber) setText(fillQuickReply('Hola {nombre} 🚚 Tu pedido ya va en camino con {transportadora}. Número de guía: {guia}.', vars));
     }
   };
 

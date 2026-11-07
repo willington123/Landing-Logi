@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
+import { storeColor } from '@/lib/inbox-stores';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
@@ -43,7 +45,48 @@ const FILTERS_KEY = 'lp_order_filters';
 const VIEW_KEY = 'lp_orders_view';
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [localOrders, setLocalOrders] = useState<OrderItem[]>([]); // the session's store (synced cache)
+  // Other stores chosen in "Todos los números": loaded from the server with their store named.
+  const { stores, chosen, sel } = useInboxStores();
+  const [extra, setExtra] = useState<Record<string, OrderItem[]>>({});
+  const [extraError, setExtraError] = useState<string | null>(null);
+  const multi = (stores?.length || 0) > 1;
+  const currentStore = stores?.find((s) => s.current) || null;
+  const others = useMemo(() => (chosen || []).filter((s) => !s.current), [chosen]);
+  const othersRef = useRef(others);
+  othersRef.current = others;
+  const showCurrent = !stores || !stores.length || Boolean(chosen?.some((s) => s.current));
+  const loadExtra = useCallback(async () => {
+    const list = othersRef.current;
+    if (!list.length) return setExtra({});
+    const results = await Promise.allSettled(
+      list.map((s) =>
+        fetch('/api/orders', { cache: 'no-store', headers: { 'x-kx-org': s.id } })
+          .then((r) => r.json())
+          .then((d) => {
+            if (!d.success) throw new Error(d.error || 'Error');
+            return (d.orders as OrderItem[]).map((o) => ({ ...o, _org: s.id, _store: s.name }));
+          }),
+      ),
+    );
+    if (othersRef.current !== list) return;
+    const next: Record<string, OrderItem[]> = {};
+    const failed: string[] = [];
+    results.forEach((r, i) => (r.status === 'fulfilled' ? (next[list[i].id] = r.value) : failed.push(list[i].name)));
+    setExtra(next);
+    setExtraError(failed.length ? `No se cargaron los pedidos de ${failed.join(', ')}.` : null);
+  }, []);
+  useEffect(() => {
+    loadExtra();
+  }, [others, loadExtra]);
+  const orders = useMemo(
+    () => [...(showCurrent ? localOrders.map((o) => (multi && currentStore ? { ...o, _store: currentStore.name } : o)) : []), ...Object.values(extra).flat()],
+    [localOrders, extra, showCurrent, multi, currentStore],
+  );
+  const reloadAll = () => {
+    pullFromCloud();
+    loadExtra();
+  };
   const [filters, setFilters] = useState<OrderFilters>(EMPTY_FILTERS);
   const [landingNames, setLandingNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,12 +113,11 @@ export default function OrdersPage() {
     } catch {}
   };
 
-  const refreshData = () => {
-    const fresh = logiStore.getOrders();
-    setOrders(fresh);
-    // Keep the open detail in step with the latest data.
-    setSelectedOrder((cur) => (cur ? fresh.find((o) => o.id === cur.id) || null : cur));
-  };
+  const refreshData = () => setLocalOrders(logiStore.getOrders());
+  // Keep the open detail in step with the latest data.
+  useEffect(() => {
+    setSelectedOrder((cur) => (cur ? orders.find((o) => o.id === cur.id && o._org === cur._org) || null : cur));
+  }, [orders]);
 
   // Remember the last filters used in this browser.
   useEffect(() => {
@@ -111,7 +153,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!anyCalling) return;
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible') pullFromCloud();
+      if (document.visibilityState === 'visible') reloadAll();
     }, 10000);
     return () => clearInterval(t);
   }, [anyCalling]);
@@ -123,7 +165,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!anyWaPending) return;
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible') pullFromCloud();
+      if (document.visibilityState === 'visible') reloadAll();
     }, 30000);
     return () => clearInterval(t);
   }, [anyWaPending]);
@@ -146,7 +188,21 @@ export default function OrdersPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await deleteOrders(confirmIds);
+      // Each store deletes its own orders.
+      const byId = new Map(orders.map((o) => [o.id, o]));
+      const mine = confirmIds.filter((id) => !byId.get(id)?._org);
+      const groups: Record<string, string[]> = {};
+      confirmIds.forEach((id) => {
+        const org = byId.get(id)?._org;
+        if (org) (groups[org] ||= []).push(id);
+      });
+      await deleteOrders(mine);
+      for (const [org, ids] of Object.entries(groups)) {
+        const res = await fetch('/api/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'x-kx-org': org }, body: JSON.stringify({ ids }) });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.success) throw new Error(d.error || `No se pudieron eliminar los pedidos (HTTP ${res.status}).`);
+      }
+      if (Object.keys(groups).length) loadExtra();
       const gone = new Set(confirmIds);
       setChecked((prev) => new Set(Array.from(prev).filter((id) => !gone.has(id))));
       if (selectedOrder && gone.has(selectedOrder.id)) setSelectedOrder(null);
@@ -171,6 +227,9 @@ export default function OrdersPage() {
       else filteredOrders.forEach((o) => next.add(o.id));
       return next;
     });
+
+  const storeTag = (o: OrderItem) =>
+    o._store ? <span className={`text-[10px] font-semibold font-sans px-1.5 py-0.5 rounded max-w-[120px] truncate ${storeColor(o._org || currentStore?.id || '')}`}>{o._store}</span> : null;
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
@@ -257,6 +316,7 @@ export default function OrdersPage() {
           {/* Intro + filters */}
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div>
+              {stores && multi && <StorePicker stores={stores} sel={sel} className="mb-3" />}
               <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Pedidos contraentrega</h2>
               <p className="text-sm text-slate-500 mt-0.5">Revisa confirmaciones, direcciones y estado de cada pedido.</p>
             </div>
@@ -320,9 +380,11 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          {extraError && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">{extraError}</p>}
+
           <OrderFilterBar all={orders} base={baseOrders} filters={filters} onChange={changeFilters} landingNames={landingNames} hideStatus={view === 'board'} />
 
-          {view === 'board' && <OrdersBoard orders={baseOrders} landingNames={landingNames} onOpen={setSelectedOrder} onChanged={refreshData} />}
+          {view === 'board' && <OrdersBoard orders={baseOrders} landingNames={landingNames} onOpen={setSelectedOrder} onChanged={() => (refreshData(), loadExtra())} currentStoreId={currentStore?.id} />}
 
           {view === 'list' && visibleChecked.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -354,7 +416,7 @@ export default function OrdersPage() {
             {filteredOrders.length === 0 && <p className="py-10 text-center text-sm text-slate-500">No hay pedidos con estos filtros.</p>}
             {filteredOrders.map((order) => (
               <div
-                key={order.id}
+                key={`${order._org || ""}|${order.id}`}
                 onClick={() => setSelectedOrder(order)}
                 className={`bg-white rounded-2xl border p-4 active:bg-slate-50 ${checked.has(order.id) ? 'border-brand-blue/40' : 'border-slate-200/80'}`}
               >
@@ -376,7 +438,7 @@ export default function OrdersPage() {
                       {order.city} · {order.comboName}
                     </p>
                     <p className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
-                      {order.orderNumber} <ShipBadges order={order} />
+                      {order.orderNumber} {storeTag(order)} <ShipBadges order={order} />
                     </p>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <div className="flex flex-col items-start">
@@ -384,7 +446,7 @@ export default function OrdersPage() {
                         <WaFallbackBadge order={order} now={now} />
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
-                        <CallButton order={order} onCalled={() => pullFromCloud()} />
+                        <CallButton order={order} onCalled={reloadAll} />
                       </div>
                     </div>
                   </div>
@@ -424,7 +486,7 @@ export default function OrdersPage() {
                   )}
                   {filteredOrders.map((order) => (
                     <tr
-                      key={order.id}
+                      key={`${order._org || ""}|${order.id}`}
                       onClick={() => setSelectedOrder(order)}
                       className={`transition cursor-pointer ${checked.has(order.id) ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}
                     >
@@ -440,6 +502,7 @@ export default function OrdersPage() {
                       <td className="py-3.5 px-3 font-mono text-[13px] text-slate-500 whitespace-nowrap">
                         {order.orderNumber}
                         <div className="mt-1 flex gap-1 font-sans">
+                          {storeTag(order)}
                           <ShipBadges order={order} />
                         </div>
                       </td>
@@ -465,7 +528,7 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-5 text-right">
-                        <CallButton order={order} onCalled={() => pullFromCloud()} />
+                        <CallButton order={order} onCalled={reloadAll} />
                       </td>
                     </tr>
                   ))}
@@ -478,7 +541,7 @@ export default function OrdersPage() {
 
       {/* Order Detail Modal */}
       {newOrder && <NewOrderModal onClose={() => setNewOrder(false)} onCreated={() => pullFromCloud()} />}
-      {dropiBulk && <DropiBulkModal orders={orders} onClose={() => setDropiBulk(false)} onDone={() => pullFromCloud()} />}
+      {dropiBulk && <DropiBulkModal orders={localOrders} onClose={() => setDropiBulk(false)} onDone={() => pullFromCloud()} />}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 ring-1 ring-inset ring-slate-600/15 max-h-[92vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">
@@ -487,7 +550,10 @@ export default function OrdersPage() {
                 <span className="text-base font-semibold text-slate-900">
                   Pedido {selectedOrder.orderNumber}
                 </span>
-                <p className="text-xs text-slate-400">Registrado desde landing page</p>
+                <p className="text-xs text-slate-400">
+                  {selectedOrder._store ? <span className={`mr-1.5 px-1.5 py-0.5 rounded font-medium ${storeColor(selectedOrder._org || currentStore?.id || '')}`}>{selectedOrder._store}</span> : null}
+                  Registrado desde landing page
+                </p>
               </div>
               <button
                 onClick={() => setSelectedOrder(null)}
@@ -531,9 +597,9 @@ export default function OrdersPage() {
                 </p>
               )}
 
-              <WhatsAppOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
-              <DropiOrderStatus order={selectedOrder} onSent={() => pullFromCloud()} />
-              <ShippingBox order={selectedOrder} onChanged={() => pullFromCloud()} />
+              <WhatsAppOrderStatus order={selectedOrder} onSent={reloadAll} />
+              <DropiOrderStatus order={selectedOrder} onSent={reloadAll} />
+              <ShippingBox order={selectedOrder} onChanged={reloadAll} />
 
               {(selectedOrder.callNotes || selectedOrder.previousAddress) && (
                 <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">
@@ -562,7 +628,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <CallButton order={selectedOrder} variant="wide" onCalled={() => pullFromCloud()} />
+              <CallButton order={selectedOrder} variant="wide" onCalled={reloadAll} />
               <button
                 onClick={() => askDelete([selectedOrder.id])}
                 className="h-10 px-4 border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2"
