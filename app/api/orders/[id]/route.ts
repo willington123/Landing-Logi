@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled, patchOrderData, updateOrderAddress, updateOrderStatus } from '@/lib/server/db';
 import type { OrderStatus } from '@/lib/types';
+import { getAgents, myAgent } from '@/lib/server/crm-store';
+import { getUser } from '@/lib/server/accounts';
+import { sessionUserId } from '@/lib/server/tenant';
 
 export const dynamic = 'force-dynamic';
+
+async function whoAmI(): Promise<string | null> {
+  const uid = sessionUserId();
+  if (!uid) return null;
+  const agent = await myAgent(await getAgents()).catch(() => null);
+  if (agent) return agent.name;
+  const user = await getUser(uid).catch(() => null);
+  return (user?.name || user?.email?.split('@')[0] || null)?.slice(0, 60) || null;
+}
 
 const STATUSES: OrderStatus[] = ['pending_call', 'calling', 'confirmed_by_voice', 'needs_review', 'unanswered', 'retry_scheduled', 'cancelled', 'shipped', 'delivered'];
 
@@ -11,6 +23,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     const body = await req.json().catch(() => ({}));
     const { status } = body;
+    // "Ya está en Dropi", marked by hand: { inDropi: boolean, dropiRef? }
+    if (status === undefined && body.inDropi !== undefined) {
+      const inDropi = body.inDropi
+        ? { at: new Date().toISOString(), by: await whoAmI(), ref: String(body.dropiRef ?? '').trim().slice(0, 40) || null }
+        : null;
+      await patchOrderData(params.id, { inDropi });
+      return NextResponse.json({ success: true, inDropi });
+    }
     // Address correction (from Mensajes): { address, city, department? }
     if (status === undefined && body.address !== undefined) {
       const clean = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
