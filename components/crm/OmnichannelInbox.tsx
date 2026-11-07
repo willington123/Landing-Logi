@@ -412,7 +412,7 @@ export default function OmnichannelInbox() {
   const [tplBusy, setTplBusy] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
   const advRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(activeKey);
   activeRef.current = activeKey;
@@ -586,8 +586,10 @@ export default function OmnichannelInbox() {
     loadMessages(activeKey).finally(() => setThreadLoading(false));
   }, [activeKey, loadMessages]);
 
+  // Scroll only the thread (scrollIntoView also moves the page, which hid the top on phones).
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const box = threadRef.current;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   // Grow the reply box with its text (up to ~6 lines).
@@ -886,16 +888,16 @@ export default function OmnichannelInbox() {
   return (
     <div className={`${card} flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
       {/* Top bar: stores, search, filters, period and the four attention cards */}
-      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-3 pb-3 space-y-3">
+      <div className={`${activeKey ? 'hidden md:block' : ''} shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-3 pb-3 space-y-3`}>
         <div className="flex flex-wrap items-center gap-2">
           {stores && <StorePicker stores={stores} sel={sel} />}
-          <div className="relative flex-1 min-w-[180px] max-w-md">
+          <div className="relative order-[9] basis-full sm:order-none sm:basis-auto flex-1 min-w-[180px] sm:max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar cliente, teléfono o producto…"
-              className="w-full h-10 text-[13px] bg-white border border-slate-200 rounded-xl pl-9 pr-8 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className="w-full h-10 text-[16px] sm:text-[13px] bg-white border border-slate-200 rounded-xl pl-9 pr-8 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpiar">
@@ -993,7 +995,7 @@ export default function OmnichannelInbox() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 overflow-x-auto max-w-full">
+          <div className="order-[10] sm:order-none w-full sm:w-auto flex items-center gap-1 overflow-x-auto max-w-full">
             <span className="hidden lg:inline text-[11px] font-semibold uppercase tracking-wide text-slate-400 mr-1">Periodo</span>
             {PERIODS.map((p) => (
               <button
@@ -1032,7 +1034,7 @@ export default function OmnichannelInbox() {
       </div>
 
       {storeErrors.length > 0 && !listError && (
-        <div className="px-4 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-800">
+        <div className="hidden md:block px-4 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-800">
           No se cargaron los chats de {storeErrors.map((s) => s.name || 'una tienda').join(', ')}: {storeErrors[0].error}
         </div>
       )}
@@ -1123,7 +1125,7 @@ export default function OmnichannelInbox() {
             <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400 p-6 text-center">{activeKey && !loaded ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Selecciona una conversación'}</div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-start gap-x-3 gap-y-2">
+              <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-100 flex flex-wrap items-start gap-x-3 gap-y-2">
                 <button onClick={() => setActiveKey('')} className="md:hidden p-1 -ml-1 mt-1 text-slate-500" aria-label="Volver">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
@@ -1133,7 +1135,7 @@ export default function OmnichannelInbox() {
                       <activeStatus.Icon className="w-3.5 h-3.5" /> {activeStatus.label}
                     </p>
                   )}
-                  <p className="text-[17px] font-bold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
+                  <p className="text-[16px] sm:text-[17px] font-bold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
                   <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
                     {multi && <StoreChip id={active.org} name={storeName(active.org)} />}
                     <span className="text-[13px] text-slate-500 inline-flex items-center gap-1">
@@ -1162,9 +1164,9 @@ export default function OmnichannelInbox() {
               </div>
 
               {botInfo?.enabled && (
-                <div className={`px-4 py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}>
+                <div className={`px-3 sm:px-4 py-1.5 sm:py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}>
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span className="flex-1 min-w-0">
+                  <span className="flex-1 min-w-0 line-clamp-2 sm:line-clamp-none" title={active.bot?.note || undefined}>
                     {active.bot?.paused ? (
                       <>
                         <strong>{botInfo.name} está en pausa</strong> en este chat
@@ -1183,7 +1185,8 @@ export default function OmnichannelInbox() {
                     className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'}`}
                   >
                     {botBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : active.bot?.paused ? <Sparkles className="w-3 h-3" /> : <Hand className="w-3 h-3" />}
-                    {active.bot?.paused ? 'Devolver al asistente' : 'Tomar el control'}
+                    <span className="sm:hidden">{active.bot?.paused ? 'Devolver' : 'Tomar'}</span>
+                    <span className="hidden sm:inline">{active.bot?.paused ? 'Devolver al asistente' : 'Tomar el control'}</span>
                   </button>
                 </div>
               )}
@@ -1193,7 +1196,7 @@ export default function OmnichannelInbox() {
                   {others.some((o) => o.typing) ? `✍️ ${others.filter((o) => o.typing).map((o) => o.name).join(' y ')} está escribiendo en este chat` : `👀 ${others.map((o) => o.name).join(' y ')} también tiene abierto este chat`}
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto bg-slate-100/70 p-4 space-y-2">
+              <div ref={threadRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-100/70 p-3 sm:p-4 space-y-2">
                 {threadLoading && messages.length === 0 && (
                   <div className="flex justify-center py-6 text-slate-400">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1241,10 +1244,9 @@ export default function OmnichannelInbox() {
                     </div>
                   </div>
                 ))}
-                <div ref={endRef} />
               </div>
 
-              <div className="border-t border-slate-100 p-3">
+              <div className="border-t border-slate-100 p-2 sm:p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3">
                 {notConnected ? (
                   <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">
                     WhatsApp{multi ? ` de ${storeName(active.org)}` : ''} no está conectado: no se pueden enviar respuestas.{' '}
@@ -1274,7 +1276,7 @@ export default function OmnichannelInbox() {
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
-                    <div className="relative flex items-end gap-2">
+                    <div className="relative flex items-end gap-1.5 sm:gap-2">
                       {qr.open && (
                         <QuickReplyMenu
                           replies={replies}
@@ -1303,7 +1305,7 @@ export default function OmnichannelInbox() {
                       )}
                       <button
                         onClick={() => setQr((s) => (s.open ? { open: false, slash: false, highlight: 0 } : { open: true, slash: false, highlight: 0 }))}
-                        className={`h-11 w-11 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+                        className={`h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
                         aria-label="Respuestas rápidas"
                         title="Respuestas rápidas (o escribe /)"
                       >
@@ -1314,13 +1316,14 @@ export default function OmnichannelInbox() {
                         value={text}
                         onChange={(e) => onTextChange(e.target.value)}
                         onKeyDown={onKeyDown}
-                        rows={2}
-                        placeholder="Escribe un mensaje… (Enter envía, Shift+Enter salta de línea, / para respuestas rápidas)"
-                        className="flex-1 resize-none text-[14px] bg-white border border-slate-200 rounded-xl px-3 py-2.5 max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        rows={1}
+                        placeholder="Mensaje…"
+                        title="Enter envía, Shift+Enter salta de línea, / para respuestas rápidas"
+                        className="flex-1 min-w-0 resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                       />
-                      <button onClick={handleSend} disabled={!text.trim() || sending} className="h-11 px-4 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
+                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="h-10 sm:h-11 w-10 sm:w-auto sm:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        Enviar
+                        <span className="hidden sm:inline">Enviar</span>
                       </button>
                     </div>
                   </>
