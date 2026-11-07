@@ -14,6 +14,8 @@ export interface HomeChat {
   order: { number: string; status: string; product: string; total: number } | null;
   assignee: string | null;
   fromAd: boolean;
+  org?: string; // store, when several are shown together (set in the panel)
+  store?: string;
 }
 
 export interface HomeData {
@@ -48,4 +50,25 @@ export function ago(iso: string | null | undefined, now = Date.now()) {
 export function greeting(now = new Date()) {
   const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', hour: '2-digit', hourCycle: 'h23' }).format(now));
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+}
+
+// Several stores in one Inicio: lists merged (newest first), numbers added up.
+export function mergeHome(parts: { org: string; store: string; data: HomeData }[], max = 50): HomeData | null {
+  if (!parts.length) return null;
+  const tag = (p: (typeof parts)[number], items: HomeChat[]) => items.map((c) => ({ ...c, org: p.org, store: p.store }));
+  const byNewest = (a: HomeChat, b: HomeChat) => String(b.since || '').localeCompare(String(a.since || ''));
+  const sum = (f: (d: HomeData) => number) => parts.reduce((n, p) => n + f(p.data), 0);
+  const first = parts[0].data;
+  return {
+    range: first.range,
+    since: first.since,
+    until: first.until,
+    hasChats: parts.some((p) => p.data.hasChats),
+    bot: { enabled: parts.some((p) => p.data.bot.enabled), name: parts.find((p) => p.data.bot.enabled)?.data.bot.name || first.bot.name },
+    help: { count: sum((d) => d.help.count), items: parts.flatMap((p) => tag(p, p.data.help.items)).sort(byNewest).slice(0, max) },
+    retake: { count: sum((d) => d.retake.count), items: parts.flatMap((p) => tag(p, p.data.retake.items)).sort(byNewest).slice(0, max) },
+    sales: { count: sum((d) => d.sales.count), revenue: sum((d) => d.sales.revenue) },
+    attending: { count: sum((d) => d.attending.count), mine: parts.some((p) => p.data.attending.mine) },
+    ai: { chats: sum((d) => d.ai.chats), solo: sum((d) => d.ai.solo), team: sum((d) => d.ai.team), waiting: sum((d) => d.ai.waiting) },
+  };
 }

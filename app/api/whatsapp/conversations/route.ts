@@ -13,13 +13,14 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });
   try {
-    const [conversations, tagMap, tags, agents, assign, botStates, bot, ads] = await Promise.all([
-      listConversations(),
+    const botStates = await getBotStates();
+    const waiting = Object.keys(botStates).filter((id) => botStates[id].paused && (botStates[id].reason === 'handoff' || botStates[id].reason === 'limit'));
+    const [conversations, tagMap, tags, agents, assign, bot, ads] = await Promise.all([
+      listConversations(200, waiting),
       getConversationTags(),
       getTags(),
       getAgents(),
       getAssignments(),
-      getBotStates(),
       getBotSettings(),
       getConversationAds(),
     ]);
@@ -35,7 +36,7 @@ export async function GET() {
         tags: (tagMap[c.id] || []).filter((id) => known.has(id)),
         assignee: assign[c.id] && people.has(assign[c.id]) ? assign[c.id] : null,
         ad: ads[c.id] ? { id: ads[c.id].id, headline: ads[c.id].headline || null, body: ads[c.id].body || null, url: ads[c.id].url || null, thumb: ads[c.id].thumb || null, at: ads[c.id].at } : null,
-        bot: botStates[c.id]?.paused ? { paused: true, reason: botStates[c.id].reason || null, note: botStates[c.id].note || null } : null,
+        bot: botStates[c.id]?.paused ? { paused: true, reason: botStates[c.id].reason || null, note: botStates[c.id].note || null, at: botStates[c.id].pausedAt || null } : null,
       })),
       bot: { enabled: bot.enabled && (await botConfigured()), mode: bot.mode, name: bot.name },
       tags,
