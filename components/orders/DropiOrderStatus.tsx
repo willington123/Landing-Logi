@@ -2,6 +2,7 @@
 
 // In the order detail: whether the order is in Dropi, why it couldn't be sent, and the "Enviar a Dropi" button.
 import React, { useEffect, useState } from 'react';
+import { orderOrgHeaders } from '@/lib/inbox-stores';
 import { CheckCircle2, Loader2, Truck } from 'lucide-react';
 import type { OrderItem } from '@/lib/types';
 
@@ -25,7 +26,7 @@ export default function DropiOrderStatus({ order, onSent }: { order: OrderItem; 
   const send = async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/orders/${order.id}/dropi`, { method: 'POST' });
+      const res = await fetch(`/api/orders/${order.id}/dropi`, { method: 'POST', headers: orderOrgHeaders(order) });
       const d = await res.json().catch(() => ({}));
       if (d.success) setState({ orderId: d.dropiOrderId, sentAt: new Date().toISOString(), error: null });
       else setState({ ...(state || {}), error: d.error || `HTTP ${res.status}` });

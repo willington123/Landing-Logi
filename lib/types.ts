@@ -256,6 +256,8 @@ export interface OrderItem {
   dropi?: { orderId?: number | string | null; sentAt?: string; error?: string | null; at?: string; sending?: string; exportedAt?: string }; // order sent to Dropi
   inDropi?: { at: string; by?: string | null; ref?: string | null } | null; // marked by hand: the store already uploaded it to Dropi (number optional)
   guideAt?: string; // when the tracking number was saved
+  _org?: string; // panel only: the order's store when Pedidos shows several (not saved)
+  _store?: string;
 }
 
 export interface VoiceAgentSettings {
