@@ -3,6 +3,7 @@
 // Mensajes → 📎 photo, video or document, and 🎤 voice note, as in WhatsApp. The file goes straight from the browser
 // to storage (big videos never pass through our server), then Konnexa sends it to the customer.
 import React, { useEffect, useRef, useState } from 'react';
+import { chatOrgHeaders } from '@/lib/inbox-stores';
 import { FileText, Loader2, Mic, Paperclip, Send, Square, Trash2, X } from 'lucide-react';
 
 type Kind = 'image' | 'video' | 'audio' | 'document';
@@ -39,7 +40,7 @@ function photoForWhatsApp(file: File): Promise<Blob> {
 }
 
 async function post(url: string, body: unknown) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...chatOrgHeaders() }, body: JSON.stringify(body) });
   const d = await res.json().catch(() => ({}));
   if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
   return d;

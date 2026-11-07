@@ -1,11 +1,13 @@
 'use client';
 
 // Inicio: what needs a person right now (chats the AI handed over, chats to pick up again) and how the AI is doing.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, Bot, Clock, Loader2, Megaphone, RefreshCw, ShoppingCart, UserRound } from 'lucide-react';
 import { TAG_COLORS } from '@/lib/crm';
-import { ago, greeting, WINDOW_MS, type HomeChat, type HomeData } from '@/lib/home';
+import { ago, greeting, mergeHome, WINDOW_MS, type HomeChat, type HomeData } from '@/lib/home';
+import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
+import { storeColor } from '@/lib/inbox-stores';
 import { daysLabel, rangeQuery, todayCo, type RangeValue } from '@/components/ads/DateRangePicker';
 
 const PERIODS: { id: 'today' | 'yesterday' | '7d' | '30d'; label: string }[] = [
@@ -15,6 +17,18 @@ const PERIODS: { id: 'today' | 'yesterday' | '7d' | '30d'; label: string }[] = [
   { id: '30d', label: '30 días' },
 ];
 const PREF = 'kx.inicio.range';
+const EMPTY: HomeData = {
+  range: 'today',
+  since: '',
+  until: '',
+  hasChats: false,
+  bot: { enabled: false, name: '' },
+  help: { count: 0, items: [] },
+  retake: { count: 0, items: [] },
+  sales: { count: 0, revenue: 0 },
+  attending: { count: 0, mine: false },
+  ai: { chats: 0, solo: 0, team: 0, waiting: 0 },
+};
 const POLL_MS = 60_000;
 
 const ORDER_LABEL: Record<string, string> = {
@@ -56,7 +70,7 @@ function whatToDo(c: HomeChat, now: number) {
   return c.waiting && c.lastInboundAt ? `${why}. Lleva ${ago(c.lastInboundAt, now)} esperando y nadie le ha contestado.` : `${why}.`;
 }
 
-function ChatRow({ c, now }: { c: HomeChat; now: number }) {
+function ChatRow({ c, now, multi }: { c: HomeChat; now: number; multi: boolean }) {
   const initial = /^[a-zA-ZÀ-ÿñÑ]/.test(c.name.trim()) ? c.name.trim()[0].toUpperCase() : null;
   return (
     <li className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-4 sm:p-5">
@@ -74,6 +88,7 @@ function ChatRow({ c, now }: { c: HomeChat; now: number }) {
               ) : c.reason === 'retake' ? (
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">la IA contestó</span>
               ) : null}
+              {multi && c.store && <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${storeColor(c.org || '')}`}>{c.store}</span>}
               {c.fromAd && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-800">
                   <Megaphone className="w-3 h-3" /> Anuncio
@@ -111,7 +126,7 @@ function ChatRow({ c, now }: { c: HomeChat; now: number }) {
         </div>
 
         <Link
-          href={`/crm?c=${encodeURIComponent(c.id)}`}
+          href={`/crm?c=${encodeURIComponent(c.id)}${c.org ? `&org=${encodeURIComponent(c.org)}` : ''}`}
           className="h-10 px-4 rounded-xl bg-brand-blue hover:brightness-105 text-white text-sm font-semibold inline-flex items-center justify-center gap-1.5 shrink-0 lg:self-center"
         >
           Atender <ArrowRight className="w-4 h-4" />
@@ -152,13 +167,33 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
     } catch {}
   };
 
+  const { stores, chosen, sel } = useInboxStores();
+  const multi = (stores?.length || 0) > 1;
+  // The stores to add up: the ones chosen in "Bandejas que ves" (the session's store when there's no list).
+  const targets = useMemo(() => (!stores ? null : stores.length ? (chosen || []).map((s) => ({ id: s.id, name: s.name, current: s.current })) : [{ id: '', name: '', current: true }]), [stores, chosen]);
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
+
   const load = useCallback(async (r: RangeValue) => {
+    const list = targetsRef.current;
+    if (!list) return;
     setLoading(true);
     try {
-      const d = await fetch(`/api/home?${rangeQuery(r)}`, { cache: 'no-store' }).then((res) => res.json());
-      if (rangeRef.current !== r) return;
-      if (!d.success) throw new Error(d.error || 'No se pudo cargar el inicio.');
-      setData(d as HomeData);
+      const results = await Promise.allSettled(
+        list.map((s) =>
+          fetch(`/api/home?${rangeQuery(r)}`, { cache: 'no-store', headers: s.current ? {} : { 'x-kx-org': s.id } })
+            .then((res) => res.json())
+            .then((d) => {
+              if (!d.success) throw new Error(d.error || 'No se pudo cargar el inicio.');
+              return { org: s.id, store: s.name, data: d as HomeData };
+            }),
+        ),
+      );
+      if (rangeRef.current !== r || targetsRef.current !== list) return;
+      const okParts = results.flatMap((x) => (x.status === 'fulfilled' ? [x.value] : []));
+      const firstErr = results.find((x) => x.status === 'rejected') as PromiseRejectedResult | undefined;
+      if (!okParts.length && list.length) throw new Error(firstErr?.reason?.message || 'No se pudo cargar el inicio.');
+      setData(mergeHome(okParts) || { ...EMPTY, hasChats: true });
       setError(null);
       setUpdatedAt(new Date());
       setNow(Date.now());
@@ -170,10 +205,11 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
   }, []);
 
   useEffect(() => {
+    if (!targets) return;
     load(range);
     const t = setInterval(() => document.visibilityState === 'visible' && load(rangeRef.current), POLL_MS);
     return () => clearInterval(t);
-  }, [range, load]);
+  }, [range, load, targets]);
 
   const goList = (t: 'help' | 'retake') => {
     setTab(t);
@@ -205,6 +241,7 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
       {/* Greeting and period */}
       <section className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
         <div>
+          {stores && multi && <StorePicker stores={stores} sel={sel} className="mb-4" />}
           <h2 className="text-2xl sm:text-[28px] font-bold tracking-tight text-slate-900 leading-tight">
             {greeting()}
             {first ? `, ${first}` : ''}
@@ -396,7 +433,7 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
               {list && list.items.length ? (
                 <ul className="mt-4 space-y-3">
                   {list.items.map((c) => (
-                    <ChatRow key={c.id} c={c} now={now} />
+                    <ChatRow key={`${c.org || ''}|${c.id}`} c={c} now={now} multi={multi} />
                   ))}
                   {list.count > list.items.length && (
                     <li className="text-center text-sm text-slate-500 pt-1">

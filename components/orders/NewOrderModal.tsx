@@ -2,6 +2,7 @@
 
 // "Nuevo pedido": an order sold by chat, typed by the team. It is saved already confirmed.
 import React, { useEffect, useMemo, useState } from 'react';
+import { chatOrgHeaders } from '@/lib/inbox-stores';
 import Link from 'next/link';
 import { Loader2, X } from 'lucide-react';
 import { CO_DEPARTMENTS } from '@/lib/co-departments';
@@ -46,7 +47,7 @@ export default function NewOrderModal({
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }));
 
   useEffect(() => {
-    fetch('/api/products', { cache: 'no-store' })
+    fetch('/api/products', { cache: 'no-store', headers: chatOrgHeaders() })
       .then((r) => r.json())
       .then((d) => {
         if (!d.success) throw new Error(d.error);
@@ -69,7 +70,7 @@ export default function NewOrderModal({
     try {
       const res = await fetch('/api/orders/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...chatOrgHeaders() },
         body: JSON.stringify({ ...f, total: f.total || null, conversationId: prefill?.conversationId || null }),
       });
       const d = await res.json().catch(() => ({}));

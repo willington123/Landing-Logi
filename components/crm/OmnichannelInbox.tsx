@@ -1,69 +1,145 @@
 'use client';
 
-// WhatsApp inbox backed by Supabase (via /api/whatsapp/*). Polls every 10 s.
+// Mensajes: one inbox for one or several stores (WhatsApp, Messenger, Instagram), via /api/whatsapp/*. Polls every 10 s.
+// Chats that need a person come first; the four cards on top (Necesitan tu ayuda, Retoma, IA trabajando, Atendiendo) filter the list.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Bell, BellOff, Bot, Check, Hand, Sparkles, CheckCheck, Clock, FileText, Loader2, MessageSquare, Search, Send, ShoppingBag, User, X, Zap, Megaphone } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Bell,
+  BellOff,
+  Bot,
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Clock,
+  FileText,
+  Filter as FilterIcon,
+  Hand,
+  Loader2,
+  Megaphone,
+  MessageSquare,
+  Search,
+  Send,
+  ShoppingBag,
+  Sparkles,
+  User,
+  UserRound,
+  X,
+  Zap,
+} from 'lucide-react';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import ChatAttach from '@/components/crm/ChatAttach';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
-import { AgentBadge, AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
+import { AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
 import TeamManager from '@/components/crm/TeamManager';
+import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
 import { CHANNEL_LABEL, CHAT_ID_RE, chatChannel, isSocialChat, type ChatChannel } from '@/lib/social';
 import { notifyPermission, requestNotify } from '@/lib/notify';
 import { type OrderAction } from '@/components/crm/OrderPanel';
-import { CustomerPanel } from '@/components/crm/CustomerPanel';
+import { CustomerPanel, type PanelTab } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
+import { chatOrgHeaders, setChatOrg, storeColor, withChatOrg } from '@/lib/inbox-stores';
+import { ago, RETAKE_AFTER_MS } from '@/lib/home';
+import { todayCo } from '@/components/ads/DateRangePicker';
 
+type BotState = { paused: boolean; reason: string | null; note: string | null; at?: string | null } | null;
 type Conversation = WaConversation & {
   order: OrderSummary | null;
   tags?: string[];
   assignee?: string | null;
-  bot?: { paused: boolean; reason: string | null; note: string | null } | null;
+  bot?: BotState;
   ad?: { id: string; headline: string | null; body: string | null; url: string | null; thumb: string | null; at: string } | null;
+  org: string; // store ('' = the session's store when the store list isn't available)
+  key: string; // org|id: the same customer can write to two stores
 };
-
-// "Vino de un anuncio" chip (click-to-WhatsApp ads).
-function AdChip({ ad, full }: { ad: NonNullable<Conversation['ad']>; full?: boolean }) {
-  const label = ad.headline || `Anuncio ${ad.id}`;
-  return (
-    <span
-      className="inline-flex items-center gap-1 max-w-full text-[10px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-full px-1.5 py-0.5"
-      title={`Llegó desde el anuncio: ${label} (id ${ad.id})`}
-    >
-      <Megaphone className="w-3 h-3 shrink-0" />
-      <span className="truncate">{full ? label : 'Anuncio'}</span>
-    </span>
-  );
-}
 interface BotInfo {
   enabled: boolean;
   mode: 'always' | 'away';
   name: string;
 }
-type Filter = 'all' | 'handoff' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
-// The AI assistant passed this chat to a person and nobody has taken it yet.
-const waitsAdvisor = (c: { bot?: { paused: boolean; reason: string | null } | null }) => Boolean(c.bot?.paused && c.bot.reason === 'handoff');
-const ME_KEY = 'lp_agent'; // who is using this browser (for "Míos")
-const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
-
-// The customer wrote last and nobody has answered yet.
-const isUnanswered = (c: Conversation) => Boolean(c.last_inbound_at && (!c.last_message_at || c.last_inbound_at >= c.last_message_at));
-const waitingFor = (iso: string) => {
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  return m < 1 ? 'ahora' : m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h` : `${Math.floor(m / 1440)} d`;
-};
 interface WaStatus {
   sending: boolean;
   confirmTemplate: boolean;
   webhook: boolean;
   missing: string[];
 }
+interface StoreData {
+  id: string;
+  name: string;
+  tags: CrmTag[];
+  agents: Agent[];
+  bot: BotInfo | null;
+  wa: WaStatus | null;
+  me: { agentId: string | null; restricted: boolean; role: string | null } | null;
+  social: { messenger: boolean; instagram: boolean };
+  error?: string;
+}
 
+type Focus = 'all' | 'help' | 'retake' | 'ai' | 'attending';
+type Adv = '' | 'unread' | 'unanswered' | 'pending' | 'confirmed' | 'mine' | 'unassigned';
+type Period = 'hour' | 'today' | 'yesterday' | '7d' | '30d' | 'all' | 'custom';
+
+const ME_KEY = 'lp_agent'; // who is using this browser (for "Míos"), when the account isn't linked to a team person
+const PENDING_ORDER = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 const POLL_MS = 10_000;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
+const PERIODS: { id: Period; label: string }[] = [
+  { id: 'hour', label: 'Última hora' },
+  { id: 'today', label: 'Hoy' },
+  { id: 'yesterday', label: 'Ayer' },
+  { id: '7d', label: '7 días' },
+  { id: '30d', label: '30 días' },
+  { id: 'all', label: 'Todo' },
+];
+const ADV: { id: Adv; label: string }[] = [
+  { id: '', label: 'Todos' },
+  { id: 'unread', label: 'Sin leer' },
+  { id: 'unanswered', label: 'Sin responder' },
+  { id: 'pending', label: 'Pedido pendiente' },
+  { id: 'confirmed', label: 'Pedido confirmado' },
+  { id: 'mine', label: 'Míos' },
+  { id: 'unassigned', label: 'Sin asignar' },
+];
+
+const ms = (iso?: string | null) => (iso ? new Date(iso).getTime() : NaN);
+// The customer wrote last and nobody has answered yet.
+const isUnanswered = (c: Conversation) => Boolean(c.last_inbound_at && (!c.last_message_at || c.last_inbound_at >= c.last_message_at));
+// The AI handed it to a person (or hit its daily limit) and nobody has taken it.
+const needsHelp = (c: Conversation) => Boolean(c.bot?.paused && (c.bot.reason === 'handoff' || c.bot.reason === 'limit'));
+// The AI answered last, the customer has been quiet 2 h, no order, and there's still time inside the 24 h window.
+const isRetake = (c: Conversation, now: number) => {
+  if (c.order || c.bot?.paused || !c.last_inbound_at || !c.last_message_at || c.last_message_at <= c.last_inbound_at) return false;
+  const quiet = now - ms(c.last_inbound_at);
+  return quiet >= RETAKE_AFTER_MS && quiet < WINDOW_MS;
+};
+const aiWorking = (c: Conversation, now: number, botOn: boolean) => botOn && !c.bot?.paused && Boolean(c.last_inbound_at) && now - ms(c.last_inbound_at) < WINDOW_MS && !isRetake(c, now);
+const isAttending = (c: Conversation) => Boolean(c.bot?.paused && c.bot.reason === 'human');
+const keyOf = (org: string, id: string) => `${org}|${id}`;
+const splitKey = (k: string) => {
+  const i = k.indexOf('|');
+  return { org: k.slice(0, i), id: k.slice(i + 1) };
+};
+
+const ymdCo = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+const daysAgo = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - n * 86400000));
+function inPeriod(c: Conversation, p: Period, since: string, until: string, now: number) {
+  if (p === 'all') return true;
+  const at = c.last_message_at || c.created_at;
+  if (!at) return false;
+  if (p === 'hour') return now - ms(at) <= 3600_000;
+  const d = ymdCo(at);
+  if (p === 'today') return d === todayCo();
+  if (p === 'yesterday') return d === daysAgo(1);
+  if (p === '7d') return d >= daysAgo(6);
+  if (p === '30d') return d >= daysAgo(29);
+  return (!since || d >= since) && (!until || d <= until);
+}
 
 function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
@@ -72,27 +148,6 @@ function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
     </svg>
   );
 }
-
-const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
-  pending_call: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
-  retry_scheduled: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
-  needs_review: { label: 'Revisar', cls: 'bg-blue-50 text-blue-700 ring-blue-600/15' },
-  unanswered: { label: 'No contesta', cls: 'bg-orange-50 text-orange-700 ring-orange-600/15' },
-  calling: { label: 'Llamando', cls: 'bg-violet-50 text-violet-700 ring-violet-600/15' },
-  confirmed_by_voice: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15' },
-  cancelled: { label: 'Cancelado', cls: 'bg-slate-100 text-slate-600 ring-slate-500/15' },
-  shipped: { label: 'En camino', cls: 'bg-sky-50 text-sky-700 ring-sky-600/15' },
-  delivered: { label: 'Entregado', cls: 'bg-green-50 text-green-700 ring-green-600/15' },
-};
-
-const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
-// "[image] hola" → "📷 Foto: hola" in the chat list.
-const MEDIA_LABEL: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento', sticker: '🙂 Sticker' };
-const preview = (t: string | null) => {
-  const m = /^\[(image|audio|video|document|sticker)\]\s*(.*)$/.exec(t || '');
-  return m ? `${MEDIA_LABEL[m[1]]}${m[2] ? `: ${m[2]}` : ''}` : t || '';
-};
-const phoneLabel = (p: string) => (isSocialChat(p) ? CHANNEL_LABEL[chatChannel(p)] : `+${p}`);
 
 // Small mark of where the chat comes from (on the avatar and in the header).
 function ChannelMark({ id, className = '' }: { id: string; className?: string }) {
@@ -122,6 +177,27 @@ function ChannelMark({ id, className = '' }: { id: string; className?: string })
   );
 }
 
+const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
+  pending_call: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
+  retry_scheduled: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 ring-amber-600/15' },
+  needs_review: { label: 'Revisar', cls: 'bg-blue-50 text-blue-700 ring-blue-600/15' },
+  unanswered: { label: 'No contesta', cls: 'bg-orange-50 text-orange-700 ring-orange-600/15' },
+  calling: { label: 'Llamando', cls: 'bg-violet-50 text-violet-700 ring-violet-600/15' },
+  confirmed_by_voice: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15' },
+  cancelled: { label: 'Cancelado', cls: 'bg-slate-100 text-slate-600 ring-slate-500/15' },
+  shipped: { label: 'En camino', cls: 'bg-sky-50 text-sky-700 ring-sky-600/15' },
+  delivered: { label: 'Entregado', cls: 'bg-green-50 text-green-700 ring-green-600/15' },
+};
+
+const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
+// "[image] hola" → "📷 Foto: hola" in the chat list.
+const MEDIA_LABEL: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento', sticker: '🙂 Sticker' };
+const preview = (t: string | null) => {
+  const m = /^\[(image|audio|video|document|sticker)\]\s*(.*)$/.exec(t || '');
+  return m ? `${MEDIA_LABEL[m[1]]}${m[2] ? `: ${m[2]}` : ''}` : t || '';
+};
+const phoneLabel = (p: string) => (isSocialChat(p) ? CHANNEL_LABEL[chatChannel(p)] : `+${p}`);
+
 function timeLabel(iso?: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -146,6 +222,20 @@ function OrderChip({ status }: { status: string }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${s.cls}`}>{s.label}</span>;
 }
 
+function StoreChip({ name, id }: { name: string; id: string }) {
+  return <span className={`inline-flex items-center max-w-[160px] px-2 py-0.5 rounded-md text-[11px] font-medium ${storeColor(id)}`}><span className="truncate">{name}</span></span>;
+}
+
+function AdChip({ ad, full }: { ad: NonNullable<Conversation['ad']>; full?: boolean }) {
+  const label = ad.headline || `Anuncio ${ad.id}`;
+  return (
+    <span className="inline-flex items-center gap-1 max-w-full text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5" title={`Llegó desde el anuncio: ${label} (id ${ad.id})`}>
+      <Megaphone className="w-3 h-3 shrink-0" />
+      <span className="truncate">{full ? label : 'Anuncio'}</span>
+    </span>
+  );
+}
+
 function Ticks({ m }: { m: WaMessage }) {
   if (m.direction !== 'out') return null;
   if (m.status === 'failed') return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
@@ -155,11 +245,11 @@ function Ticks({ m }: { m: WaMessage }) {
   return <Clock className="w-3.5 h-3.5 text-slate-300" />;
 }
 
-// Photo, voice note, video, document or sticker the customer sent (streamed through /api/whatsapp/media).
+// Photo, voice note, video, document or sticker (streamed through /api/whatsapp/media, from the chat's store).
 function MediaView({ m }: { m: WaMessage }) {
   const [failed, setFailed] = useState(false);
   const media = m.media!;
-  const src = media.url || `/api/whatsapp/media/${media.id}`;
+  const src = media.url || withChatOrg(`/api/whatsapp/media/${media.id}`);
   if (failed) return <p className="text-xs text-slate-500 italic">El archivo ya no está disponible en WhatsApp (se guarda unos 30 días).</p>;
   if (media.kind === 'image' || media.kind === 'sticker')
     return (
@@ -171,7 +261,7 @@ function MediaView({ m }: { m: WaMessage }) {
   if (media.kind === 'video') return <video controls preload="metadata" src={src} onError={() => setFailed(true)} className="rounded-xl max-h-72 max-w-full" />;
   const name = media.filename || 'documento';
   return (
-    <a href={media.url ? src : `${src}?name=${encodeURIComponent(name)}`} target={media.url ? '_blank' : undefined} rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 hover:bg-slate-100">
+    <a href={media.url ? src : withChatOrg(`/api/whatsapp/media/${media.id}?name=${encodeURIComponent(name)}`)} target={media.url ? '_blank' : undefined} rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 hover:bg-slate-100">
       <FileText className="w-5 h-5 text-slate-500 shrink-0" />
       <span className="text-[13px] text-slate-800 truncate">{name}</span>
       <span className="text-[11px] font-semibold text-slate-500 shrink-0">Descargar</span>
@@ -187,91 +277,166 @@ function WindowChip({ left }: { left: number }) {
   const title = 'WhatsApp deja escribir gratis durante 24 horas después del último mensaje del cliente. Después solo se puede usar una plantilla aprobada.';
   if (left <= 0)
     return (
-      <span title={title} className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-500/15">
-        <Clock className="w-3 h-3" /> Ventana cerrada
+      <span title={title} className="inline-flex items-center gap-1.5 whitespace-nowrap h-8 px-3 rounded-full text-[12px] font-medium bg-slate-100 text-slate-500">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Ventana cerrada
       </span>
     );
   const h = Math.floor(left / 3600000);
   const m = Math.floor((left % 3600000) / 60000);
   const urgent = left < 2 * 3600000;
   return (
-    <span
-      title={title}
-      className={`inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${urgent ? 'bg-amber-50 text-amber-800 ring-amber-600/20' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'}`}
-    >
-      <Clock className="w-3 h-3" /> {h ? `${h} h ${m} min` : `${m} min`}
-      <span className="hidden sm:inline"> para responder</span>
+    <span title={title} className={`inline-flex items-center gap-1.5 whitespace-nowrap h-8 px-3 rounded-full text-[12px] font-medium ${urgent ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-700'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${urgent ? 'bg-amber-500' : 'bg-blue-600'}`} /> Ventana: {h ? `${h}h ${m}m` : `${m} min`}
     </span>
   );
 }
 
+// What the chat is, in one line (list and thread header).
+function chatStatus(c: Conversation, now: number, botOn: boolean, assigneeName: string | null) {
+  if (needsHelp(c)) return { label: 'Necesita tu ayuda', cls: 'text-amber-700', Icon: AlertTriangle };
+  if (isRetake(c, now)) return { label: 'Retoma', cls: 'text-violet-700', Icon: Clock };
+  if (isUnanswered(c) && (!botOn || c.bot?.paused)) return { label: 'Espera respuesta', cls: 'text-red-600', Icon: Clock };
+  if (isAttending(c)) return { label: assigneeName ? `Atiende ${assigneeName}` : 'Atendiendo', cls: 'text-emerald-700', Icon: UserRound };
+  if (aiWorking(c, now, botOn)) return { label: 'IA atendiendo', cls: 'text-violet-700', Icon: Bot };
+  return null;
+}
+
+function reasonText(c: Conversation) {
+  if (needsHelp(c)) return c.bot?.reason === 'limit' ? 'La IA llegó a su límite de respuestas del día con este cliente.' : c.bot?.note || 'La IA pidió una persona.';
+  return preview(c.last_message);
+}
+
+// "Qué hacer" for the open chat.
+function Guide({ c, now, botOn, botName, busy, onBot }: { c: Conversation; now: number; botOn: boolean; botName: string; busy: boolean; onBot: (pause: boolean) => void }) {
+  const left = windowLeft(c.last_inbound_at, now);
+  let tone = 'bg-slate-50 border-slate-200 text-slate-700';
+  let title = 'Nada pendiente';
+  let steps: string[] = ['Este chat no necesita nada por ahora.'];
+  if (needsHelp(c)) {
+    tone = 'bg-amber-50 border-amber-200 text-amber-900';
+    title = 'Necesita tu ayuda';
+    steps = [
+      c.bot?.reason === 'limit' ? 'La IA llegó a su límite de respuestas del día con este cliente.' : `La IA pidió una persona: ${c.bot?.note || 'no supo seguir sola'}.`,
+      isUnanswered(c) && c.last_inbound_at ? `El cliente lleva ${ago(c.last_inbound_at, now)} esperando. Respóndele tú.` : 'Revisa la conversación y responde tú.',
+      botOn ? `Cuando quede resuelto, devuélvelo a ${botName}.` : '',
+    ];
+  } else if (isRetake(c, now)) {
+    tone = 'bg-violet-50 border-violet-200 text-violet-900';
+    title = 'Retoma esta conversación';
+    steps = [`La IA contestó hace ${ago(c.last_message_at, now)} y el cliente no volvió a escribir.`, 'Escríbele para cerrar la venta: pregúntale si le quedó alguna duda.'];
+  } else if (isUnanswered(c) && (!botOn || c.bot?.paused)) {
+    tone = 'bg-red-50 border-red-200 text-red-900';
+    title = 'El cliente espera respuesta';
+    steps = [`Escribió hace ${ago(c.last_inbound_at, now)} y nadie le ha contestado.`];
+  } else if (isAttending(c)) {
+    tone = 'bg-emerald-50 border-emerald-200 text-emerald-900';
+    title = 'Lo está atendiendo una persona';
+    steps = [botOn ? `${botName} está en pausa en este chat. Si ya terminaste, devuélvelo a la IA.` : 'Sigue la conversación desde aquí.'];
+  } else if (aiWorking(c, now, botOn)) {
+    tone = 'bg-violet-50 border-violet-100 text-violet-900';
+    title = `${botName} lo está atendiendo`;
+    steps = ['No necesitas hacer nada. Si escribes tú, la IA se pausa en este chat.'];
+  }
+  return (
+    <section className={`rounded-xl border p-3 ${tone}`}>
+      <p className="text-[13px] font-semibold">{title}</p>
+      <ul className="mt-1.5 space-y-1 text-[13px]">
+        {steps.filter(Boolean).map((s) => (
+          <li key={s}>• {s}</li>
+        ))}
+        {left > 0 && left < 2 * 3600000 && <li>• Quedan menos de 2 horas para responder gratis por WhatsApp.</li>}
+      </ul>
+      {botOn && (
+        <button
+          onClick={() => onBot(!c.bot?.paused)}
+          disabled={busy}
+          className={`mt-3 h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 ${c.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'}`}
+        >
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : c.bot?.paused ? <Sparkles className="w-3.5 h-3.5" /> : <Hand className="w-3.5 h-3.5" />}
+          {c.bot?.paused ? `Devolver a ${botName}` : 'Tomar el control'}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export default function OmnichannelInbox() {
+  const { stores, chosen, sel } = useInboxStores();
   const [cloud, setCloud] = useState<boolean | null>(null);
-  const [wa, setWa] = useState<WaStatus | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [storeData, setStoreData] = useState<Record<string, StoreData>>({});
+  const [loaded, setLoaded] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  // /crm?c=<phone> opens that chat (links from Agenda and Pedidos).
-  const [activeId, setActiveId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    const c = (new URLSearchParams(window.location.search).get('c') || '').trim();
-    return CHAT_ID_RE.test(c) ? c : c.replace(/\D/g, ''); // "+57 300…" still works for phones
+  // /crm?c=<phone>&org=<store> opens that chat (links from Inicio, Agenda and Pedidos).
+  const [wanted, setWanted] = useState<{ id: string; org: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const q = new URLSearchParams(window.location.search);
+    const c = (q.get('c') || '').trim();
+    if (!c) return null;
+    return { id: CHAT_ID_RE.test(c) ? c : c.replace(/\D/g, ''), org: q.get('org') || '' }; // "+57 300…" still works for phones
   });
+  const [activeKey, setActiveKey] = useState('');
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [tags, setTags] = useState<CrmTag[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [botInfo, setBotInfo] = useState<BotInfo | null>(null);
   const [botBusy, setBotBusy] = useState(false);
   const [me, setMe] = useState('');
-  // Who is signed in, from the server (team person linked to this account).
-  const [serverMe, setServerMe] = useState<{ agentId: string | null; restricted: boolean; role: string | null } | null>(null);
   const [others, setOthers] = useState<{ name: string; typing: boolean }[]>([]);
-  const [socialOn, setSocialOn] = useState<{ messenger: boolean; instagram: boolean }>({ messenger: false, instagram: false });
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
   const typingAt = useRef(0);
-  const myId = serverMe?.agentId || me;
   const [replies, setReplies] = useState<QuickReply[]>([]);
-  // /crm?f=handoff (or mine, unanswered…) opens with that filter (links from Inicio).
-  const [filter, setFilter] = useState<Filter>(() => {
-    if (typeof window === 'undefined') return 'all';
+  const [focus, setFocus] = useState<Focus>(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('f') === 'handoff' ? 'help' : 'all'));
+  const [adv, setAdv] = useState<Adv>(() => {
+    if (typeof window === 'undefined') return '';
     const f = new URLSearchParams(window.location.search).get('f') || '';
-    return (['handoff', 'unread', 'unanswered', 'pending', 'confirmed', 'mine', 'unassigned'] as string[]).includes(f) ? (f as Filter) : 'all';
+    return (ADV.map((a) => a.id) as string[]).includes(f) ? (f as Adv) : '';
   });
-  const [tagFilter, setTagFilter] = useState('');
-  // One tab per channel (WhatsApp / Messenger / Instagram). Remembered in this browser; a link to a chat opens its tab.
-  const [channelFilter, setChannelFilterState] = useState<ChatChannel>(() => {
-    if (typeof window === 'undefined') return 'whatsapp';
-    const c = new URLSearchParams(window.location.search).get('c') || '';
-    if (c) return chatChannel(c.trim());
-    try {
-      const v = localStorage.getItem('lp_inbox_tab');
-      if (v === 'messenger' || v === 'instagram') return v;
-    } catch {}
-    return 'whatsapp';
-  });
-  const setChannelFilter = (ch: ChatChannel) => {
-    setChannelFilterState(ch);
-    try {
-      localStorage.setItem('lp_inbox_tab', ch);
-    } catch {}
-  };
+  const [tagFilter, setTagFilter] = useState(''); // tag name (stores have their own tags)
+  const [channel, setChannel] = useState<'' | ChatChannel>('');
+  const [period, setPeriod] = useState<Period>('all');
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
+  const [advOpen, setAdvOpen] = useState(false);
   const [manage, setManage] = useState<'tags' | 'replies' | 'team' | null>(null);
   // Quick reply menu: open with ⚡ (query typed in the box is ignored) or by typing "/atajo".
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
-  const [orderOpen, setOrderOpen] = useState(false); // customer drawer on small screens
-  const [newOrder, setNewOrder] = useState(false); // "Crear pedido" for the open chat
+  const [orderOpen, setOrderOpen] = useState(false); // right panel on small screens
+  const [panelTab, setPanelTab] = useState<PanelTab>('todo');
+  const [newOrder, setNewOrder] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [sound, setSound] = useState(true);
   const [tplBusy, setTplBusy] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef(activeId);
-  activeRef.current = activeId;
+  const advRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(activeKey);
+  activeRef.current = activeKey;
+
+  const currentId = stores?.find((s) => s.current)?.id || '';
+  const multi = (stores?.length || 0) > 1;
+  // Stores to load: the chosen ones; without the store list (no database, old session) the session's store.
+  const targets = useMemo(() => (!stores ? null : stores.length ? (chosen || []).map((s) => ({ id: s.id, name: s.name })) : [{ id: '', name: '' }]), [stores, chosen]);
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
+  const currentRef = useRef(currentId);
+  currentRef.current = currentId;
+  const hdr = (org: string) => chatOrgHeaders(org && org !== currentRef.current ? org : null);
+
+  const active = conversations.find((c) => c.key === activeKey) || null;
+  const activeOrg = activeKey ? splitKey(activeKey).org : '';
+  // Requests made by the parts of the open chat (tags, order, attachments, team) go to its store.
+  setChatOrg(activeOrg && activeOrg !== currentId ? activeOrg : null);
+  useEffect(() => () => setChatOrg(null), []);
+  const sd: StoreData | null = storeData[activeOrg] || null;
+  const tags = sd?.tags || [];
+  const agents = sd?.agents || [];
+  const botInfo = sd?.bot || null;
+  const wa = sd?.wa || null;
 
   useEffect(() => {
     isCloud().then(setCloud);
@@ -288,62 +453,94 @@ export default function OmnichannelInbox() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!advOpen) return;
+    const out = (e: MouseEvent) => advRef.current && !advRef.current.contains(e.target as Node) && setAdvOpen(false);
+    document.addEventListener('mousedown', out);
+    return () => document.removeEventListener('mousedown', out);
+  }, [advOpen]);
+
   const loadConversations = useCallback(async () => {
-    try {
-      const d = await api<{ conversations: Conversation[]; tags: CrmTag[]; agents: Agent[]; bot?: BotInfo; whatsapp: WaStatus; me?: { agentId: string | null; restricted: boolean; role: string | null }; social?: { messenger: boolean; instagram: boolean } }>('/api/whatsapp/conversations');
-      setBotInfo(d.bot || null);
-      setConversations(d.conversations);
-      if (d.tags) setTags(d.tags);
-      if (d.agents) setAgents(d.agents);
-      if (d.me) setServerMe(d.me);
-      if (d.social) setSocialOn(d.social);
-      setWa(d.whatsapp);
-      setListError(null);
-    } catch (e: any) {
-      setListError(e.message);
+    const list = targetsRef.current;
+    if (!list) return;
+    if (!list.length) {
+      setConversations([]);
+      setStoreData({});
+      setLoaded(true);
+      return;
     }
+    type R = { conversations: Omit<Conversation, 'org' | 'key'>[]; tags: CrmTag[]; agents: Agent[]; bot?: BotInfo; whatsapp: WaStatus; me?: StoreData['me']; social?: StoreData['social'] };
+    const results = await Promise.allSettled(list.map((s) => api<R>('/api/whatsapp/conversations', { headers: hdr(s.id) })));
+    if (targetsRef.current !== list) return; // the chosen stores changed meanwhile
+    const data: Record<string, StoreData> = {};
+    const all: Conversation[] = [];
+    let fails = 0;
+    let lastError = '';
+    results.forEach((r, i) => {
+      const s = list[i];
+      if (r.status === 'rejected') {
+        fails++;
+        lastError = r.reason?.message || 'Error';
+        data[s.id] = { id: s.id, name: s.name, tags: [], agents: [], bot: null, wa: null, me: null, social: { messenger: false, instagram: false }, error: lastError };
+        return;
+      }
+      const d = r.value;
+      data[s.id] = { id: s.id, name: s.name, tags: d.tags || [], agents: d.agents || [], bot: d.bot || null, wa: d.whatsapp, me: d.me || null, social: d.social || { messenger: false, instagram: false } };
+      for (const c of d.conversations) all.push({ ...(c as Conversation), org: s.id, key: keyOf(s.id, c.id) });
+    });
+    setStoreData(data);
+    setConversations(all);
+    setListError(fails === list.length ? lastError : null);
+    setLoaded(true);
+    setUpdatedAt(new Date());
+    setNow(Date.now());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadMessages = useCallback(async (id: string) => {
+  const loadMessages = useCallback(async (key: string) => {
+    const { org, id } = splitKey(key);
     try {
-      const d = await api<{ messages: WaMessage[]; conversation: Conversation; others?: { name: string; typing: boolean }[] }>(`/api/whatsapp/conversations/${id}/messages`);
-      if (activeRef.current !== id) return;
+      const d = await api<{ messages: WaMessage[]; conversation: Conversation; others?: { name: string; typing: boolean }[] }>(`/api/whatsapp/conversations/${id}/messages`, { headers: hdr(org) });
+      if (activeRef.current !== key) return;
       setOthers(d.others || []);
       // Only replace when something changed, so polling doesn't re-scroll the thread.
-      const sig = (ms: WaMessage[]) => ms.map((m) => `${m.id}:${m.status}`).join('|');
+      const sig = (xs: WaMessage[]) => xs.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...d.conversation, tags: c.tags, assignee: c.assignee, bot: c.bot, ad: c.ad, unread_count: c.unread_count } : c)));
+      setConversations((prev) => prev.map((c) => (c.key === key ? { ...c, ...d.conversation, org: c.org, key: c.key, tags: c.tags, assignee: c.assignee, bot: c.bot, ad: c.ad, unread_count: c.unread_count } : c)));
       if (d.conversation.unread_count > 0) {
-        await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST' });
-        setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
+        await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST', headers: hdr(org) });
+        setConversations((prev) => prev.map((c) => (c.key === key ? { ...c, unread_count: 0 } : c)));
         window.dispatchEvent(new Event(UNREAD_REFRESH_EVENT));
       }
     } catch {
       // Keep what is on screen; the next poll retries.
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // "I have this chat open" every poll, so others see it (and don't answer at the same time).
-  const sendPresence = useCallback((id: string, typing: boolean) => {
-    fetch(`/api/whatsapp/conversations/${id}/presence`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ typing }) })
+  const sendPresence = useCallback((key: string, typing: boolean) => {
+    const { org, id } = splitKey(key);
+    fetch(`/api/whatsapp/conversations/${id}/presence`, { method: 'POST', headers: { 'content-type': 'application/json', ...hdr(org) }, body: JSON.stringify({ typing }) })
       .then((r) => r.json())
-      .then((d) => d.success && activeRef.current === id && setOthers(d.others || []))
+      .then((d) => d.success && activeRef.current === key && setOthers(d.others || []))
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    (window as any).__lpActiveChat = activeId; // the menu skips the notice for the chat on screen
+    (window as any).__lpActiveChat = activeKey ? splitKey(activeKey).id : ''; // the menu skips the notice for the chat on screen
     setOthers([]);
-    if (!cloud || !activeId) return;
-    sendPresence(activeId, false);
+    if (!cloud || !activeKey) return;
+    sendPresence(activeKey, false);
     const t = setInterval(() => {
       if (document.visibilityState === 'visible' && activeRef.current) sendPresence(activeRef.current, Date.now() - typingAt.current < 8000);
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [cloud, activeId, sendPresence]);
+  }, [cloud, activeKey, sendPresence]);
 
-  // Poll the list (and the open thread) while the tab is visible.
+  // Load now when the chosen stores change, then poll while the tab is visible.
   useEffect(() => {
-    if (!cloud) return;
+    if (!cloud || !targets) return;
     loadConversations();
     const t = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
@@ -351,14 +548,31 @@ export default function OmnichannelInbox() {
       if (activeRef.current) loadMessages(activeRef.current);
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [cloud, loadConversations, loadMessages]);
+  }, [cloud, targets, loadConversations, loadMessages]);
 
+  // The open chat's store was removed from the view.
+  useEffect(() => {
+    if (activeKey && targets && !targets.some((t) => t.id === splitKey(activeKey).org)) setActiveKey('');
+  }, [targets, activeKey]);
+
+  // Open the chat from the link once the list is in.
+  useEffect(() => {
+    if (!wanted || !loaded) return;
+    const hit =
+      conversations.find((c) => c.id === wanted.id && (!wanted.org || c.org === wanted.org || (!c.org && wanted.org === currentId))) ||
+      (!wanted.org ? conversations.find((c) => c.id === wanted.id && (c.org === currentId || !c.org)) || conversations.find((c) => c.id === wanted.id) : null);
+    setActiveKey(hit ? hit.key : keyOf(wanted.org && wanted.org !== currentId ? wanted.org : currentId, wanted.id));
+    setWanted(null);
+  }, [wanted, loaded, conversations, currentId]);
+
+  // Quick replies of the open chat's store.
   useEffect(() => {
     if (!cloud) return;
-    crmApi<{ items: QuickReply[] }>('/api/whatsapp/quick-replies')
+    crmApi<{ items: QuickReply[] }>('/api/whatsapp/quick-replies', { headers: hdr(activeOrg) })
       .then((d) => setReplies(d.items))
-      .catch(() => {});
-  }, [cloud]);
+      .catch(() => setReplies([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud, activeOrg]);
 
   useEffect(() => {
     setMessages([]);
@@ -367,10 +581,10 @@ export default function OmnichannelInbox() {
     setQr({ open: false, slash: false, highlight: 0 });
     setOrderOpen(false);
     setTplMsg(null);
-    if (!activeId) return;
+    if (!activeKey) return;
     setThreadLoading(true);
-    loadMessages(activeId).finally(() => setThreadLoading(false));
-  }, [activeId, loadMessages]);
+    loadMessages(activeKey).finally(() => setThreadLoading(false));
+  }, [activeKey, loadMessages]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -384,9 +598,16 @@ export default function OmnichannelInbox() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [text]);
 
-  const active = conversations.find((c) => c.id === activeId) || null;
   const left = windowLeft(active?.last_inbound_at, now);
   const canReply = left > 0;
+  const botOn = (c: Conversation) => Boolean(storeData[c.org]?.bot?.enabled);
+  const storeName = (org: string) => storeData[org]?.name || stores?.find((s) => s.id === org)?.name || '';
+  const myAgentId = (org: string) => storeData[org]?.me?.agentId || (org === currentId || !org ? me : '');
+  const agentName = (c: Conversation) => (c.assignee && storeData[c.org]?.agents.find((a) => a.id === c.assignee)?.name) || null;
+  const tagsOf = (c: Conversation) => {
+    const byId = Object.fromEntries((storeData[c.org]?.tags || []).map((t) => [t.id, t]));
+    return (c.tags || []).map((id) => byId[id]).filter(Boolean) as CrmTag[];
+  };
 
   const sendTemplate = async () => {
     if (!active?.order) return;
@@ -395,7 +616,7 @@ export default function OmnichannelInbox() {
     try {
       await crmApi('/api/whatsapp/confirm', { method: 'POST', body: JSON.stringify({ orderId: active.order.id }) });
       setTplMsg({ ok: true, text: 'Plantilla enviada. Cuando el cliente responda, se abre de nuevo la ventana de 24 horas.' });
-      loadMessages(active.id);
+      loadMessages(active.key);
       loadConversations();
     } catch (e: any) {
       setTplMsg({ ok: false, text: e.message });
@@ -404,53 +625,65 @@ export default function OmnichannelInbox() {
     }
   };
 
-  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags]);
-  const inTab = useMemo(() => conversations.filter((c) => chatChannel(c.id) === channelFilter), [conversations, channelFilter]);
-  const tabs = useMemo(
-    () =>
-      (['whatsapp', 'messenger', 'instagram'] as ChatChannel[]).map((ch) => {
-        const list = conversations.filter((c) => chatChannel(c.id) === ch);
-        return { ch, chats: list.length, unread: list.filter((c) => c.unread_count > 0).length };
-      }),
-    [conversations],
-  );
-  const showTabs = socialOn.messenger || socialOn.instagram || tabs.some((t) => t.ch !== 'whatsapp' && t.chats > 0);
+  // ---------- filters ----------
+
+  const socialOn = Object.values(storeData).some((s) => s.social.messenger || s.social.instagram) || conversations.some((c) => isSocialChat(c.id));
+  const allTagNames = useMemo(() => Array.from(new Set(Object.values(storeData).flatMap((s) => s.tags.map((t) => t.name)))).sort((a, b) => a.localeCompare(b)), [storeData]);
+
+  const base = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return conversations.filter((c) => {
+      if (channel && chatChannel(c.id) !== channel) return false;
+      // Chats waiting for a person always show, whatever the period.
+      if (!needsHelp(c) && !inPeriod(c, period, since, until, now)) return false;
+      if (adv === 'unread' && !(c.unread_count > 0)) return false;
+      if (adv === 'unanswered' && !isUnanswered(c)) return false;
+      if (adv === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
+      if (adv === 'confirmed' && c.order?.status !== 'confirmed_by_voice') return false;
+      if (adv === 'mine' && (!myAgentId(c.org) || c.assignee !== myAgentId(c.org))) return false;
+      if (adv === 'unassigned' && c.assignee) return false;
+      const tagNames = tagsOf(c).map((t) => t.name);
+      if (tagFilter && !tagNames.includes(tagFilter)) return false;
+      if (!q) return true;
+      return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, storeName(c.org), ...tagNames].some((v) => v?.toLowerCase().includes(q));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, storeData, search, channel, period, since, until, adv, tagFilter, now, me]);
+
   const counts = useMemo(
     () => ({
-      handoff: inTab.filter(waitsAdvisor).length,
-      unread: inTab.filter((c) => c.unread_count > 0).length,
-      unanswered: inTab.filter(isUnanswered).length,
-      pending: inTab.filter((c) => c.order && PENDING_ORDER.includes(c.order.status)).length,
-      confirmed: inTab.filter((c) => c.order?.status === 'confirmed_by_voice').length,
-      mine: myId ? inTab.filter((c) => c.assignee === myId).length : 0,
-      unassigned: inTab.filter((c) => !c.assignee).length,
+      help: base.filter(needsHelp).length,
+      retake: base.filter((c) => isRetake(c, now)).length,
+      ai: base.filter((c) => aiWorking(c, now, botOn(c))).length,
+      attending: base.filter(isAttending).length,
     }),
-    [inTab, myId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [base, now, storeData],
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (showTabs ? inTab : conversations).filter((c) => {
-      if (filter === 'handoff' && !waitsAdvisor(c)) return false;
-      if (filter === 'unread' && !(c.unread_count > 0)) return false;
-      if (filter === 'unanswered' && !isUnanswered(c)) return false;
-      if (filter === 'pending' && !(c.order && PENDING_ORDER.includes(c.order.status))) return false;
-      if (filter === 'confirmed' && c.order?.status !== 'confirmed_by_voice') return false;
-      if (filter === 'mine' && (!myId || c.assignee !== myId)) return false;
-      if (filter === 'unassigned' && c.assignee) return false;
-      if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
-      if (!q) return true;
-      const tagNames = (c.tags || []).map((id) => tagById[id]?.name);
-      return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, ...tagNames].some((v) => v?.toLowerCase().includes(q));
+    const list = base.filter((c) => {
+      if (focus === 'help') return needsHelp(c);
+      if (focus === 'retake') return isRetake(c, now);
+      if (focus === 'ai') return aiWorking(c, now, botOn(c));
+      if (focus === 'attending') return isAttending(c);
+      return true;
     });
-  }, [conversations, inTab, showTabs, search, filter, tagFilter, tagById, myId]);
-  const agentById = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a])), [agents]);
-  const meAgent = agentById[myId] || null;
+    // First what needs a person: handed over, then customers waiting, then chats to pick up, then the rest.
+    const rank = (c: Conversation) => (needsHelp(c) ? 0 : isUnanswered(c) && (!botOn(c) || c.bot?.paused) ? 1 : isRetake(c, now) ? 2 : 3);
+    const at = (c: Conversation) => (needsHelp(c) ? c.bot?.at || c.last_message_at || '' : c.last_message_at || '');
+    return list.sort((a, b) => rank(a) - rank(b) || at(b).localeCompare(at(a)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, focus, now, storeData]);
+
+  const advActive = Boolean(adv || tagFilter || channel);
+  const meAgent = agents.find((a) => a.id === myAgentId(activeOrg)) || null;
+  const ownAgent = storeData[currentId]?.me?.agentId ? storeData[currentId].agents.find((a) => a.id === storeData[currentId].me?.agentId) || null : null;
   const toggleAvailable = async () => {
-    if (!meAgent) return;
+    if (!ownAgent) return;
     try {
-      const d = await api<{ agent: CrmTag & { available?: boolean } }>('/api/whatsapp/agents', { method: 'PATCH', body: JSON.stringify({ available: meAgent.available === false }) });
-      setAgents((xs) => xs.map((a) => (a.id === d.agent.id ? { ...a, available: d.agent.available } : a)));
+      const d = await api<{ agent: CrmTag & { available?: boolean } }>('/api/whatsapp/agents', { method: 'PATCH', body: JSON.stringify({ available: ownAgent.available === false }) });
+      setStoreData((all) => ({ ...all, [currentId]: { ...all[currentId], agents: all[currentId].agents.map((a) => (a.id === d.agent.id ? { ...a, available: d.agent.available } : a)) } }));
     } catch {}
   };
   const enableAlerts = async () => setAlerts(await requestNotify());
@@ -461,6 +694,11 @@ export default function OmnichannelInbox() {
       if (id) localStorage.setItem(ME_KEY, id);
       else localStorage.removeItem(ME_KEY);
     } catch {}
+  };
+  const markAllRead = async () => {
+    await Promise.all((targets || []).map((s) => fetch('/api/whatsapp/conversations/read-all', { method: 'POST', headers: hdr(s.id) }).catch(() => null)));
+    await loadConversations();
+    window.dispatchEvent(new Event(UNREAD_REFRESH_EVENT));
   };
 
   // ---------- quick replies ----------
@@ -498,9 +736,9 @@ export default function OmnichannelInbox() {
   const onTextChange = (v: string) => {
     setText(v);
     // Tell the team I'm writing here (at most every 5 s).
-    if (activeId && v.trim() && Date.now() - typingAt.current > 5000) {
+    if (activeKey && v.trim() && Date.now() - typingAt.current > 5000) {
       typingAt.current = Date.now();
-      sendPresence(activeId, true);
+      sendPresence(activeKey, true);
     }
     if (/^\/\S*$/.test(v)) setQr({ open: true, slash: true, highlight: 0 });
     else if (qr.slash) setQr({ open: false, slash: false, highlight: 0 });
@@ -531,15 +769,19 @@ export default function OmnichannelInbox() {
     }
   };
 
-  // ---------- tags and order actions ----------
+  // ---------- chat actions ----------
+
+  const patchActive = (patch: Partial<Conversation>) => {
+    const key = activeKey;
+    setConversations((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  };
 
   const setBotPaused = async (paused: boolean) => {
     if (!active) return;
-    const id = active.id;
     setBotBusy(true);
     try {
-      await crmApi(`/api/whatsapp/conversations/${id}/bot`, { method: 'POST', body: JSON.stringify({ action: paused ? 'pause' : 'resume' }) });
-      setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: paused ? { paused: true, reason: 'human', note: null } : null } : c)));
+      await crmApi(`/api/whatsapp/conversations/${active.id}/bot`, { method: 'POST', body: JSON.stringify({ action: paused ? 'pause' : 'resume' }) });
+      patchActive({ bot: paused ? { paused: true, reason: 'human', note: null } : null });
     } finally {
       setBotBusy(false);
     }
@@ -547,16 +789,14 @@ export default function OmnichannelInbox() {
 
   const assign = async (agentId: string | null) => {
     if (!active) return;
-    const id = active.id;
-    const d = await crmApi<{ assignee: string | null }>(`/api/whatsapp/conversations/${id}/assign`, { method: 'PUT', body: JSON.stringify({ agentId }) });
-    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, assignee: d.assignee } : c)));
+    const d = await crmApi<{ assignee: string | null }>(`/api/whatsapp/conversations/${active.id}/assign`, { method: 'PUT', body: JSON.stringify({ agentId }) });
+    patchActive({ assignee: d.assignee });
   };
 
   const saveConvTags = async (ids: string[]) => {
     if (!active) return;
-    const id = active.id;
-    const d = await crmApi<{ tags: string[] }>(`/api/whatsapp/conversations/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tags: ids }) });
-    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, tags: d.tags } : c)));
+    const d = await crmApi<{ tags: string[] }>(`/api/whatsapp/conversations/${active.id}/tags`, { method: 'PUT', body: JSON.stringify({ tags: ids }) });
+    patchActive({ tags: d.tags });
   };
 
   const onOrderChanged = async (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => {
@@ -567,8 +807,7 @@ export default function OmnichannelInbox() {
       const withGuide = extra?.trackingNumber ? replies.find((x) => x.shortcut === 'guia') : null;
       const r = withGuide || replies.find((x) => x.shortcut === 'envio');
       if (r) setText(fillQuickReply(r.body, vars));
-      else if (extra?.trackingNumber)
-        setText(fillQuickReply('Hola {nombre} 🚚 Tu pedido {pedido} ya va en camino con {transportadora}. Número de guía: {guia}.', vars));
+      else if (extra?.trackingNumber) setText(fillQuickReply('Hola {nombre} 🚚 Tu pedido {pedido} ya va en camino con {transportadora}. Número de guía: {guia}.', vars));
     }
   };
 
@@ -578,18 +817,15 @@ export default function OmnichannelInbox() {
     setSending(true);
     setSendError(null);
     try {
-      await api(`/api/whatsapp/conversations/${active.id}/messages`, { method: 'POST', body: JSON.stringify({ text: body }) });
+      await api(`/api/whatsapp/conversations/${active.id}/messages`, { method: 'POST', body: JSON.stringify({ text: body }), headers: hdr(active.org) });
       setText('');
       setQr({ open: false, slash: false, highlight: 0 });
-      if (botInfo?.enabled) {
-        const id = active.id;
-        setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: { paused: true, reason: 'human', note: null } } : c)));
-      }
-      await loadMessages(active.id);
+      if (botInfo?.enabled) patchActive({ bot: { paused: true, reason: 'human', note: null } });
+      await loadMessages(active.key);
       loadConversations();
     } catch (e: any) {
       setSendError(e.message);
-      loadMessages(active.id);
+      loadMessages(active.key);
     } finally {
       setSending(false);
     }
@@ -624,306 +860,309 @@ export default function OmnichannelInbox() {
     );
   }
 
+  const cards: { id: Exclude<Focus, 'all'>; label: string; n: number; Icon: typeof Clock; tone: string; on: string }[] = [
+    { id: 'help', label: 'Necesitan tu ayuda', n: counts.help, Icon: AlertTriangle, tone: 'bg-amber-50/80 text-amber-600', on: 'ring-amber-400' },
+    { id: 'retake', label: 'Retoma', n: counts.retake, Icon: Clock, tone: 'bg-violet-50/70 text-violet-600', on: 'ring-violet-400' },
+    { id: 'ai', label: 'IA trabajando', n: counts.ai, Icon: Bot, tone: 'bg-sky-50/70 text-sky-600', on: 'ring-sky-400' },
+    { id: 'attending', label: 'Atendiendo', n: counts.attending, Icon: UserRound, tone: 'bg-emerald-50/70 text-emerald-600', on: 'ring-emerald-400' },
+  ];
+  const storeErrors = Object.values(storeData).filter((s) => s.error);
+  const activeStatus = active ? chatStatus(active, now, botOn(active), agentName(active)) : null;
+  const notConnected = wa && !wa.sending && active && !isSocialChat(active.id);
+
+  const panel = active && (
+    <CustomerPanel
+      conversationId={active.id}
+      order={active.order}
+      orderChip={(st) => <OrderChip status={st} />}
+      onOrderChanged={onOrderChanged}
+      onCreateOrder={() => setNewOrder(true)}
+      tab={panelTab}
+      onTab={setPanelTab}
+      guide={<Guide c={active} now={now} botOn={Boolean(botInfo?.enabled)} botName={botInfo?.name || 'La IA'} busy={botBusy} onBot={setBotPaused} />}
+    />
+  );
+
   return (
     <div className={`${card} flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
-      {wa && !wa.sending && (!showTabs || channelFilter === 'whatsapp') && (
-        <div className="px-4 py-2.5 border-b border-amber-200 bg-amber-50 text-[13px] text-amber-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>
-            WhatsApp todavía no está conectado: no se envían confirmaciones ni respuestas.{' '}
-            <Link href="/integrations" className="font-semibold underline">
-              Ver cómo conectarlo
-            </Link>
-          </span>
-        </div>
-      )}
-
-      {showTabs && (
-        <div className="flex border-b border-slate-200 bg-white shrink-0 overflow-x-auto" role="tablist">
-          {tabs.map((t) => (
+      {/* Top bar: stores, search, filters, period and the four attention cards */}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-3 pb-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {stores && <StorePicker stores={stores} sel={sel} />}
+          <div className="relative flex-1 min-w-[180px] max-w-md">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar cliente, teléfono o producto…"
+              className="w-full h-10 text-[13px] bg-white border border-slate-200 rounded-xl pl-9 pr-8 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpiar">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div ref={advRef} className="relative">
             <button
-              key={t.ch}
-              role="tab"
-              aria-selected={channelFilter === t.ch}
-              aria-label={`${CHANNEL_LABEL[t.ch]}${t.unread ? ` (${t.unread} sin leer)` : ''}`}
-              onClick={() => {
-                setChannelFilter(t.ch);
-                if (activeId && chatChannel(activeId) !== t.ch) setActiveId('');
-              }}
-              className={`${channelFilter === t.ch ? 'flex-[2] sm:flex-1' : 'flex-1'} min-w-0 h-12 px-2 sm:px-3 inline-flex items-center justify-center gap-1.5 sm:gap-2 text-[12px] sm:text-[13px] font-semibold border-b-2 transition whitespace-nowrap ${
-                channelFilter === t.ch ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              onClick={() => setAdvOpen((o) => !o)}
+              className={`h-10 px-3 rounded-xl border text-[13px] font-medium inline-flex items-center gap-1.5 ${advActive ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
             >
-              <ChannelMark id={t.ch === 'messenger' ? 'm1' : t.ch === 'instagram' ? 'i1' : '1'} className="w-5 h-5 shrink-0" />
-              <span className={`truncate ${channelFilter === t.ch ? '' : 'hidden sm:inline'}`}>{CHANNEL_LABEL[t.ch]}</span>
-              {t.unread > 0 && <span className="shrink-0 text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 min-w-[18px] text-center">{t.unread}</span>}
+              <FilterIcon className="w-4 h-4" /> Filtros avanzados <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            {advOpen && (
+              <div className="absolute z-40 mt-2 left-0 w-[min(calc(100vw-2rem),340px)] bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-3 text-[13px]">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Mostrar</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ADV.filter((a) => a.id !== 'mine' && a.id !== 'unassigned' ? true : Object.values(storeData).some((s) => s.agents.length)).map((a) => (
+                      <button key={a.id || 'all'} onClick={() => setAdv(a.id)} className={`h-7 px-2.5 rounded-full text-[12px] font-medium ${adv === a.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {socialOn && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Canal</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {([['', 'Todos'], ['whatsapp', 'WhatsApp'], ['messenger', 'Messenger'], ['instagram', 'Instagram']] as ['' | ChatChannel, string][]).map(([k, label]) => (
+                        <button key={k || 'all'} onClick={() => setChannel(k)} className={`h-7 px-2.5 rounded-full text-[12px] font-medium ${channel === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {allTagNames.length > 0 && (
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Etiqueta</span>
+                    <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="mt-1.5 w-full h-9 border border-slate-200 rounded-lg px-2 bg-white text-slate-700">
+                      <option value="">Todas las etiquetas</option>
+                      {allTagNames.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {advActive && (
+                  <button onClick={() => (setAdv(''), setTagFilter(''), setChannel(''))} className="text-[12px] font-semibold text-brand-blue">
+                    Quitar filtros
+                  </button>
+                )}
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <button onClick={markAllRead} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2">
+                    <CheckCheck className="w-4 h-4 text-slate-400" /> Marcar todo como leído
+                  </button>
+                  <button onClick={() => (setSoundOn(!sound), !sound && playMessageSound())} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2">
+                    {sound ? <Bell className="w-4 h-4 text-slate-400" /> : <BellOff className="w-4 h-4 text-slate-400" />} Sonido de mensaje nuevo: {sound ? 'activado' : 'apagado'}
+                  </button>
+                  {alerts !== 'unsupported' && alerts !== 'granted' && (
+                    <button onClick={enableAlerts} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-slate-400" /> Activar avisos del navegador
+                    </button>
+                  )}
+                  {ownAgent && (
+                    <button onClick={toggleAvailable} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2" title="Si estás ausente no te llegan chats nuevos del reparto automático">
+                      <span className={`w-2.5 h-2.5 rounded-full ml-0.5 mr-0.5 ${ownAgent.available !== false ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                      {ownAgent.available !== false ? 'Disponible para chats nuevos' : 'Ausente (no recibes chats nuevos)'}
+                    </button>
+                  )}
+                  {!multi && !storeData[currentId]?.me?.agentId && agents.length > 0 && (
+                    <select value={me} onChange={(e) => chooseMe(e.target.value)} className="w-full h-9 border border-slate-200 rounded-lg px-2 bg-white text-slate-700" aria-label="¿Quién eres?">
+                      <option value="">¿Quién eres? (para “Míos”)</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          Soy {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="border-t border-slate-100 pt-3">
+                  <p className="text-[11px] text-slate-400 mb-1.5">{multi ? `Ajustes de ${storeName(activeOrg || currentId) || 'esta tienda'}` : 'Ajustes'}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-medium text-slate-600">
+                    <button onClick={() => (setManage('tags'), setAdvOpen(false))} className="hover:text-slate-900">Etiquetas</button>
+                    <button onClick={() => (setManage('replies'), setAdvOpen(false))} className="hover:text-slate-900">Respuestas rápidas</button>
+                    <button onClick={() => (setManage('team'), setAdvOpen(false))} className="hover:text-slate-900">Equipo</button>
+                    <Link href="/automations" className="hover:text-slate-900">Respuestas automáticas</Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full">
+            <span className="hidden lg:inline text-[11px] font-semibold uppercase tracking-wide text-slate-400 mr-1">Periodo</span>
+            {PERIODS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriod(p.id)}
+                className={`h-9 px-3 rounded-full text-[13px] font-medium whitespace-nowrap ${period === p.id ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-white'}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="hidden 2xl:flex items-center gap-1.5 text-[13px] text-slate-400">
+            <input type="date" value={since} max={until || todayCo()} onChange={(e) => (setSince(e.target.value), setPeriod('custom'))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-slate-700" aria-label="Desde" />
+            a
+            <input type="date" value={until} min={since} max={todayCo()} onChange={(e) => (setUntil(e.target.value), setPeriod('custom'))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-slate-700" aria-label="Hasta" />
+          </div>
+          {updatedAt && <span className="ml-auto hidden xl:inline text-[12px] text-slate-400">Actualizado {updatedAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>}
+        </div>
+
+        <div className="grid grid-flow-col auto-cols-[minmax(170px,1fr)] lg:grid-flow-row lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto">
+          {cards.map((k) => (
+            <button
+              key={k.id}
+              onClick={() => setFocus(focus === k.id ? 'all' : k.id)}
+              aria-pressed={focus === k.id}
+              className={`h-14 px-3 rounded-2xl flex items-center gap-3 text-left transition ${k.tone} ${focus === k.id ? `ring-2 ${k.on} bg-white` : 'hover:brightness-[0.98]'}`}
+            >
+              <span className="w-9 h-9 rounded-xl bg-white/70 flex items-center justify-center shrink-0">
+                <k.Icon className="w-[18px] h-[18px]" />
+              </span>
+              <span className="flex-1 min-w-0 text-[13px] sm:text-[14px] font-semibold text-slate-900 leading-tight">{k.label}</span>
+              <span className="text-[22px] sm:text-[24px] font-bold text-slate-900 tabular-nums">{k.n}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {storeErrors.length > 0 && !listError && (
+        <div className="px-4 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-800">
+          No se cargaron los chats de {storeErrors.map((s) => s.name || 'una tienda').join(', ')}: {storeErrors[0].error}
         </div>
       )}
 
       <div className="flex-1 flex min-h-0">
         {/* Conversation list */}
-        <div className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 border-r border-slate-200 flex-col min-h-0`}>
-          <div className="p-4 border-b border-slate-100">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-                {showTabs && channelFilter !== 'whatsapp' ? (
-                  <>
-                    <ChannelMark id={channelFilter === 'messenger' ? 'm1' : 'i1'} className="w-4 h-4" /> {CHANNEL_LABEL[channelFilter]}
-                  </>
-                ) : (
-                  <>
-                    <WhatsAppIcon className="w-4 h-4 text-[#25D366]" /> WhatsApp
-                  </>
-                )}
-              </h2>
-              <div className="flex items-center gap-0.5">
-              <Link
-                href="/automations"
-                className="h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 text-slate-600 hover:bg-slate-100"
-                title="Respuestas automáticas por palabra clave y fuera de horario"
-              >
-                <Bot className="w-3.5 h-3.5" /> Auto
-              </Link>
-              <button
-                onClick={() => {
-                  setSoundOn(!sound);
-                  if (!sound) playMessageSound();
-                }}
-                className={`h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 ${sound ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'}`}
-                title={sound ? 'Sonido de mensaje nuevo activado' : 'Sonido de mensaje nuevo desactivado'}
-              >
-                {sound ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />} {sound ? 'Sonido' : 'Silencio'}
-              </button>
-              </div>
+        <div className={`${activeKey ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] shrink-0 border-r border-slate-200 flex-col min-h-0`}>
+          <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-bold text-slate-900">Conversaciones</h2>
+              <span className="text-[13px] text-slate-400">{filtered.length}</span>
             </div>
-            <p className="text-xs text-slate-500">{(showTabs ? inTab : conversations).length} conversaciones</p>
-            <div className="relative mt-3">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar cliente, teléfono o pedido"
-                className="w-full text-[13px] bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-8 py-2 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:bg-white"
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpiar">
-                  <X className="w-3.5 h-3.5" />
+            <p className="text-[12px] text-slate-500">
+              {focus === 'all' ? 'Primero lo que necesita a una persona.' : cards.find((k) => k.id === focus)?.label}
+              {focus !== 'all' && (
+                <button onClick={() => setFocus('all')} className="ml-2 font-semibold text-brand-blue">
+                  Ver todas
                 </button>
               )}
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {(
-                [
-                  ['all', 'Todos', null],
-                  ...(counts.handoff || filter === 'handoff' ? ([['handoff', '🙋 Esperan asesor', counts.handoff]] as [Filter, string, number | null][]) : []),
-                  ['unread', 'Sin leer', counts.unread],
-                  ['unanswered', 'Sin responder', counts.unanswered],
-                  ['pending', 'Pendientes', counts.pending],
-                  ['confirmed', 'Confirmados', counts.confirmed],
-                  ...(agents.length
-                    ? ([
-                        ['mine', meAgent ? 'Míos' : 'Míos (elige quién eres)', counts.mine],
-                        ['unassigned', 'Sin asignar', counts.unassigned],
-                      ] as [Filter, string, number | null][])
-                    : []),
-                ] as [Filter, string, number | null][]
-              ).map(([k, label, n]) => (
-                <button
-                  key={k}
-                  onClick={() => setFilter(k)}
-                  className={`h-7 px-2.5 rounded-full text-[11px] font-medium inline-flex items-center gap-1 transition ${
-                    filter === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {label}
-                  {n ? <span className={`text-[10px] font-bold ${filter === k ? 'text-white/80' : k === 'unanswered' ? 'text-red-600' : k === 'handoff' ? 'text-amber-700' : 'text-slate-500'}`}>{n}</span> : null}
-                </button>
-              ))}
-            </div>
-            {counts.unread > 0 && (filter === 'unread' || counts.unread >= 3) && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await fetch('/api/whatsapp/conversations/read-all', { method: 'POST' }).catch(() => null);
-                  await loadConversations();
-                  window.dispatchEvent(new Event(UNREAD_REFRESH_EVENT));
-                }}
-                className="mt-2 text-[11.5px] font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-                title="No marca los chats que esperan asesor"
-              >
-                <CheckCheck className="w-3.5 h-3.5" /> Marcar todo como leído
-              </button>
-            )}
-            {tags.length > 0 && (
-              <div className="mt-2 flex items-center gap-2">
-                <select
-                  value={tagFilter}
-                  onChange={(e) => setTagFilter(e.target.value)}
-                  className="flex-1 h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700"
-                  aria-label="Filtrar por etiqueta"
-                >
-                  <option value="">Todas las etiquetas</option>
-                  {tags.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={() => setManage('tags')} className="text-[11px] font-medium text-slate-500 hover:text-slate-800 whitespace-nowrap">
-                  Editar etiquetas
-                </button>
-              </div>
-            )}
-            <div className="mt-2 flex items-center gap-2">
-              {serverMe?.agentId && meAgent ? (
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <AgentBadge agent={meAgent} />
-                  <button
-                    onClick={toggleAvailable}
-                    className={`h-7 px-2 rounded-full text-[11px] font-semibold border whitespace-nowrap shrink-0 ${meAgent.available !== false ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}
-                    title="Si estás ausente no te llegan chats nuevos del reparto automático"
-                  >
-                    {meAgent.available !== false ? '● Disponible' : '○ Ausente'}
-                  </button>
-                  {alerts !== 'unsupported' && alerts !== 'granted' && (
-                    <button onClick={enableAlerts} className="text-[11px] font-medium text-brand-blue whitespace-nowrap" title="Te avisa cuando un cliente tuyo escribe, aunque estés en otra pestaña">
-                      Activar avisos
-                    </button>
-                  )}
-                </div>
-              ) : agents.length > 0 ? (
-                <select
-                  value={me}
-                  onChange={(e) => chooseMe(e.target.value)}
-                  className="flex-1 h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700"
-                  aria-label="¿Quién eres?"
-                  title="Se recuerda en este navegador. Sirve para el filtro Míos."
-                >
-                  <option value="">¿Quién eres? (para “Míos”)</option>
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      Soy {a.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="flex-1 text-[11px] text-slate-400">¿Trabajas con más personas? Repártanse los chats.</span>
-              )}
-              <button onClick={() => setManage('team')} className="text-[11px] font-medium text-slate-500 hover:text-slate-800 whitespace-nowrap">
-                {agents.length ? 'Editar equipo' : 'Agregar equipo'}
-              </button>
-            </div>
+            </p>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {listError && <p className="m-3 text-xs text-red-600 bg-red-50 rounded-xl p-3">No se pudieron cargar las conversaciones: {listError}</p>}
-            {!listError && filtered.length === 0 && (
-              <div className="p-6 text-center text-[13px] text-slate-500">
-                {showTabs && channelFilter !== 'whatsapp' && inTab.length === 0
-                  ? `Aún no hay chats de ${CHANNEL_LABEL[channelFilter]}. Aparecen aquí cuando alguien le escribe a tu ${channelFilter === 'instagram' ? 'cuenta de Instagram' : 'página de Facebook'} o responde el mensaje privado de un comentario.`
-                  : (showTabs ? inTab : conversations).length === 0
-                  ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
-                  : filter === 'unanswered' && !search && !tagFilter
-                    ? '¡Al día! No hay chats esperando respuesta.'
-                    : filter === 'handoff' && !search && !tagFilter
-                    ? 'Ningún chat espera asesor. Cuando el asistente pase uno a una persona, aparece aquí.'
-                    : 'Sin resultados.'}
+            {!loaded && (
+              <div className="flex justify-center py-8 text-slate-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
               </div>
             )}
-            {filtered.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setActiveId(c.id)}
-                className={`w-full text-left px-4 py-3 border-b border-slate-100 flex gap-3 transition ${c.id === activeId ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
-              >
-                <div className="relative w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-semibold shrink-0">
-                  {(c.name || '#').replace(/^@/, '').charAt(0).toUpperCase()}
-                  <ChannelMark id={c.id} className="absolute -bottom-0.5 -right-0.5 w-4 h-4 ring-2 ring-white" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
-                      {c.assignee && agentById[c.assignee] && <AgentBadge agent={agentById[c.assignee]} />}
-                      <span className="truncate">{c.name || phoneLabel(c.id)}</span>
-                    </span>
-                    <span className="text-[11px] text-slate-400 shrink-0">{timeLabel(c.last_message_at)}</span>
+            {listError && <p className="m-3 text-xs text-red-600 bg-red-50 rounded-xl p-3">No se pudieron cargar las conversaciones: {listError}</p>}
+            {loaded && targets && !targets.length && <p className="p-6 text-center text-[13px] text-slate-500">Elige al menos una tienda en “Bandejas que ves”.</p>}
+            {loaded && !listError && !!targets?.length && filtered.length === 0 && (
+              <div className="p-6 text-center text-[13px] text-slate-500">
+                {conversations.length === 0
+                  ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
+                  : focus === 'help'
+                    ? '¡Al día! Nadie está esperando a una persona.'
+                    : focus === 'retake'
+                      ? 'No hay chats para retomar.'
+                      : 'Sin resultados con estos filtros.'}
+              </div>
+            )}
+            {filtered.map((c) => {
+              const st = chatStatus(c, now, botOn(c), agentName(c));
+              const help = needsHelp(c);
+              const tagList = tagsOf(c).filter((t) => !sameAsOrder(t.name, c.order?.status));
+              return (
+                <div
+                  key={c.key}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setActiveKey(c.key)}
+                  onKeyDown={(e) => e.key === 'Enter' && setActiveKey(c.key)}
+                  className={`relative px-4 py-3.5 border-b border-slate-100 cursor-pointer transition border-l-[3px] ${help ? 'border-l-red-400' : 'border-l-transparent'} ${c.key === activeKey ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="flex items-start gap-2">
+                    {st ? <st.Icon className={`w-4 h-4 mt-0.5 shrink-0 ${st.cls}`} /> : <ChannelMark id={c.id} className="w-4 h-4 mt-0.5 shrink-0" />}
+                    <span className="flex-1 min-w-0 text-[15px] font-semibold text-slate-900 truncate">{c.name || phoneLabel(c.id)}</span>
+                    <span className="text-[12px] text-slate-400 shrink-0 mt-0.5">{c.last_message_at ? `hace ${ago(help ? c.bot?.at || c.last_message_at : c.last_message_at, now)}` : ''}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <span className="text-xs text-slate-500 truncate">{preview(c.last_message)}</span>
-                    {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center">{c.unread_count}</span>}
+                  {st && <p className={`mt-1 text-[11px] font-bold uppercase tracking-wide ${st.cls}`}>{st.label}</p>}
+                  <div className="mt-0.5 flex items-end gap-2">
+                    <p className="flex-1 min-w-0 text-[13px] text-slate-600 line-clamp-2">{reasonText(c)}</p>
+                    {c.unread_count > 0 && <span className="text-[10px] font-bold bg-[#25D366] text-white rounded-full px-1.5 min-w-[18px] text-center shrink-0">{c.unread_count}</span>}
                   </div>
-                  {waitsAdvisor(c) && (
-                    <p className="mt-1 text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-1.5 py-0.5 truncate" title={c.bot?.note || undefined}>
-                      🙋 Espera asesor{c.bot?.note ? `: ${c.bot.note}` : ''}
-                    </p>
-                  )}
-                  {(c.order || isUnanswered(c) || (c.tags || []).length > 0 || c.ad) && (
-                    <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                      {c.ad && <AdChip ad={c.ad} />}
-                      {isUnanswered(c) && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600" title="El cliente espera respuesta">
-                          <Clock className="w-3 h-3" /> {waitingFor(c.last_inbound_at!)}
-                        </span>
-                      )}
-                      {c.order && (
-                        <>
-                          <span className="text-[11px] text-slate-400">{c.order.orderNumber}</span>
-                          <OrderChip status={c.order.status} />
-                        </>
-                      )}
-                      {(c.tags || []).map((id) => tagById[id] && !sameAsOrder(tagById[id].name, c.order?.status) && <TagChip key={id} tag={tagById[id]} small />)}
-                    </div>
-                  )}
+                  <div className="mt-2 flex items-center gap-1 flex-wrap">
+                    {multi && <StoreChip id={c.org} name={storeName(c.org)} />}
+                    {isSocialChat(c.id) && <ChannelMark id={c.id} className="w-4 h-4" />}
+                    {c.ad && <AdChip ad={c.ad} />}
+                    {c.order && <OrderChip status={c.order.status} />}
+                    {tagList.slice(0, 3).map((t) => (
+                      <TagChip key={t.id} tag={t} small />
+                    ))}
+                    {help && (
+                      <span className="ml-auto h-8 px-3 rounded-lg bg-brand-blue text-white text-[13px] font-semibold inline-flex items-center gap-1">
+                        Atender <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* Thread */}
-        <div className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0 min-h-0`}>
+        <div className={`${activeKey ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0 min-h-0`}>
           {!active ? (
-            <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400 p-6 text-center">Selecciona una conversación</div>
+            <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400 p-6 text-center">{activeKey && !loaded ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Selecciona una conversación'}</div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-                <button onClick={() => setActiveId('')} className="md:hidden p-1 -ml-1 text-slate-500" aria-label="Volver">
+              <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-start gap-x-3 gap-y-2">
+                <button onClick={() => setActiveKey('')} className="md:hidden p-1 -ml-1 mt-1 text-slate-500" aria-label="Volver">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <span className="text-xs text-slate-500 mr-1 inline-flex items-center gap-1">
+                <div className="min-w-[220px] flex-1">
+                  {activeStatus && (
+                    <p className={`text-[11px] font-bold uppercase tracking-wide inline-flex items-center gap-1.5 ${activeStatus.cls}`}>
+                      <activeStatus.Icon className="w-3.5 h-3.5" /> {activeStatus.label}
+                    </p>
+                  )}
+                  <p className="text-[17px] font-bold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    {multi && <StoreChip id={active.org} name={storeName(active.org)} />}
+                    <span className="text-[13px] text-slate-500 inline-flex items-center gap-1">
                       <ChannelMark id={active.id} className="w-3.5 h-3.5" /> {phoneLabel(active.id)}
                     </span>
-                    <WindowChip left={left} />
-                    {active.ad && <AdChip ad={active.ad} full />}
-                    {(active.tags || []).map((id) => tagById[id] && !sameAsOrder(tagById[id].name, active.order?.status) && <TagChip key={id} tag={tagById[id]} small />)}
+                    {agentName(active) && <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-800 whitespace-nowrap">Con {agentName(active)}</span>}
+                    {tagsOf(active)
+                      .filter((t) => !sameAsOrder(t.name, active.order?.status))
+                      .map((t) => (
+                        <TagChip key={t.id} tag={t} small />
+                      ))}
                   </div>
                 </div>
-                <button
-                  onClick={() => setNewOrder(true)}
-                  title="Crear un pedido confirmado para este cliente"
-                  className="h-8 px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center gap-1.5"
-                >
-                  <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pedido</span>
-                </button>
-                <button
-                  onClick={() => setOrderOpen(true)}
-                  className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
-                >
-                  <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Cliente</span>
-                </button>
-                <AssignPicker agents={agents} assignee={active.assignee || null} onChange={assign} onManage={() => setManage('team')} />
-                <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {active.ad && <AdChip ad={active.ad} full />}
+                  <WindowChip left={left} />
+                  <button onClick={() => setNewOrder(true)} title="Crear un pedido confirmado para este cliente" className="h-8 px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pedido</span>
+                  </button>
+                  <button onClick={() => setOrderOpen(true)} className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Qué hacer</span>
+                  </button>
+                  <AssignPicker agents={agents} assignee={active.assignee || null} onChange={assign} onManage={() => setManage('team')} />
+                  <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
+                </div>
               </div>
 
               {botInfo?.enabled && (
-                <div
-                  className={`px-4 py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}
-                >
+                <div className={`px-4 py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}>
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   <span className="flex-1 min-w-0">
                     {active.bot?.paused ? (
@@ -941,9 +1180,7 @@ export default function OmnichannelInbox() {
                   <button
                     onClick={() => setBotPaused(!active.bot?.paused)}
                     disabled={botBusy}
-                    className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${
-                      active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'
-                    }`}
+                    className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'}`}
                   >
                     {botBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : active.bot?.paused ? <Sparkles className="w-3 h-3" /> : <Hand className="w-3 h-3" />}
                     {active.bot?.paused ? 'Devolver al asistente' : 'Tomar el control'}
@@ -953,12 +1190,10 @@ export default function OmnichannelInbox() {
 
               {others.length > 0 && (
                 <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100 text-[12px] text-amber-900">
-                  {others.some((o) => o.typing)
-                    ? `✍️ ${others.filter((o) => o.typing).map((o) => o.name).join(' y ')} está escribiendo en este chat`
-                    : `👀 ${others.map((o) => o.name).join(' y ')} también tiene abierto este chat`}
+                  {others.some((o) => o.typing) ? `✍️ ${others.filter((o) => o.typing).map((o) => o.name).join(' y ')} está escribiendo en este chat` : `👀 ${others.map((o) => o.name).join(' y ')} también tiene abierto este chat`}
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 space-y-2">
+              <div className="flex-1 overflow-y-auto bg-slate-100/70 p-4 space-y-2">
                 {threadLoading && messages.length === 0 && (
                   <div className="flex justify-center py-6 text-slate-400">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -967,19 +1202,19 @@ export default function OmnichannelInbox() {
                 {messages.map((m) => (
                   <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words shadow-sm ${
-                        m.direction === 'out' ? 'bg-emerald-50 border border-emerald-100 text-slate-800' : 'bg-white border border-slate-200 text-slate-800'
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap break-words shadow-sm ${
+                        m.direction === 'out' ? 'bg-blue-100/80 text-slate-800 rounded-br-md' : 'bg-white text-slate-800 rounded-bl-md'
                       }`}
                     >
                       {m.type === 'template' && <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Plantilla</p>}
                       {m.type === 'auto' && <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5">Respuesta automática</p>}
                       {m.type === 'followup' && (
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 mb-0.5 inline-flex items-center gap-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 mb-0.5 flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> Seguimiento automático · IA
                         </p>
                       )}
                       {m.type === 'bot' && (
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5 inline-flex items-center gap-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5 flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> {botInfo?.name || 'Asistente'} · IA
                         </p>
                       )}
@@ -1010,7 +1245,14 @@ export default function OmnichannelInbox() {
               </div>
 
               <div className="border-t border-slate-100 p-3">
-                {!canReply ? (
+                {notConnected ? (
+                  <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">
+                    WhatsApp{multi ? ` de ${storeName(active.org)}` : ''} no está conectado: no se pueden enviar respuestas.{' '}
+                    <Link href="/integrations" className="font-semibold underline">
+                      Ver cómo conectarlo
+                    </Link>
+                  </p>
+                ) : !canReply ? (
                   <div className="text-xs text-slate-600 bg-slate-100 rounded-xl px-3 py-2.5 space-y-2">
                     <p>
                       {isSocialChat(active.id)
@@ -1022,19 +1264,13 @@ export default function OmnichannelInbox() {
                           : 'El cliente aún no ha escrito: WhatsApp solo deja iniciar la conversación con una plantilla aprobada.'}
                     </p>
                     {active.order && PENDING_ORDER.includes(active.order.status) && wa?.confirmTemplate && (
-                      <button
-                        onClick={sendTemplate}
-                        disabled={tplBusy}
-                        className="h-8 px-3 rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
-                      >
+                      <button onClick={sendTemplate} disabled={tplBusy} className="h-8 px-3 rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60">
                         {tplBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <WhatsAppIcon className="w-3.5 h-3.5" />}
                         Enviar plantilla de confirmación ({active.order.orderNumber})
                       </button>
                     )}
                     {tplMsg && <p className={tplMsg.ok ? 'text-emerald-700' : 'text-red-600'}>{tplMsg.text}</p>}
                   </div>
-                ) : !wa?.sending && !isSocialChat(active.id) ? (
-                  <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">Conecta WhatsApp en Integraciones para poder responder.</p>
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
@@ -1054,42 +1290,35 @@ export default function OmnichannelInbox() {
                           onClose={() => setQr({ open: false, slash: false, highlight: 0 })}
                         />
                       )}
-                      <button
-                        onClick={() => setQr((s) => (s.open ? { open: false, slash: false, highlight: 0 } : { open: true, slash: false, highlight: 0 }))}
-                        className={`h-9 w-9 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
-                        aria-label="Respuestas rápidas"
-                        title="Respuestas rápidas (o escribe /)"
-                      >
-                        <Zap className="w-4 h-4" />
-                      </button>
                       {!isSocialChat(active.id) && (
                         <ChatAttach
                           chatId={active.id}
                           onError={setSendError}
                           onSent={async () => {
-                            if (botInfo?.enabled) {
-                              const id = active.id;
-                              setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, bot: { paused: true, reason: 'human', note: null } } : c)));
-                            }
-                            await loadMessages(active.id);
+                            if (botInfo?.enabled) patchActive({ bot: { paused: true, reason: 'human', note: null } });
+                            await loadMessages(active.key);
                             loadConversations();
                           }}
                         />
                       )}
+                      <button
+                        onClick={() => setQr((s) => (s.open ? { open: false, slash: false, highlight: 0 } : { open: true, slash: false, highlight: 0 }))}
+                        className={`h-11 w-11 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+                        aria-label="Respuestas rápidas"
+                        title="Respuestas rápidas (o escribe /)"
+                      >
+                        <Zap className="w-4 h-4" />
+                      </button>
                       <textarea
                         ref={inputRef}
                         value={text}
                         onChange={(e) => onTextChange(e.target.value)}
                         onKeyDown={onKeyDown}
-                        rows={1}
-                        placeholder="Escribe… o / para respuestas rápidas"
-                        className="flex-1 resize-none text-[13px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:bg-white"
+                        rows={2}
+                        placeholder="Escribe un mensaje… (Enter envía, Shift+Enter salta de línea, / para respuestas rápidas)"
+                        className="flex-1 resize-none text-[14px] bg-white border border-slate-200 rounded-xl px-3 py-2.5 max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                       />
-                      <button
-                        onClick={handleSend}
-                        disabled={!text.trim() || sending}
-                        className="h-9 px-3 rounded-xl bg-slate-900 text-white text-[13px] font-medium flex items-center gap-1.5 disabled:opacity-40"
-                      >
+                      <button onClick={handleSend} disabled={!text.trim() || sending} className="h-11 px-4 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         Enviar
                       </button>
@@ -1101,27 +1330,21 @@ export default function OmnichannelInbox() {
           )}
         </div>
 
-        {/* Customer: linked order, history and notes */}
-        {active && (
-          <div className="hidden xl:block w-80 shrink-0 border-l border-slate-200 p-4 overflow-y-auto">
-            <CustomerPanel conversationId={active.id} order={active.order} orderChip={(st) => <OrderChip status={st} />} onOrderChanged={onOrderChanged} />
-          </div>
-        )}
+        {/* Qué hacer / Venta */}
+        {active && <div className="hidden xl:block w-[340px] shrink-0 border-l border-slate-200 p-4 overflow-y-auto">{panel}</div>}
         {active && orderOpen && (
           <div className="xl:hidden fixed inset-0 z-40 flex justify-end bg-slate-900/40" onMouseDown={(e) => e.target === e.currentTarget && setOrderOpen(false)}>
-            <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto">
-              <div className="flex justify-end -mb-2">
-                <button onClick={() => setOrderOpen(false)} className="w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center" aria-label="Cerrar">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <CustomerPanel conversationId={active.id} order={active.order} orderChip={(st) => <OrderChip status={st} />} onOrderChanged={onOrderChanged} />
+            <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto relative">
+              <button onClick={() => setOrderOpen(false)} className="absolute right-2 top-2 z-20 w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center" aria-label="Cerrar">
+                <X className="w-4 h-4" />
+              </button>
+              {panel}
             </div>
           </div>
         )}
       </div>
-      {manage === 'tags' && <TagManager tags={tags} onClose={() => setManage(null)} onSaved={(t) => (setTags(t), loadConversations())} />}
-      {manage === 'team' && <TeamManager onClose={() => setManage(null)} onSaved={(a) => (setAgents(a), loadConversations())} />}
+      {manage === 'tags' && <TagManager tags={tags.length || activeOrg ? tags : storeData[currentId]?.tags || []} onClose={() => setManage(null)} onSaved={() => loadConversations()} />}
+      {manage === 'team' && <TeamManager onClose={() => setManage(null)} onSaved={() => loadConversations()} />}
       {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
       {newOrder && active && (
         <NewOrderModal

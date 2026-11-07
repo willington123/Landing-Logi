@@ -3,6 +3,7 @@
 // Mensajes → Equipo: the people who answer chats (linked to their accounts), automatic assignment in turns,
 // and how each person is doing.
 import React, { useEffect, useState } from 'react';
+import { chatOrgHeaders } from '@/lib/inbox-stores';
 import Link from 'next/link';
 import { Loader2, Plus, Trash2, X } from 'lucide-react';
 import { TAG_COLORS, type Agent, type RoutingSettings, type TagColor } from '@/lib/crm';
@@ -37,7 +38,7 @@ const ROLE: Record<string, string> = { owner: 'Dueño', admin: 'Administrador', 
 const COLORS = Object.keys(TAG_COLORS) as TagColor[];
 
 async function call(url: string, init?: RequestInit) {
-  const r = await fetch(url, { cache: 'no-store', ...init, headers: { 'content-type': 'application/json' } });
+  const r = await fetch(url, { cache: 'no-store', ...init, headers: { 'content-type': 'application/json', ...chatOrgHeaders() } });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.success) throw new Error(d.error || `HTTP ${r.status}`);
   return d;

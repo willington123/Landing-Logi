@@ -228,10 +228,18 @@ async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummar
   return out;
 }
 
-export async function listConversations(limit = 200) {
+// The newest chats, plus the ones in "include" even if older (chats waiting for a person must never be left out).
+export async function listConversations(limit = 200, include: string[] = []) {
   const { data, error } = await (await db()).from('wa_conversations').select('*').order('last_message_at', { ascending: false, nullsFirst: false }).limit(limit);
   if (error) throw new Error(error.message);
   const rows = (data || []) as WaConversation[];
+  const have = new Set(rows.map((r) => r.id));
+  const missing = include.filter((id) => !have.has(id)).slice(0, 500);
+  for (let i = 0; i < missing.length; i += 200) {
+    const { data: more, error: moreErr } = await (await db()).from('wa_conversations').select('*').in('id', missing.slice(i, i + 200));
+    if (moreErr) throw new Error(moreErr.message);
+    rows.push(...((more || []) as WaConversation[]));
+  }
   const orders = await orderSummaries(Array.from(new Set(rows.map((r) => r.order_id).filter(Boolean) as string[])));
   return rows.map((r) => ({ ...r, order: (r.order_id && orders[r.order_id]) || null }));
 }

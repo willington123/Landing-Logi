@@ -2,11 +2,12 @@
 
 // Pieces of the WhatsApp inbox: tags, quick replies and their editors.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { chatOrgHeaders } from '@/lib/inbox-stores';
 import { Check, Loader2, Pencil, Plus, Settings2, Tag, Trash2, UserPlus, X, Zap } from 'lucide-react';
 import { TAG_COLORS, type CrmTag, type QuickReply, type TagColor, shortcutFrom } from '@/lib/crm';
 
 export async function crmApi<T = any>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
+  const res = await fetch(url, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...chatOrgHeaders(), ...(init?.headers || {}) } });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
