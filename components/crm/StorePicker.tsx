@@ -1,7 +1,7 @@
 'use client';
 
 // "Bandejas que ves": pick one, several or all of your stores to see them together (Inicio and Mensajes).
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Phone } from 'lucide-react';
 import { fetchInboxStores, readSelection, saveSelection, selectedStores, STORES_EVENT, type InboxStore } from '@/lib/inbox-stores';
 
@@ -20,8 +20,10 @@ export function useInboxStores() {
       window.removeEventListener('storage', sync);
     };
   }, []);
-  // Stores no longer in the account are ignored.
-  const chosen = stores ? selectedStores(stores, sel) : null;
+  // Stores no longer in the account are ignored. Kept stable between renders (pages reload their data when it changes).
+  const selKey = sel === null ? '*' : sel.join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const chosen = useMemo(() => (stores ? selectedStores(stores, sel) : null), [stores, selKey]);
   return { stores, chosen, sel };
 }
 
