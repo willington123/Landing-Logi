@@ -47,7 +47,9 @@ export function cleanProduct(input: any): CatalogProduct | string {
   }
   if (!offers.length) return `${name}: agrega al menos una oferta con su precio.`;
   offers.sort((a, b) => a.units - b.units);
-  const image = str(input?.image, 600);
+  // A photo just picked comes as a data URL (much longer than a link): never cut it, or the saved image is broken.
+  const rawImage = String(input?.image ?? '').trim();
+  const image = rawImage.startsWith('data:image/') ? (rawImage.length <= 4_500_000 ? rawImage : '') : str(rawImage, 600);
   return {
     id: isCatalogId(input?.id) && /^[\w-]{4,40}$/.test(input.id) ? input.id : rid('prd-'),
     name,
