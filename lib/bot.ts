@@ -15,6 +15,9 @@ export interface BotSettings {
   resumeAfterHours: number; // a chat a person took over goes back to the assistant after this many hours without a person writing (0 = never)
 }
 
+// The store's own instructions and information (about 20 pages). The assistant reads them on every reply (cached).
+export const MAX_BUSINESS_INFO = 60_000;
+
 export type BotModel = 'quality' | 'balanced' | 'economy';
 export const BOT_MODELS: { id: BotModel; label: string; hint: string; price: { input: number; output: number; cacheRead: number; cacheWrite: number } }[] = [
   { id: 'quality', label: 'Máxima calidad (Opus)', hint: 'El más inteligente. Para productos caros o clientes difíciles. Cuesta el doble que Equilibrado.', price: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 } },
@@ -63,7 +66,7 @@ export function cleanFollowUp(f: any): FollowUpSettings {
 
 export function cleanBot(input: any): BotSettings | string {
   const name = String(input?.name ?? '').trim().slice(0, 40);
-  const businessInfo = String(input?.businessInfo ?? '').trim().slice(0, 6000);
+  const businessInfo = String(input?.businessInfo ?? '').trim().slice(0, MAX_BUSINESS_INFO);
   const max = Math.round(Number(input?.maxRepliesPerDay));
   if (!name) return 'Ponle un nombre al asistente.';
   if (input?.enabled && businessInfo.length < 20) return 'Escribe la información de tu negocio: el asistente solo responde con lo que está ahí y en tus landings.';

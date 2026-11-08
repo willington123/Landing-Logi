@@ -3,7 +3,7 @@
 // AI assistant for WhatsApp (Claude): settings and a simulator to try it before turning it on.
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, Search, Send, Sparkles, UserRound } from 'lucide-react';
-import { BOT_MODELS, DEFAULT_BOT, FOLLOW_UP_HOURS, RESUME_HOURS, type BotSettings } from '@/lib/bot';
+import { BOT_MODELS, DEFAULT_BOT, FOLLOW_UP_HOURS, MAX_BUSINESS_INFO, RESUME_HOURS, type BotSettings } from '@/lib/bot';
 import { isCloud } from '@/lib/cloud';
 
 interface SimMsg {
@@ -17,6 +17,30 @@ const usd = (u: { input: number; output: number; cacheRead: number; cacheWrite: 
   const p = (BOT_MODELS.find((m) => m.id === model) || BOT_MODELS[1]).price;
   return (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1_000_000;
 };
+
+// Length of the store's information and what it adds to each reply (the assistant reads it every time; cached reads are cheap).
+function InfoSize({ text, model }: { text: string; model: BotSettings['model'] }) {
+  const chars = text.length;
+  const pages = chars / 3000;
+  const tokens = Math.round(chars / 3.5);
+  const p = (BOT_MODELS.find((m) => m.id === model) || BOT_MODELS[1]).price;
+  const cached = (tokens * p.cacheRead) / 1_000_000;
+  const fresh = (tokens * p.cacheWrite) / 1_000_000;
+  const money = (v: number) => `US$${v < 0.01 ? v.toFixed(4) : v.toFixed(3)}`;
+  const near = chars > MAX_BUSINESS_INFO * 0.9;
+  return (
+    <span className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-[11px]">
+      <span className={near ? 'text-amber-700 font-medium' : 'text-slate-400'}>
+        {chars.toLocaleString('es-CO')} / {MAX_BUSINESS_INFO.toLocaleString('es-CO')} caracteres{chars ? ` · unas ${pages < 1 ? 'menos de 1' : Math.round(pages)} ${Math.round(pages) === 1 && pages >= 1 ? 'página' : 'páginas'}` : ''}
+      </span>
+      {chars > 6000 && (
+        <span className="text-slate-500">
+          Suma unos {money(cached)} por respuesta ({money(fresh)} cuando la IA lo vuelve a leer completo, tras 5 min sin mensajes).
+        </span>
+      )}
+    </span>
+  );
+}
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -276,7 +300,8 @@ export default function WhatsAppBot() {
               <span className="block text-[11px] text-slate-400">
                 Envíos, pago, garantía, cambios, horarios… El asistente solo responde con esto y con lo que hay en tus landings publicadas (productos, ofertas y preguntas frecuentes).
               </span>
-              <textarea value={cfg.businessInfo} onChange={(e) => set({ businessInfo: e.target.value })} rows={9} maxLength={6000} className="mt-1.5 w-full text-[13px] border border-slate-200 rounded-xl px-3 py-2" />
+              <textarea value={cfg.businessInfo} onChange={(e) => set({ businessInfo: e.target.value })} rows={14} maxLength={MAX_BUSINESS_INFO} className="mt-1.5 w-full text-[13px] border border-slate-200 rounded-xl px-3 py-2 resize-y min-h-[220px]" />
+              <InfoSize text={cfg.businessInfo} model={cfg.model} />
             </label>
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2.5">
               <p className="text-[13px] font-semibold text-slate-900">🙋 Cuándo pasa el chat a un asesor</p>
