@@ -165,8 +165,12 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
     try {
       const d = await call('/api/products/media', 'POST', { productId: item.id, audio: await toDataUrl(blob) });
       setAudio(d.media.audio);
-      setTranscript(d.media.audio?.transcript || '');
-      flash(d.media.audio?.transcript ? 'Nota de voz lista y transcrita' : 'Nota de voz lista. Escribe abajo lo que dice para que el asistente lo sepa.');
+      setTranscript('');
+      // Second step: what it says (it can take a while; the voice note is already saved).
+      setBusy('transcribe');
+      const t = await call('/api/products/media', 'POST', { productId: item.id, transcribe: true }).catch(() => ({ transcript: '' }));
+      setTranscript(t.transcript || '');
+      flash(t.transcript ? 'Nota de voz lista y transcrita' : 'Nota de voz lista. Escribe abajo lo que dice para que el asistente lo sepa.');
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -299,9 +303,9 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
           <div className="space-y-2 border-t border-slate-100 pt-4">
             <p className="text-[13px] font-semibold text-slate-900">🎤 Nota de voz</p>
             <p className="text-[11.5px] text-slate-500">Grábala aquí o sube un audio (mp3, m4a, ogg; hasta 3 minutos). Konnexa la convierte en nota de voz de WhatsApp y la transcribe.</p>
-            {busy === 'audio' && (
+            {(busy === 'audio' || busy === 'transcribe') && (
               <p className="text-[12.5px] text-slate-600 inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Convirtiendo a nota de voz y transcribiendo…
+                <Loader2 className="w-4 h-4 animate-spin" /> {busy === 'audio' ? 'Convirtiendo a nota de voz…' : 'Nota de voz guardada. Escribiendo lo que dice…'}
               </p>
             )}
             {audio && busy !== 'audio' && (

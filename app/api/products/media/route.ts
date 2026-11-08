@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getAllMedia, removeAudio, saveAudio, saveImages, saveTranscript } from '@/lib/server/product-media';
+import { getAllMedia, removeAudio, saveAudio, saveImages, saveTranscript, transcribeSaved } from '@/lib/server/product-media';
 import { sellables } from '@/lib/server/products';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { currentOrgId } from '@/lib/server/tenant';
@@ -23,7 +23,7 @@ export async function GET() {
   }
 }
 
-// { productId, images: [{ url | dataURL, caption }] } · { productId, audio: dataURL } · { productId, transcript }
+// { productId, images: [{ url | dataURL, name, caption }] } · { productId, audio: dataURL } · { productId, transcribe: true } · { productId, transcript }
 export async function POST(req: NextRequest) {
   try {
     await requireManager();
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     if (!(await sellables()).some((l) => l.id === productId)) return fail('Producto no encontrado.', 404);
     if (Array.isArray(b.images)) return ok({ images: await saveImages(productId, b.images) });
     if (typeof b.audio === 'string') return ok({ media: await saveAudio(productId, b.audio) });
+    if (b.transcribe) return ok({ transcript: await transcribeSaved(productId) });
     if (typeof b.transcript === 'string') {
       await saveTranscript(productId, b.transcript);
       return ok();
