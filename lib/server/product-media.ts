@@ -28,14 +28,15 @@ async function save(productId: string, media: ProductMedia) {
 }
 
 // Photos: kept URLs stay; pasted ones (data URLs) are uploaded.
-export async function saveImages(productId: string, images: { url: string; caption?: string }[]): Promise<MediaImage[]> {
+export async function saveImages(productId: string, images: { url: string; name?: string; caption?: string }[]): Promise<MediaImage[]> {
   const cur = await getMedia(productId);
   const keep = new Set(cur.images.map((i) => i.url));
   const out: MediaImage[] = [];
   for (const img of images.slice(0, MAX_MEDIA_IMAGES)) {
     const caption = String(img.caption || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-    if (img.url.startsWith('data:image/')) out.push({ url: await uploadPublicImage(`media/${productId}`, img.url), caption });
-    else if (keep.has(img.url)) out.push({ url: img.url, caption });
+    const name = String(img.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (img.url.startsWith('data:image/')) out.push({ url: await uploadPublicImage(`media/${productId}`, img.url), name, caption });
+    else if (keep.has(img.url)) out.push({ url: img.url, name, caption });
   }
   await save(productId, { ...cur, images: out });
   return out;

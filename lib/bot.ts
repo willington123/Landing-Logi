@@ -96,7 +96,7 @@ export interface BotChatState {
   note?: string; // why it handed over (shown in the chat)
   day?: string; // yyyy-mm-dd of the counter below
   replies?: number; // bot replies that day
-  mediaSent?: Record<string, { photos?: string; audio?: string }>; // product id → when its photos / voice note were sent here
+  mediaSent?: Record<string, { photos?: string; audio?: string; images?: Record<string, string> }>; // product id → when its photos (each one by link) / voice note were sent here
 }
 
 // A paused chat goes back to the assistant: a person took it (or the assistant handed it over) and no person
