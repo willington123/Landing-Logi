@@ -4,7 +4,7 @@
 // products). The audio is turned into a voice note and transcribed once, so the assistant knows what it says.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Mic, Plus, Square, Trash2, Upload, X } from 'lucide-react';
-import { MAX_AUDIO_SECONDS, MAX_MEDIA_IMAGES, type MediaImage, type ProductMedia } from '@/lib/product-media';
+import { MAX_AUDIO_SECONDS, MAX_MEDIA_IMAGES, PHOTO_NAMES, photoName, type MediaImage, type ProductMedia } from '@/lib/product-media';
 
 interface Item {
   id: string;
@@ -66,8 +66,8 @@ export default function ProductMediaSection() {
       <div>
         <h3 className="text-[15px] font-semibold text-slate-900">Fotos y nota de voz para el asistente</h3>
         <p className="text-[12.5px] text-slate-500">
-          El asistente se las envía al cliente por WhatsApp cuando pregunta por el producto, <b>una sola vez</b>. La nota de voz llega como si la hubieras grabado en el chat, y el asistente
-          sabe lo que dice.
+          Ponle un nombre a cada foto (Precios, Producto, Tallas…): cuando el cliente pregunte por eso, el asistente le envía esa foto por WhatsApp, <b>una sola vez</b>. La nota de voz llega como si
+          la hubieras grabado en el chat, y el asistente sabe lo que dice.
         </p>
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
@@ -90,7 +90,7 @@ export default function ProductMediaSection() {
                   </span>
                 </p>
                 <p className="text-[12px] text-slate-500">
-                  {it.media.images.length ? `📷 ${it.media.images.length} ${it.media.images.length === 1 ? 'foto' : 'fotos'}` : 'Sin fotos'} ·{' '}
+                  {it.media.images.length ? `📷 ${Array.from(new Set(it.media.images.map(photoName))).join(', ')}` : 'Sin fotos'} ·{' '}
                   {it.media.audio ? `🎤 nota de voz ${secs(it.media.audio.seconds)}` : 'sin nota de voz'}
                 </p>
               </div>
@@ -115,7 +115,8 @@ export default function ProductMediaSection() {
 }
 
 function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
-  const [images, setImages] = useState<MediaImage[]>(item.media.images);
+  // Photos from before names existed show their old description as the name.
+  const [images, setImages] = useState<MediaImage[]>(item.media.images.map((m) => ({ ...m, name: photoName(m) })));
   const [audio, setAudio] = useState(item.media.audio);
   const [transcript, setTranscript] = useState(item.media.audio?.transcript || '');
   const [busy, setBusy] = useState<string | null>(null);
@@ -147,8 +148,9 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
     setBusy('photos');
     setErr(null);
     try {
+      if (images.some((m) => !(m.name || '').trim())) throw new Error('Ponle un nombre a cada foto (por ejemplo Producto o Precios).');
       const d = await call('/api/products/media', 'POST', { productId: item.id, images });
-      setImages(d.images);
+      setImages(d.images.map((m: MediaImage) => ({ ...m, name: photoName(m) })));
       flash('Fotos guardadas');
     } catch (e: any) {
       setErr(e.message);
@@ -237,7 +239,15 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
             <p className="text-[13px] font-semibold text-slate-900">
               📷 Fotos <span className="font-normal text-slate-500">({images.length}/{MAX_MEDIA_IMAGES})</span>
             </p>
-            <p className="text-[11.5px] text-slate-500">Escribe qué muestra cada una (opcional): el asistente lo usa para saber cuál enviar, y va como texto de la foto.</p>
+            <p className="text-[11.5px] text-slate-500">
+              <b>¿Qué es?</b> le dice al asistente cuándo enviarla: si el cliente pregunta el precio, envía la foto «Precios»; si pide fotos, las de «Producto». Puedes repetir un nombre en varias fotos o escribir el
+              tuyo. El texto de abajo (opcional) sí le llega al cliente con la foto.
+            </p>
+            <datalist id="photo-names">
+              {PHOTO_NAMES.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {images.map((img, i) => (
                 <div key={i} className="rounded-xl border border-slate-200 overflow-hidden">
@@ -247,7 +257,18 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <input className={`${input} rounded-none border-0 border-t`} value={img.caption} maxLength={120} placeholder="Qué muestra (opcional)" onChange={(e) => setImages(images.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} />
+                  <div className="border-t border-slate-200 p-1.5 space-y-1">
+                    <label className="block text-[10.5px] font-semibold text-slate-500 px-0.5">¿Qué es?</label>
+                    <input
+                      list="photo-names"
+                      className={`${input} font-semibold ${(img.name || '').trim() ? '' : 'border-amber-300 bg-amber-50/50'}`}
+                      value={img.name || ''}
+                      maxLength={40}
+                      placeholder="Ej.: Precios"
+                      onChange={(e) => setImages(images.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))}
+                    />
+                    <input className={input} value={img.caption} maxLength={120} placeholder="Texto para el cliente (opcional)" onChange={(e) => setImages(images.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} />
+                  </div>
                 </div>
               ))}
               {images.length < MAX_MEDIA_IMAGES && (
@@ -262,7 +283,7 @@ function MediaEditor({ item, onClose }: { item: Item; onClose: () => void }) {
                       const files = Array.from(e.target.files || []).slice(0, MAX_MEDIA_IMAGES - images.length);
                       e.target.value = '';
                       const added: MediaImage[] = [];
-                      for (const f of files) added.push({ url: await shrink(f).catch(() => ''), caption: '' });
+                      for (const f of files) added.push({ url: await shrink(f).catch(() => ''), name: 'Producto', caption: '' });
                       setImages((cur) => [...cur, ...added.filter((a) => a.url)]);
                     }}
                   />

@@ -12,7 +12,7 @@ import { STREET_TYPES, localPhoneDigits, validateName, validatePhone } from '@/l
 import { MODEL_WEIGHT } from '@/lib/plans';
 import { DEFAULT_BOT, cleanFollowUp, handoffRulesText, type BotChatState, type BotModel, type BotSettings } from '@/lib/bot';
 import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
-import type { ProductMedia } from '@/lib/product-media';
+import { photoName, photosToSend, type ProductMedia } from '@/lib/product-media';
 import { getAgenda } from '@/lib/server/agenda';
 import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
 
@@ -114,7 +114,7 @@ function landingText(l: LandingPageConfig, base: string, media?: ProductMedia): 
   if (faqs.length) lines.push('Preguntas frecuentes:', ...faqs.map((f) => `- ${f.question} → ${f.answer}`));
   if (media?.images.length || media?.audio) {
     lines.push('Material para enviar al cliente con enviar_medios:');
-    if (media.images.length) lines.push(`- ${media.images.length} ${media.images.length === 1 ? 'foto' : 'fotos'}: ${media.images.map((m, i) => `[${i + 1}] ${m.caption || 'foto del producto'}`).join('; ')}`);
+    if (media.images.length) lines.push(`- Fotos (cada una con su nombre; envía por número la que corresponda a lo que pide el cliente): ${media.images.map((m, i) => `[${i + 1}] ${photoName(m)}`).join('; ')}`);
     if (media.audio) lines.push(`- Nota de voz de la tienda explicando el producto${media.audio.seconds ? ` (${media.audio.seconds} s)` : ''}.${media.audio.transcript ? ` Lo que dice: "${media.audio.transcript.replace(/\s+/g, ' ')}"` : ''}`);
   }
   return lines.join('\n');
@@ -168,7 +168,7 @@ Cómo empiezas:
 ${sell}
 
 También puedes:
-- Enviar las fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Úsala cuando el cliente confirme que le interesa ese producto, pregunte cómo es o cómo funciona, o pida fotos o más información. Nunca en respuesta a un simple saludo. No digas que las enviaste ni las anuncies ("te dejé fotos", "te mandé un audio", "mira arriba"): el cliente ya las ve en el chat. Acompáñalas con una sola pregunta corta para seguir la conversación (por ejemplo "¿Para qué tipo de piel lo buscas?"), sin repetir lo que dice la nota de voz. Se envían una sola vez por cliente: si ya se enviaron, no las vuelvas a enviar salvo que el cliente pida de forma explícita que se las reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
+- Enviar fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Cada foto tiene un nombre que dice qué es: cuando el cliente pregunte o pida algo que corresponde al nombre de una foto, envíale esa foto (indica su número) además de responderle. Por ejemplo: si pregunta el precio y hay una foto "Precios", envíala; si pide ver el producto o fotos, envía las fotos "Producto"; si pregunta tallas o medidas, la de "Tallas y medidas"; y lo mismo con cualquier otro nombre (cómo se usa, resultados, testimonios, envíos). Envía solo las fotos que corresponden a lo que pidió, no todas. La nota de voz, cuando el cliente confirme que le interesa el producto o pregunte cómo es o cómo funciona. Nunca envíes nada en respuesta a un simple saludo. No digas que las enviaste ni las anuncies ("te dejé fotos", "te mandé un audio", "mira arriba"): el cliente ya las ve en el chat. Acompáñalas con una respuesta corta y una sola pregunta para seguir la conversación (por ejemplo "¿Para qué tipo de piel lo buscas?"), sin repetir lo que dice la nota de voz. Cada foto y la nota de voz se envían una sola vez por cliente: si ya se le envió esa misma, no la repitas salvo que el cliente pida de forma explícita que se la reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
 - Consultar los pedidos de este cliente con consultar_pedidos (solo los hechos con su número de WhatsApp) y decirle en qué estado van y el número de guía si ya fue despachado.
 
 Reglas importantes:
@@ -241,13 +241,13 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
 const MEDIA_TOOL: Anthropic.Beta.BetaTool = {
   name: 'enviar_medios',
   description:
-    'Envía al cliente por WhatsApp las fotos y/o la nota de voz de un producto que tenga "Material para enviar". Cada cosa se envía una sola vez por cliente; si ya se envió, no se repite salvo que el cliente pida explícitamente que se la reenvíes.',
+    'Envía al cliente por WhatsApp fotos y/o la nota de voz de un producto que tenga "Material para enviar". Elige las fotos por su nombre según lo que pidió el cliente (precio → "Precios", ver el producto → "Producto"…). Cada foto y la nota de voz se envían una sola vez por cliente; si ya se envió, no se repite salvo que el cliente pida explícitamente que se la reenvíes.',
   input_schema: {
     type: 'object',
     properties: {
       landing_id: { type: 'string', description: 'landing_id del producto (sección Productos).' },
       que: { type: 'string', enum: ['fotos', 'nota_de_voz', 'ambos'] },
-      fotos: { type: 'array', items: { type: 'integer' }, description: 'Números de las fotos a enviar según la lista del producto. Vacío = todas.' },
+      fotos: { type: 'array', items: { type: 'integer' }, description: 'Números de las fotos que corresponden a lo que pidió el cliente, según su nombre en la lista del producto. Vacío = las fotos "Producto".' },
       reenviar: { type: 'boolean', description: 'true solo si el cliente pidió de forma explícita que se las vuelvas a enviar.' },
     },
     required: ['landing_id', 'que', 'fotos', 'reenviar'],
@@ -271,27 +271,30 @@ async function sendProductMedia(
   const again = Boolean(input.reenviar);
   const out: { fotos_enviadas: number; nota_de_voz_enviada: boolean; ya_enviado: string[]; fallo?: string[] } = { fotos_enviadas: 0, nota_de_voz_enviada: false, ya_enviado: [] };
   const name = product.productName || product.title;
-  const picks = (input.fotos || []).filter((n) => Number.isInteger(n) && n >= 1 && n <= media.images.length);
-  const images = picks.length ? picks.map((n) => media.images[n - 1]) : media.images;
+  const { send: images, skipped } = photosToSend(media.images, input.fotos || [], sent, again);
+  const sentImages: Record<string, string> = { ...(sent.images || {}) };
   const { sendAudio, sendImage } = await import('@/lib/server/whatsapp');
   const { recordOutbound } = await import('@/lib/server/wa-store');
   const now = new Date().toISOString();
-  const mark: { photos?: string; audio?: string } = { ...sent };
+  const mark: { photos?: string; audio?: string; images?: Record<string, string> } = { ...sent };
   const failed: string[] = [];
   if (wantPhotos) {
-    if (sent.photos && !again) out.ya_enviado.push('fotos');
-    else {
-      for (const img of images) {
-        if (ctx.dryRun) {
-          out.fotos_enviadas++;
-          continue;
-        }
-        const r = await sendImage(ctx.phone, img.url, img.caption || undefined);
-        await recordOutbound({ phone: ctx.phone, type: 'image', body: `📷 ${img.caption || `Foto de ${name}`}`, result: r, payload: { type: 'image', image: { link: img.url, caption: img.caption || undefined } } }).catch(() => {});
-        if (r.ok) out.fotos_enviadas++;
-        else failed.push(`foto: ${r.error}`);
+    out.ya_enviado.push(...skipped.map((img) => `foto "${photoName(img)}"`));
+    for (const img of images) {
+      if (ctx.dryRun) {
+        out.fotos_enviadas++;
+        continue;
       }
-      if (out.fotos_enviadas) mark.photos = now;
+      const r = await sendImage(ctx.phone, img.url, img.caption || undefined);
+      await recordOutbound({ phone: ctx.phone, type: 'image', body: `📷 ${photoName(img)} · ${name}`, result: r, payload: { type: 'image', image: { link: img.url, caption: img.caption || undefined } } }).catch(() => {});
+      if (r.ok) {
+        out.fotos_enviadas++;
+        sentImages[img.url] = now;
+      } else failed.push(`foto: ${r.error}`);
+    }
+    if (out.fotos_enviadas) {
+      mark.photos = now;
+      mark.images = sentImages;
     }
   }
   if (wantAudio) {
@@ -307,7 +310,7 @@ async function sendProductMedia(
     }
   }
   if (failed.length) out.fallo = failed;
-  if (!ctx.dryRun && (mark.photos !== sent.photos || mark.audio !== sent.audio)) await setBotState(ctx.phone, { mediaSent: { ...(state.mediaSent || {}), [product.id]: mark } });
+  if (!ctx.dryRun && (mark.photos !== sent.photos || mark.audio !== sent.audio || mark.images !== sent.images)) await setBotState(ctx.phone, { mediaSent: { ...(state.mediaSent || {}), [product.id]: mark } });
   return {
     ...out,
     nota: out.ya_enviado.length && !out.fotos_enviadas && !out.nota_de_voz_enviada
