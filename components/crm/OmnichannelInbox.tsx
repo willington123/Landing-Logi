@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import ChatAttach from '@/components/crm/ChatAttach';
+import ProductPhotos from '@/components/crm/ProductPhotos';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
@@ -1276,7 +1277,7 @@ export default function OmnichannelInbox() {
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
-                    <div className="relative flex items-end gap-1.5 sm:gap-2">
+                    <div className="relative flex flex-wrap sm:flex-nowrap items-end gap-1.5 sm:gap-2">
                       {qr.open && (
                         <QuickReplyMenu
                           replies={replies}
@@ -1290,6 +1291,17 @@ export default function OmnichannelInbox() {
                             setManage('replies');
                           }}
                           onClose={() => setQr({ open: false, slash: false, highlight: 0 })}
+                        />
+                      )}
+                      {!isSocialChat(active.id) && (
+                        <ProductPhotos
+                          chatId={active.id}
+                          onError={setSendError}
+                          onSent={async () => {
+                            if (botInfo?.enabled) patchActive({ bot: { paused: true, reason: 'human', note: null } });
+                            await loadMessages(active.key);
+                            loadConversations();
+                          }}
                         />
                       )}
                       {!isSocialChat(active.id) && (
@@ -1319,9 +1331,9 @@ export default function OmnichannelInbox() {
                         rows={1}
                         placeholder="Mensaje…"
                         title="Enter envía, Shift+Enter salta de línea, / para respuestas rápidas"
-                        className="flex-1 min-w-0 resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        className="flex-1 min-w-0 max-sm:-order-2 max-sm:basis-[calc(100%-3rem)] resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                       />
-                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="h-10 sm:h-11 w-10 sm:w-auto sm:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
+                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="max-sm:-order-1 h-10 sm:h-11 w-10 sm:w-auto sm:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         <span className="hidden sm:inline">Enviar</span>
                       </button>
