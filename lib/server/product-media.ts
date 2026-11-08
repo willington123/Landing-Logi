@@ -75,7 +75,7 @@ export async function toVoiceNote(input: Buffer): Promise<{ data: Buffer; second
   const out = path.join(dir, 'out.ogg');
   try {
     await fs.writeFile(src, input);
-    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-t', String(MAX_AUDIO_SECONDS), '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '64k', '-vbr', 'on', '-application', 'audio', '-f', 'ogg', out]);
+    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-t', String(MAX_AUDIO_SECONDS), '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '64k', '-vbr', 'on', '-compression_level', '5', '-application', 'audio', '-f', 'ogg', out]);
     if (r.code !== 0) throw userError('No pudimos leer ese audio. Prueba con un mp3, m4a u ogg.');
     const m = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(r.err);
     const total = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
@@ -92,13 +92,34 @@ export async function saveAudio(productId: string, dataUrl: string): Promise<Pro
   if (raw.length > 3.2 * 1024 * 1024) throw userError('El audio pesa más de 3 MB. Usa uno más corto (hasta unos 3 minutos) o grábalo aquí mismo.');
   const { data, seconds } = await toVoiceNote(raw);
   const url = await uploadPublicFile(`media/${productId}`, data, 'audio/ogg', 'ogg');
-  // What it says, once, so the assistant answers with that context (blank if Gemini isn't set up: it can be typed).
-  const key = (process.env.GEMINI_API_KEY || '').trim();
-  const transcript = key ? await transcribeAudio(key, data.toString('base64'), 'audio/ogg').catch(() => '') : '';
+  // The transcript is a second step (transcribeSaved): together they could pass the server's time limit.
   const cur = await getMedia(productId);
-  const next = { ...cur, audio: { url, transcript: (transcript || '').trim().slice(0, 4000), seconds, updatedAt: new Date().toISOString() } };
+  const next = { ...cur, audio: { url, transcript: '', seconds, updatedAt: new Date().toISOString() } };
   await save(productId, next);
   return next;
+}
+
+const TRANSCRIBE_MS = 45_000;
+
+// What the saved voice note says, once, so the assistant answers with that context.
+// Blank when Gemini isn't set up or takes too long: the store can type it.
+export async function transcribeSaved(productId: string): Promise<string> {
+  const cur = await getMedia(productId);
+  if (!cur.audio) throw userError('Primero sube el audio.');
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  if (!key) return '';
+  const res = await fetch(cur.audio.url, { cache: 'no-store' });
+  if (!res.ok) return '';
+  const base64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<string>((resolve) => (timer = setTimeout(() => resolve(''), TRANSCRIBE_MS)));
+  const transcript = (await Promise.race([transcribeAudio(key, base64, 'audio/ogg').catch(() => ''), late])).trim().slice(0, 4000);
+  clearTimeout(timer);
+  if (!transcript) return '';
+  // Only if it's still the same voice note and nobody typed a text meanwhile.
+  const now = await getMedia(productId);
+  if (now.audio?.url === cur.audio.url && !now.audio.transcript) await save(productId, { ...now, audio: { ...now.audio, transcript } });
+  return transcript;
 }
 
 export async function saveTranscript(productId: string, transcript: string) {
