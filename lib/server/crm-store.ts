@@ -53,6 +53,23 @@ export async function setConversationTags(conversationId: string, tagIds: string
   return clean;
 }
 
+// Adds tags to several chats with one read and one write (parallel single writes would overwrite each other).
+export async function addConversationTags(changes: Record<string, string[]>): Promise<string[]> {
+  const valid = new Set((await getTags()).map((t) => t.id));
+  const all = await getConversationTags();
+  const changed: string[] = [];
+  for (const [id, add] of Object.entries(changes)) {
+    const cur = all[id] || [];
+    const next = Array.from(new Set([...cur, ...add.filter((t) => valid.has(t))]));
+    if (next.length > cur.length) {
+      all[id] = next;
+      changed.push(id);
+    }
+  }
+  if (changed.length) await writeSetting('wa_conv_tags', all);
+  return changed;
+}
+
 // ---------- internal notes (only the team sees them) ----------
 
 export interface CrmNote {

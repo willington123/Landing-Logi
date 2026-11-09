@@ -123,6 +123,7 @@ export function TagManager({
   intro = 'Úsalas para ordenar los chats y filtrarlos. Si borras una, se quita de todas las conversaciones.',
   addLabel = 'Nueva etiqueta',
   placeholder = '',
+  extra = null,
 }: {
   tags: CrmTag[];
   onClose: () => void;
@@ -132,6 +133,7 @@ export function TagManager({
   intro?: string;
   addLabel?: string;
   placeholder?: string;
+  extra?: React.ReactNode;
 }) {
   const [items, setItems] = useState<CrmTag[]>(tags);
   const [saving, setSaving] = useState(false);
@@ -153,6 +155,7 @@ export function TagManager({
   return (
     <Modal title={title} onClose={onClose}>
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+        {extra}
         <p className="text-xs text-slate-500">{intro}</p>
         {items.length === 0 && <p className="text-xs text-slate-400">Aún no hay ninguno.</p>}
         {items.map((t, i) => (
@@ -201,6 +204,59 @@ export function TagManager({
         </button>
       </div>
     </Modal>
+  );
+}
+
+// "Etiquetar con IA": the AI reads chats that already came in and tags them. Rounds of ~40 chats until none is left.
+export function AutoTagBox({ onDone }: { onDone: () => void }) {
+  const [days, setDays] = useState(7);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ checked: number; tagged: number; remaining: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    const total = { checked: 0, tagged: 0, remaining: 0 };
+    setProgress(total);
+    try {
+      for (let round = 0; round < 50; round++) {
+        const r = await crmApi<{ checked: number; tagged: number; remaining: number; error?: string }>('/api/whatsapp/tags/auto', { method: 'POST', body: JSON.stringify({ days }) });
+        total.checked += r.checked;
+        total.tagged += r.tagged;
+        total.remaining = r.remaining;
+        setProgress({ ...total });
+        if (r.error) throw new Error(r.error);
+        if (!r.remaining || !r.checked) break;
+      }
+      onDone();
+    } catch (e: any) {
+      setError(e.message);
+      if (total.checked) onDone();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 mb-3 space-y-2">
+      <p className="text-[13px] font-semibold text-violet-900">Etiquetar con IA los chats que ya llegaron</p>
+      <p className="text-[12px] text-violet-900/80">La IA lee cada chat sin etiquetas y le pone las que encajan. Usa tus etiquetas guardadas: si acabas de cambiarlas, guarda primero.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} disabled={busy} className="h-9 text-[13px] border border-violet-200 rounded-lg px-2 bg-white" aria-label="Periodo">
+          <option value={1}>Último día</option>
+          <option value={7}>Últimos 7 días</option>
+          <option value={30}>Últimos 30 días</option>
+        </select>
+        <button onClick={run} disabled={busy} className="h-9 px-3 rounded-lg bg-violet-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-60">
+          {busy && <Loader2 className="w-4 h-4 animate-spin" />} {busy ? 'Etiquetando…' : 'Etiquetar con IA'}
+        </button>
+      </div>
+      {progress && (
+        <p className="text-[12px] text-violet-900">
+          {busy ? `Revisados ${progress.checked}${progress.remaining ? ` · faltan ${progress.remaining}` : ''} · etiquetados ${progress.tagged}` : progress.checked ? `Listo: revisó ${progress.checked} ${progress.checked === 1 ? 'chat' : 'chats'} y etiquetó ${progress.tagged}.` : 'No hay chats sin etiquetas en ese periodo.'}
+        </p>
+      )}
+      {error && <p className="text-[12px] text-red-600">{error}</p>}
+    </div>
   );
 }
 

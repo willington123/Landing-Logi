@@ -15,7 +15,7 @@ import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 import { photoName, photosToSend, type ProductMedia } from '@/lib/product-media';
 import { getAgenda } from '@/lib/server/agenda';
 import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
-import { getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
+import { addConversationTags, getConversationTags, getTags } from '@/lib/server/crm-store';
 import { isOrderTag, type CrmTag } from '@/lib/crm';
 
 // The store picks the model in Automatizaciones (Sonnet by default).
@@ -260,7 +260,7 @@ const MEDIA_TOOL: Anthropic.Beta.BetaTool = {
 
 // The store's tags (Mensajes → Etiquetas) the assistant can put on the chat so the team finds it. "Confirmado"
 // stays out: the store sets it when the order is created.
-function tagTool(tags: CrmTag[]): Anthropic.Beta.BetaTool | null {
+export function tagTool(tags: CrmTag[]): Anthropic.Beta.BetaTool | null {
   const names = tags.filter((t) => !isOrderTag(t)).map((t) => t.name);
   if (!names.length) return null;
   return {
@@ -597,7 +597,7 @@ export async function runBot(opts: {
         } else if (t.name === 'etiquetar_chat' && TAG_TOOL) {
           const wanted = new Set(((t.input as any)?.etiquetas || []).map(String));
           const add = storeTags.filter((x) => wanted.has(x.name) && !isOrderTag(x) && !chatTagIds.includes(x.id));
-          if (add.length && !opts.dryRun) await setConversationTags(opts.phone, [...chatTagIds, ...add.map((x) => x.id)]);
+          if (add.length && !opts.dryRun) await addConversationTags({ [opts.phone]: add.map((x) => x.id) });
           chatTagIds.push(...add.map((x) => x.id));
           result = { ok: true, etiquetas: add.map((x) => x.name), nota: 'Listo. No le menciones las etiquetas al cliente.' };
         } else if (t.name === 'pasar_a_humano') {
