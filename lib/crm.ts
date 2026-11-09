@@ -26,6 +26,14 @@ export const TAG_COLORS = {
 export type TagColor = keyof typeof TAG_COLORS;
 export const isTagColor = (c: unknown): c is TagColor => typeof c === 'string' && c in TAG_COLORS;
 
+// Tag names compared without accents, case or "de" ("Cambio de dirección" = "cambio direccion").
+export const tagKey = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\bde\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+// The store's own tag for a built-in meaning (default id, or a tag the store created with that name).
+export function findTag(tags: CrmTag[], id: string, names: string[]): CrmTag | null {
+  return tags.find((t) => t.id === id) || tags.find((t) => names.some((n) => tagKey(t.name) === tagKey(n))) || null;
+}
+export const isOrderTag = (t: CrmTag) => t.id === 'confirmado' || ['confirmado', 'pedido confirmado'].includes(tagKey(t.name));
+
 export const DEFAULT_TAGS: CrmTag[] = [
   { id: 'nuevo', name: 'Nuevo', color: 'blue' },
   { id: 'confirmado', name: 'Confirmado', color: 'green' },

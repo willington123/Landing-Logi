@@ -121,6 +121,9 @@ const isRetake = (c: Conversation, now: number) => {
   return quiet >= RETAKE_AFTER_MS && quiet < WINDOW_MS;
 };
 const aiWorking = (c: Conversation, now: number, botOn: boolean) => botOn && !c.bot?.paused && Boolean(c.last_inbound_at) && now - ms(c.last_inbound_at) < WINDOW_MS && !isRetake(c, now);
+// Last message in the chat, from either side (what WhatsApp sorts by).
+const lastActivity = (c: Conversation) => [c.last_message_at, c.last_inbound_at].filter(Boolean).sort().pop() || '';
+const ORDER_KEY = 'konnexa_inbox_order';
 const isAttending = (c: Conversation) => Boolean(c.bot?.paused && c.bot.reason === 'human');
 const keyOf = (org: string, id: string) => `${org}|${id}`;
 const splitKey = (k: string) => {
@@ -397,6 +400,19 @@ export default function OmnichannelInbox() {
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
   const typingAt = useRef(0);
   const [replies, setReplies] = useState<QuickReply[]>([]);
+  // List order: newest activity first (like WhatsApp) or what needs a person first. Remembered per browser.
+  const [order, setOrder] = useState<'recent' | 'priority'>('recent');
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(ORDER_KEY) === 'priority') setOrder('priority');
+    } catch {}
+  }, []);
+  const pickOrder = (o: 'recent' | 'priority') => {
+    setOrder(o);
+    try {
+      localStorage.setItem(ORDER_KEY, o);
+    } catch {}
+  };
   const [focus, setFocus] = useState<Focus>(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('f') === 'handoff' ? 'help' : 'all'));
   const [adv, setAdv] = useState<Adv>(() => {
     if (typeof window === 'undefined') return '';
@@ -680,12 +696,13 @@ export default function OmnichannelInbox() {
       if (focus === 'attending') return isAttending(c);
       return true;
     });
+    if (order === 'recent') return list.sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)));
     // First what needs a person: handed over, then customers waiting, then chats to pick up, then the rest.
     const rank = (c: Conversation) => (needsHelp(c) ? 0 : isUnanswered(c) && (!botOn(c) || c.bot?.paused) ? 1 : isRetake(c, now) ? 2 : 3);
     const at = (c: Conversation) => (needsHelp(c) ? c.bot?.at || c.last_message_at || '' : c.last_message_at || '');
     return list.sort((a, b) => rank(a) - rank(b) || at(b).localeCompare(at(a)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, focus, now, storeData]);
+  }, [base, focus, now, storeData, order]);
 
   const advActive = Boolean(adv || tagFilter || channel);
   const meAgent = agents.find((a) => a.id === myAgentId(activeOrg)) || null;
@@ -1056,8 +1073,20 @@ export default function OmnichannelInbox() {
               <h2 className="text-lg font-bold text-slate-900">Conversaciones</h2>
               <span className="text-[13px] text-slate-400">{filtered.length}</span>
             </div>
-            <p className="text-[12px] text-slate-500">
-              {focus === 'all' ? 'Primero lo que necesita a una persona.' : cards.find((k) => k.id === focus)?.label}
+            <div className="mt-2 inline-flex rounded-lg bg-slate-100 p-0.5 text-[12px] font-semibold" role="group" aria-label="Orden de la lista">
+              {(
+                [
+                  ['recent', 'Más recientes'],
+                  ['priority', 'Prioridad'],
+                ] as const
+              ).map(([id, label]) => (
+                <button key={id} onClick={() => pickOrder(id)} aria-pressed={order === id} className={`h-8 px-3 rounded-md ${order === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[12px] text-slate-500">
+              {focus === 'all' ? (order === 'recent' ? 'Arriba quien escribió más reciente.' : 'Primero lo que necesita a una persona.') : cards.find((k) => k.id === focus)?.label}
               {focus !== 'all' && (
                 <button onClick={() => setFocus('all')} className="ml-2 font-semibold text-brand-blue">
                   Ver todas
@@ -1101,7 +1130,7 @@ export default function OmnichannelInbox() {
                   <div className="flex items-start gap-2">
                     {st ? <st.Icon className={`w-4 h-4 mt-0.5 shrink-0 ${st.cls}`} /> : <ChannelMark id={c.id} className="w-4 h-4 mt-0.5 shrink-0" />}
                     <span className="flex-1 min-w-0 text-[15px] font-semibold text-slate-900 truncate">{c.name || phoneLabel(c.id)}</span>
-                    <span className="text-[12px] text-slate-400 shrink-0 mt-0.5">{c.last_message_at ? `hace ${ago(help ? c.bot?.at || c.last_message_at : c.last_message_at, now)}` : ''}</span>
+                    <span className={`text-[12px] shrink-0 mt-0.5 ${c.unread_count > 0 ? 'text-[#1DA851] font-semibold' : 'text-slate-400'}`}>{lastActivity(c) ? `hace ${ago(order === 'priority' && help ? c.bot?.at || lastActivity(c) : lastActivity(c), now)}` : ''}</span>
                   </div>
                   {st && <p className={`mt-1 text-[11px] font-bold uppercase tracking-wide ${st.cls}`}>{st.label}</p>}
                   <div className="mt-0.5 flex items-end gap-2">

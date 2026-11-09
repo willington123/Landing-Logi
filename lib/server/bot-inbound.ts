@@ -7,7 +7,7 @@ import { sendText, whatsappEnabled, type InboundMessage } from '@/lib/server/wha
 import { markConversationRead, recordOutbound } from '@/lib/server/wa-store';
 import { addNote, getAutoSettings, getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
-import { isWorkingTime } from '@/lib/crm';
+import { findTag, isOrderTag, isWorkingTime, type CrmTag } from '@/lib/crm';
 import { shouldResume } from '@/lib/bot';
 import { autoAssign } from '@/lib/server/crm-store';
 
@@ -15,8 +15,18 @@ const DEBOUNCE_MS = Number(process.env.BOT_DEBOUNCE_MS ?? 4000);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 
-// Tag the chat when the assistant hands it over (only tags that exist).
-const HANDOFF_TAG: Record<string, string> = { reclamo: 'reclamo', cambio_pedido: 'cambio-direccion', cancelacion: 'reclamo' };
+// Tag the chat when the assistant hands it over (the store's tag with that id or name, if it has one).
+const HANDOFF_TAG: Record<string, [string, string[]]> = {
+  reclamo: ['reclamo', ['Reclamo', 'Reclamos', 'Queja']],
+  cambio_pedido: ['cambio-direccion', ['Cambio de dirección', 'Cambio de pedido', 'Cambio']],
+  cancelacion: ['reclamo', ['Cancelación', 'Cancelado', 'Reclamo']],
+};
+async function addTag(phone: string, pick: (tags: CrmTag[]) => CrmTag | null) {
+  const tag = pick(await getTags());
+  if (!tag) return;
+  const current = (await getConversationTags())[phone] || [];
+  if (!current.includes(tag.id)) await setConversationTags(phone, [...current, tag.id]);
+}
 
 // true = the assistant takes this message (the keyword/out-of-hours replies are skipped).
 export async function botTakesMessage(m: InboundMessage, fallback: () => Promise<unknown>): Promise<boolean> {
@@ -96,20 +106,14 @@ async function answer(m: InboundMessage) {
 
   if (run.order) {
     await addNote(m.from, `🛒 El asistente tomó el pedido ${run.order} (confirmado en el chat).`).catch(() => {});
-    if ((await getTags()).some((t) => t.id === 'confirmado')) {
-      const current = (await getConversationTags())[m.from] || [];
-      if (!current.includes('confirmado')) await setConversationTags(m.from, [...current, 'confirmado']).catch(() => {});
-    }
+    await addTag(m.from, (tags) => tags.find(isOrderTag) || null).catch(() => {});
   }
 
   if (run.handoff) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'handoff', note: run.handoff.motivo });
     await autoAssign(m.from, 'handoff').catch(() => null);
     await addNote(m.from, `🤖 El asistente pasó el chat a una persona: ${run.handoff.motivo}`).catch(() => {});
-    const tag = HANDOFF_TAG[run.handoff.tipo];
-    if (tag && (await getTags()).some((t) => t.id === tag)) {
-      const current = (await getConversationTags())[m.from] || [];
-      if (!current.includes(tag)) await setConversationTags(m.from, [...current, tag]).catch(() => {});
-    }
+    const want = HANDOFF_TAG[run.handoff.tipo];
+    if (want) await addTag(m.from, (tags) => findTag(tags, want[0], want[1])).catch(() => {});
   }
 }
