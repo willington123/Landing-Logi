@@ -171,13 +171,13 @@ export async function transcribeAudio(apiKey: string, base64: string, mimeType: 
           role: 'user',
           parts: [
             {
-              text: 'Transcribe esta nota de voz de un cliente, palabra por palabra, en el idioma en que habla (normalmente español de Colombia). Escribe solo lo que dice, con puntuación normal, sin comentarios ni comillas. Si no se entiende nada o solo hay ruido, responde exactamente: (inaudible)',
+              text: 'Transcribe esta nota de voz de un cliente COMPLETA, de principio a fin y palabra por palabra, en el idioma en que habla (normalmente español de Colombia). Aunque sea larga, no la resumas, no la acortes y no te saltes partes: escribe todo lo que dice, con puntuación normal, sin comentarios ni comillas. Si una parte no se entiende, escribe [no se entiende] en ese punto y sigue. Si no se entiende nada o solo hay ruido, responde exactamente: (inaudible)',
             },
             { inline_data: { mime_type: mime, data: base64 } },
           ],
         },
       ],
-      generationConfig: { temperature: 0, ...(thinking ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) },
+      generationConfig: { temperature: 0, maxOutputTokens: 8192, ...(thinking ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) },
     });
     let data;
     try {
@@ -188,6 +188,6 @@ export async function transcribeAudio(apiKey: string, base64: string, mimeType: 
     }
     const text: string = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
     const clean = text.trim();
-    return /^\(?inaudible\)?\.?$/i.test(clean) ? '' : clean.slice(0, 4000);
+    return /^\(?inaudible\)?\.?$/i.test(clean) ? '' : clean.slice(0, 12000);
   });
 }

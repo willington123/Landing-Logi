@@ -68,6 +68,21 @@ function run(bin: string, args: string[]): Promise<{ code: number; err: string }
   });
 }
 
+// A voice note the customer sent (OGG/Opus) → MP3, for phones whose browser can't play Opus (iPhone shows "0:00").
+export async function toMp3(input: Buffer): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mp3-'));
+  const src = path.join(dir, `in-${randomUUID()}`);
+  const out = path.join(dir, 'out.mp3');
+  try {
+    await fs.writeFile(src, input);
+    const r = await run(ffmpegPath(), ['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-ac', '1', '-c:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', out]);
+    if (r.code !== 0) throw new Error('No se pudo convertir el audio.');
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 // Any audio (mp3, m4a, ogg, webm from the panel's recorder…) → OGG/Opus mono, the format WhatsApp plays as a voice note.
 export async function toVoiceNote(input: Buffer): Promise<{ data: Buffer; seconds: number | null }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vn-'));
