@@ -1,14 +1,12 @@
-// Voice notes the customer sends (WhatsApp, Messenger, Instagram) become text with Gemini, so the AI
+// Voice notes the customer sends (WhatsApp, Messenger, Instagram) become text (Whisper on Groq, Gemini as backup), so the AI
 // assistant, the automatic replies and the team understand them. The audio stays playable in Mensajes.
 import { db } from '@/lib/server/db';
 import { fetchMedia, type InboundMessage } from '@/lib/server/whatsapp';
 import { mediaFromPayload } from '@/lib/server/wa-store';
-import { transcribeAudio } from '@/lib/gemini';
+import { transcribe, transcriptionOn } from '@/lib/server/transcribe';
 
 const MAX_BYTES = 15 * 1024 * 1024;
-const geminiKey = () => (process.env.GEMINI_API_KEY || '').trim();
-
-export const voiceNotesOn = () => Boolean(geminiKey());
+export const voiceNotesOn = transcriptionOn;
 
 // Where the audio of this message is (WhatsApp media id, or the file link Messenger / Instagram send).
 function audioSource(m: InboundMessage): { mediaId?: string; url?: string } | null {
@@ -44,11 +42,11 @@ async function download(src: { mediaId?: string; url?: string }): Promise<{ data
 // Transcribes the voice note and saves the text on the message. Returns the text ('' if it couldn't).
 export async function transcribeVoiceNote(m: InboundMessage): Promise<string> {
   const src = audioSource(m);
-  if (!src || !geminiKey()) return '';
+  if (!src || !transcriptionOn()) return '';
   try {
     const file = await download(src);
     if (!file) return '';
-    const text = await transcribeAudio(geminiKey(), file.data.toString('base64'), file.mime);
+    const text = await transcribe(file.data, file.mime);
     if (!text) return '';
     const d = await db();
     const { data: row } = await d.from('wa_messages').select('id, payload').eq('wa_message_id', m.waMessageId).maybeSingle();

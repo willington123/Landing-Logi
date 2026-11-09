@@ -19,7 +19,7 @@ SaaS multi-tienda para tiendas de **pago contraentrega** (Colombia principalment
 
 - **Next.js 14** (App Router) + TypeScript + Tailwind. Desplegado en **Vercel**.
 - **Supabase** (Postgres + Storage, bucket público `landing-images`). Esquema en `supabase/schema.sql` y `supabase/migrations/`.
-- IA: **Anthropic** (`@anthropic-ai/sdk`) para el asistente y las landings; **Gemini** para transcribir notas de voz e imágenes.
+- IA: **Anthropic** (`@anthropic-ai/sdk`) para el asistente y las landings; **Whisper en Groq** (`GROQ_API_KEY`, `lib/server/transcribe.ts`) para transcribir notas de voz, con **Gemini** de respaldo; Gemini también para imágenes.
 - `ffmpeg-static` convierte audios a nota de voz de WhatsApp (OGG/Opus). `next.config.js` incluye el binario en las rutas que lo usan (`outputFileTracingIncludes`).
 
 ## Cómo está organizado

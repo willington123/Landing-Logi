@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { db, uploadPublicFile, uploadPublicImage } from '@/lib/server/db';
-import { transcribeAudio } from '@/lib/gemini';
+import { transcribe, transcriptionOn } from '@/lib/server/transcribe';
 import { EMPTY_MEDIA, MAX_AUDIO_SECONDS, MAX_MEDIA_IMAGES, type MediaImage, type ProductMedia } from '@/lib/product-media';
 
 const ROW = 'wa_product_media';
@@ -117,18 +117,17 @@ export async function saveAudio(productId: string, dataUrl: string): Promise<Pro
 const TRANSCRIBE_MS = 45_000;
 
 // What the saved voice note says, once, so the assistant answers with that context.
-// Blank when Gemini isn't set up or takes too long: the store can type it.
+// Blank when no transcription key is set up or it takes too long: the store can type it.
 export async function transcribeSaved(productId: string): Promise<string> {
   const cur = await getMedia(productId);
   if (!cur.audio) throw userError('Primero sube el audio.');
-  const key = (process.env.GEMINI_API_KEY || '').trim();
-  if (!key) return '';
+  if (!transcriptionOn()) return '';
   const res = await fetch(cur.audio.url, { cache: 'no-store' });
   if (!res.ok) return '';
-  const base64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+  const audio = Buffer.from(await res.arrayBuffer());
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<string>((resolve) => (timer = setTimeout(() => resolve(''), TRANSCRIBE_MS)));
-  const transcript = (await Promise.race([transcribeAudio(key, base64, 'audio/ogg').catch(() => ''), late])).trim().slice(0, 4000);
+  const transcript = (await Promise.race([transcribe(audio, 'audio/ogg').catch(() => ''), late])).trim().slice(0, 4000);
   clearTimeout(timer);
   if (!transcript) return '';
   // Only if it's still the same voice note and nobody typed a text meanwhile.
