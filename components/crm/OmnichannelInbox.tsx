@@ -37,7 +37,7 @@ import ProductPhotos from '@/components/crm/ProductPhotos';
 import { isCloud } from '@/lib/cloud';
 import type { OrderSummary, WaConversation, WaMessage } from '@/lib/server/wa-store';
 import { fillQuickReply, type Agent, type CrmTag, type QuickReply } from '@/lib/crm';
-import { AssignPicker, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
+import { AssignPicker, AutoTagBox, QuickReplyManager, QuickReplyMenu, TagChip, TagManager, TagPicker, crmApi, matchReplies } from '@/components/crm/CrmParts';
 import TeamManager from '@/components/crm/TeamManager';
 import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
 import { CHANNEL_LABEL, CHAT_ID_RE, chatChannel, isSocialChat, type ChatChannel } from '@/lib/social';
@@ -1013,6 +1013,7 @@ export default function OmnichannelInbox() {
                   <p className="text-[11px] text-slate-400 mb-1.5">{multi ? `Ajustes de ${storeName(activeOrg || currentId) || 'esta tienda'}` : 'Ajustes'}</p>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-medium text-slate-600">
                     <button onClick={() => (setManage('tags'), setAdvOpen(false))} className="hover:text-slate-900">Etiquetas</button>
+                    <button onClick={() => (setManage('tags'), setAdvOpen(false))} className="text-violet-700 hover:text-violet-900">Etiquetar con IA</button>
                     <button onClick={() => (setManage('replies'), setAdvOpen(false))} className="hover:text-slate-900">Respuestas rápidas</button>
                     <button onClick={() => (setManage('team'), setAdvOpen(false))} className="hover:text-slate-900">Equipo</button>
                     <Link href="/automations" className="hover:text-slate-900">Respuestas automáticas</Link>
@@ -1395,7 +1396,7 @@ export default function OmnichannelInbox() {
           </div>
         )}
       </div>
-      {manage === 'tags' && <TagManager tags={tags.length || activeOrg ? tags : storeData[currentId]?.tags || []} onClose={() => setManage(null)} onSaved={() => loadConversations()} />}
+      {manage === 'tags' && <TagManager tags={tags.length || activeOrg ? tags : storeData[currentId]?.tags || []} onClose={() => setManage(null)} onSaved={() => loadConversations()} extra={<AutoTagBox onDone={() => loadConversations()} />} />}
       {manage === 'team' && <TeamManager onClose={() => setManage(null)} onSaved={() => loadConversations()} />}
       {manage === 'replies' && <QuickReplyManager replies={replies} onClose={() => setManage(null)} onSaved={setReplies} />}
       {newOrder && active && (

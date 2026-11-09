@@ -5,7 +5,7 @@ import { waitUntil } from '@vercel/functions';
 import { db } from '@/lib/server/db';
 import { sendText, whatsappEnabled, type InboundMessage } from '@/lib/server/whatsapp';
 import { markConversationRead, recordOutbound } from '@/lib/server/wa-store';
-import { addNote, getAutoSettings, getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
+import { addConversationTags, addNote, getAutoSettings, getTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
 import { findTag, isOrderTag, isWorkingTime, type CrmTag } from '@/lib/crm';
 import { shouldResume } from '@/lib/bot';
@@ -23,9 +23,7 @@ const HANDOFF_TAG: Record<string, [string, string[]]> = {
 };
 async function addTag(phone: string, pick: (tags: CrmTag[]) => CrmTag | null) {
   const tag = pick(await getTags());
-  if (!tag) return;
-  const current = (await getConversationTags())[phone] || [];
-  if (!current.includes(tag.id)) await setConversationTags(phone, [...current, tag.id]);
+  if (tag) await addConversationTags({ [phone]: [tag.id] });
 }
 
 // true = the assistant takes this message (the keyword/out-of-hours replies are skipped).
