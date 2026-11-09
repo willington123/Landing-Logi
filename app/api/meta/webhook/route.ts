@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cloudEnabled } from '@/lib/server/db';
 import { verifySignature } from '@/lib/server/whatsapp';
 import { runWithOrg } from '@/lib/server/tenant';
-import { handleComment, handleSocialMessage, orgForAsset, parseSocialMessaging, parseSocialWebhook } from '@/lib/server/social';
+import { applySocialReceipt, handleComment, handleSocialMessage, orgForAsset, parseSocialMessaging, parseSocialReceipts, parseSocialWebhook } from '@/lib/server/social';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -10,7 +10,8 @@ export const maxDuration = 60;
 const env = (k: string) => (process.env[k] || '').trim();
 
 // Facebook Page and Instagram notices (comments) for every store, through the platform's Meta app.
-// In the Meta app: Webhooks → Page (fields "feed" and "messages") and Instagram ("comments" and "messages") → this URL.
+// In the Meta app: Webhooks → Page (fields "feed", "messages", "message_deliveries", "message_reads") and Instagram
+// ("comments", "messages", "messaging_seen") → this URL.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const tokens = [env('META_VERIFY_TOKEN'), env('WHATSAPP_VERIFY_TOKEN')].filter(Boolean);
@@ -46,5 +47,12 @@ export async function POST(req: NextRequest) {
     if (!org) continue;
     await runWithOrg(org, () => handleSocialMessage(ev)).catch((e) => console.error('Messenger/Instagram:', e));
   }
-  return NextResponse.json({ ok: true, comments: comments.length, handled, messages: chats.length });
+  // "Delivered" / "read" → ✓✓ in Mensajes.
+  const receipts = parseSocialReceipts(body);
+  for (const r of receipts) {
+    const org = await orgForAsset(r.kind, r.assetId);
+    if (!org) continue;
+    await runWithOrg(org, () => applySocialReceipt(r)).catch((e) => console.error('Messenger/Instagram (recibos):', e));
+  }
+  return NextResponse.json({ ok: true, comments: comments.length, handled, messages: chats.length, receipts: receipts.length });
 }
