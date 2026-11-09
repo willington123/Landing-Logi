@@ -15,6 +15,8 @@ import type { LandingPageConfig, OrderItem, OrderStatus } from '@/lib/types';
 import { photoName, photosToSend, type ProductMedia } from '@/lib/product-media';
 import { getAgenda } from '@/lib/server/agenda';
 import { AGENDA_TOOLS, AGENDA_TOOL_NAMES, agendaPrompt, runAgendaTool } from '@/lib/server/bot-agenda';
+import { getConversationTags, getTags, setConversationTags } from '@/lib/server/crm-store';
+import { isOrderTag, type CrmTag } from '@/lib/crm';
 
 // The store picks the model in Automatizaciones (Sonnet by default).
 const MODEL_IDS: Record<BotModel, string> = { quality: 'claude-opus-5-5', balanced: 'claude-sonnet-5-5', economy: 'claude-haiku-5-5' };
@@ -256,6 +258,25 @@ const MEDIA_TOOL: Anthropic.Beta.BetaTool = {
   strict: true,
 };
 
+// The store's tags (Mensajes → Etiquetas) the assistant can put on the chat so the team finds it. "Confirmado"
+// stays out: the store sets it when the order is created.
+function tagTool(tags: CrmTag[]): Anthropic.Beta.BetaTool | null {
+  const names = tags.filter((t) => !isOrderTag(t)).map((t) => t.name);
+  if (!names.length) return null;
+  return {
+    name: 'etiquetar_chat',
+    description:
+      'Pone etiquetas a este chat para que el equipo de la tienda lo encuentre fácil (el cliente no las ve). Úsala junto con tu respuesta en cuanto quede claro qué pasa en el chat, y solo con etiquetas que el chat aún no tenga. Ejemplos: "Dudas" si pregunta pero todavía no decide, "Reclamo" si se queja, "Cambio de dirección" si pide cambiar datos de su pedido, "VIP" si ya compró varias veces. Si ninguna encaja, no la uses. Nunca le menciones las etiquetas al cliente.',
+    input_schema: {
+      type: 'object',
+      properties: { etiquetas: { type: 'array', items: { type: 'string', enum: names }, description: 'Etiquetas que le quieres poner al chat.' } },
+      required: ['etiquetas'],
+      additionalProperties: false,
+    },
+    strict: true,
+  };
+}
+
 async function sendProductMedia(
   input: { landing_id?: string; que?: string; fotos?: number[]; reenviar?: boolean },
   ctx: { phone: string; landings: LandingPageConfig[]; media: Record<string, ProductMedia>; dryRun: boolean },
@@ -489,6 +510,9 @@ export async function runBot(opts: {
   const hasMedia = Object.values(knowledge.media || {}).some((m) => m.images.length || m.audio);
   const run: BotRun = { reply: null, handoff: null, toolCalls: [], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   if (!messages.length) return run;
+  const [storeTags, chatTagIds] = await Promise.all([getTags().catch(() => [] as CrmTag[]), getConversationTags().then((all) => all[opts.phone] || []).catch(() => [] as string[])]);
+  const TAG_TOOL = tagTool(storeTags);
+  const chatTagNames = storeTags.filter((t) => chatTagIds.includes(t.id)).map((t) => t.name);
 
   const now = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const system: Anthropic.Beta.BetaTextBlockParam[] = [
@@ -501,6 +525,7 @@ export async function runBot(opts: {
         : `Datos de esta conversación: cliente "${opts.customerName || 'sin nombre'}", WhatsApp +${opts.phone}. Fecha y hora en Colombia: ${now}.`,
     },
   ];
+  if (TAG_TOOL) system.push({ type: 'text', text: `Etiquetas que ya tiene este chat: ${chatTagNames.length ? chatTagNames.join(', ') : 'ninguna'}.` });
   if (opts.ad && (opts.ad.headline || opts.ad.body)) {
     // Ad text is written by the store, but keep it short and clearly marked as data.
     const adText = [opts.ad.headline, opts.ad.body].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 400);
@@ -522,6 +547,7 @@ export async function runBot(opts: {
       tools: [
         ...(appointments ? [...AGENDA_TOOLS, ...TOOLS.filter((t) => t.name === 'pasar_a_humano')] : opts.settings.takeOrders ? [...TOOLS, CREATE_ORDER_TOOL] : TOOLS),
         ...(hasMedia && !/^[mi]\d/.test(opts.phone) ? [MEDIA_TOOL] : []),
+        ...(TAG_TOOL ? [TAG_TOOL] : []),
       ],
       messages,
     });
@@ -568,6 +594,12 @@ export async function runBot(opts: {
         } else if (t.name === 'crear_pedido' && opts.settings.takeOrders) {
           result = await createBotOrder(t.input as CreateOrderInput, { phone: opts.phone, landings: knowledge.landings, dryRun: Boolean(opts.dryRun) });
           if ((result as any).ok && !opts.dryRun) run.order = String((result as any).pedido);
+        } else if (t.name === 'etiquetar_chat' && TAG_TOOL) {
+          const wanted = new Set(((t.input as any)?.etiquetas || []).map(String));
+          const add = storeTags.filter((x) => wanted.has(x.name) && !isOrderTag(x) && !chatTagIds.includes(x.id));
+          if (add.length && !opts.dryRun) await setConversationTags(opts.phone, [...chatTagIds, ...add.map((x) => x.id)]);
+          chatTagIds.push(...add.map((x) => x.id));
+          result = { ok: true, etiquetas: add.map((x) => x.name), nota: 'Listo. No le menciones las etiquetas al cliente.' };
         } else if (t.name === 'pasar_a_humano') {
           const input = (t.input || {}) as { motivo?: string; tipo?: string };
           run.handoff = { motivo: String(input.motivo || '').slice(0, 300) || 'Sin detalle', tipo: String(input.tipo || 'otro') };
