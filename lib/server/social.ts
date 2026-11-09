@@ -104,6 +104,24 @@ export async function orgForAsset(kind: 'page' | 'ig', id: string): Promise<stri
 }
 
 // Turns pages on/off: subscribes the app to each page (Meta then sends its comments) and claims it for this store.
+// Comments, messages, and "delivered" / "read" notices for Messenger (so the inbox shows ✓✓ like WhatsApp).
+const PAGE_FIELDS = ['feed', 'messages', 'message_deliveries', 'message_reads'];
+async function subscribePage(pageId: string, token: string) {
+  try {
+    await graph('POST', `${pageId}/subscribed_apps`, token, { subscribed_fields: PAGE_FIELDS });
+  } catch {
+    // The receipts are optional: comments and messages must keep working.
+    await graph('POST', `${pageId}/subscribed_apps`, token, { subscribed_fields: ['feed', 'messages'] });
+  }
+}
+// Pages turned on before receipts existed get them the next time something arrives (once per server).
+const receiptsAsked = new Set<string>();
+function askReceipts(pageId: string, token: string) {
+  if (receiptsAsked.has(pageId)) return;
+  receiptsAsked.add(pageId);
+  graph('POST', `${pageId}/subscribed_apps`, token, { subscribed_fields: PAGE_FIELDS }).catch(() => {});
+}
+
 export async function setActivePages(active: string[]): Promise<{ id: string; ok: boolean; error?: string }[]> {
   const d = await db();
   const s = await storedIntegrations(d.orgId);
@@ -120,7 +138,7 @@ export async function setActivePages(active: string[]): Promise<{ id: string; ok
         continue;
       }
       try {
-        await graph('POST', `${p.id}/subscribed_apps`, token, { subscribed_fields: ['feed', 'messages'] });
+        await subscribePage(p.id, token);
         await rawDb().from('settings').upsert({ org_id: d.orgId, id: indexId('page', p.id), data: { at: new Date().toISOString() } });
         if (p.ig) await rawDb().from('settings').upsert({ org_id: d.orgId, id: indexId('ig', p.ig.id), data: { page: p.id } });
         results.push({ id: p.id, ok: true });
@@ -495,6 +513,7 @@ export async function handleComment(c: IncomingComment): Promise<SocialLogItem |
     if (!page) return null;
     const token = decrypt(page.token);
     if (!token) return null;
+    if (c.channel === 'facebook') askReceipts(page.id, token);
     if (!(await claim([`c:${c.commentId}`])).size) return null; // already handled (Meta sends some twice)
 
     const settings = await getSocialSettings();
@@ -672,6 +691,46 @@ async function privateToChat(c: IncomingComment, pageId: string, r: any, text: s
   ).catch(() => {});
 }
 
+// "Delivered" / "read" notices from Messenger (mids or a watermark: everything before it) and Instagram (mid).
+export interface SocialReceipt {
+  kind: 'page' | 'ig';
+  assetId: string;
+  chat: string; // m… / i… chat id
+  status: 'delivered' | 'read';
+  mids: string[];
+  watermark: number | null; // ms
+}
+export function parseSocialReceipts(body: any): SocialReceipt[] {
+  const out: SocialReceipt[] = [];
+  if (body?.object !== 'page' && body?.object !== 'instagram') return out;
+  const kind = body.object === 'page' ? 'page' : 'ig';
+  for (const entry of Array.isArray(body.entry) ? body.entry : []) {
+    const assetId = String(entry?.id || '');
+    for (const ev of Array.isArray(entry?.messaging) ? entry.messaging : []) {
+      const person = String(ev?.sender?.id || '');
+      if (!/^\d{5,30}$/.test(person) || person === assetId) continue;
+      const chat = `${kind === 'page' ? 'm' : 'i'}${person}`;
+      const r = ev.delivery || ev.read;
+      if (!r) continue;
+      const mids = (Array.isArray(r.mids) ? r.mids : r.mid ? [r.mid] : []).map(String).filter(Boolean);
+      const watermark = Number(r.watermark) || null;
+      if (!mids.length && !watermark) continue;
+      out.push({ kind, assetId, chat, status: ev.read ? 'read' : 'delivered', mids, watermark });
+    }
+  }
+  return out;
+}
+
+// Moves the store's messages forward (sent → delivered → read), never backwards.
+export async function applySocialReceipt(r: SocialReceipt) {
+  const lower = r.status === 'read' ? ['sent', 'delivered'] : ['sent'];
+  const d = await db();
+  if (r.mids.length)
+    await d.from('wa_messages').update({ status: r.status }).eq('conversation_id', r.chat).eq('direction', 'out').in('wa_message_id', r.mids.slice(0, 100)).in('status', lower);
+  if (r.watermark)
+    await d.from('wa_messages').update({ status: r.status }).eq('conversation_id', r.chat).eq('direction', 'out').lte('created_at', new Date(r.watermark).toISOString()).in('status', lower);
+}
+
 export interface IncomingChatEvent {
   kind: 'page' | 'ig';
   assetId: string; // page id or instagram account id
@@ -745,6 +804,10 @@ export async function handleSocialMessage(ev: IncomingChatEvent & { echo?: boole
   const pages = (await storedIntegrations(org)).social?.pages || [];
   const page = pages.find((p) => p.active && (ev.kind === 'page' ? p.id === ev.assetId : p.ig?.id === ev.assetId));
   if (!page) return;
+  if (ev.kind === 'page') {
+    const t = decrypt(page.token);
+    if (t) askReceipts(page.id, t);
+  }
   const id = ev.message.from;
   const known = await chatMeta(id);
   if (!known || (!known.name && !known.username)) {
