@@ -259,7 +259,12 @@ function MediaView({ m }: { m: WaMessage }) {
         <img src={src} alt={media.caption || (m.direction === 'out' ? 'Foto enviada' : 'Foto del cliente')} onError={() => setFailed(true)} className={`rounded-xl ${media.kind === 'sticker' ? 'w-28 h-28 object-contain' : 'max-h-72 w-auto max-w-full object-cover'}`} />
       </a>
     );
-  if (media.kind === 'audio') return <audio controls preload="none" src={src} onError={() => setFailed(true)} className="w-64 max-w-full h-10" />;
+  if (media.kind === 'audio') {
+    // iPhone (and old Safari) can't play WhatsApp's OGG/Opus: ask for an MP3 copy.
+    const asMp3 = !media.url && typeof document !== 'undefined' && !document.createElement('audio').canPlayType('audio/ogg; codecs=opus');
+    const audioSrc = asMp3 ? withChatOrg(`/api/whatsapp/media/${media.id}?as=mp3`) : src;
+    return <audio controls preload="metadata" src={audioSrc} onError={() => setFailed(true)} className="w-64 max-w-full h-10" />;
+  }
   if (media.kind === 'video') return <video controls preload="metadata" src={src} onError={() => setFailed(true)} className="rounded-xl max-h-72 max-w-full" />;
   const name = media.filename || 'documento';
   return (
