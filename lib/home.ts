@@ -14,6 +14,7 @@ export interface HomeChat {
   order: { number: string; status: string; product: string; total: number } | null;
   assignee: string | null;
   fromAd: boolean;
+  followUpAt?: string | null; // the AI's automatic follow-up really went out (after the last message of the customer)
   org?: string; // store, when several are shown together (set in the panel)
   store?: string;
 }
@@ -31,7 +32,7 @@ export interface HomeData {
   ai: { chats: number; solo: number; team: number; waiting: number };
 }
 
-// Minimum silence before a chat the AI answered shows up in "Retoma".
+// Minimum silence before a chat the AI answered shows up in "Por retomar".
 export const RETAKE_AFTER_MS = 2 * 3600_000;
 // WhatsApp's free reply window.
 export const WINDOW_MS = 24 * 3600_000;

@@ -55,6 +55,7 @@ type Conversation = WaConversation & {
   tags?: string[];
   assignee?: string | null;
   bot?: BotState;
+  followUpAt?: string | null; // the AI's automatic follow-up really went out
   ad?: { id: string; headline: string | null; body: string | null; url: string | null; thumb: string | null; at: string } | null;
   org: string; // store ('' = the session's store when the store list isn't available)
   key: string; // org|id: the same customer can write to two stores
@@ -295,7 +296,7 @@ function WindowChip({ left }: { left: number }) {
 // What the chat is, in one line (list and thread header).
 function chatStatus(c: Conversation, now: number, botOn: boolean, assigneeName: string | null) {
   if (needsHelp(c)) return { label: 'Necesita tu ayuda', cls: 'text-amber-700', Icon: AlertTriangle };
-  if (isRetake(c, now)) return { label: 'Retoma', cls: 'text-violet-700', Icon: Clock };
+  if (isRetake(c, now)) return c.followUpAt ? { label: 'Seguimiento enviado', cls: 'text-violet-700', Icon: Clock } : { label: 'Por retomar', cls: 'text-violet-700', Icon: Clock };
   if (isUnanswered(c) && (!botOn || c.bot?.paused)) return { label: 'Espera respuesta', cls: 'text-red-600', Icon: Clock };
   if (isAttending(c)) return { label: assigneeName ? `Atiende ${assigneeName}` : 'Atendiendo', cls: 'text-emerald-700', Icon: UserRound };
   if (aiWorking(c, now, botOn)) return { label: 'IA atendiendo', cls: 'text-violet-700', Icon: Bot };
@@ -323,8 +324,10 @@ function Guide({ c, now, botOn, botName, busy, onBot }: { c: Conversation; now: 
     ];
   } else if (isRetake(c, now)) {
     tone = 'bg-violet-50 border-violet-200 text-violet-900';
-    title = 'Retoma esta conversación';
-    steps = [`La IA contestó hace ${ago(c.last_message_at, now)} y el cliente no volvió a escribir.`, 'Escríbele para cerrar la venta: pregúntale si le quedó alguna duda.'];
+    title = c.followUpAt ? 'Seguimiento enviado, sin respuesta' : 'Por retomar';
+    steps = c.followUpAt
+      ? [`La IA le escribió un seguimiento hace ${ago(c.followUpAt, now)} y el cliente no ha respondido.`, 'Si quieres insistir, escríbele tú.']
+      : [`La IA contestó hace ${ago(c.last_message_at, now)} y el cliente no volvió a escribir. Todavía nadie le ha hecho seguimiento.`, 'Escríbele para cerrar la venta: pregúntale si le quedó alguna duda.'];
   } else if (isUnanswered(c) && (!botOn || c.bot?.paused)) {
     tone = 'bg-red-50 border-red-200 text-red-900';
     title = 'El cliente espera respuesta';
@@ -865,7 +868,7 @@ export default function OmnichannelInbox() {
 
   const cards: { id: Exclude<Focus, 'all'>; label: string; n: number; Icon: typeof Clock; tone: string; on: string }[] = [
     { id: 'help', label: 'Necesitan tu ayuda', n: counts.help, Icon: AlertTriangle, tone: 'bg-amber-50/80 text-amber-600', on: 'ring-amber-400' },
-    { id: 'retake', label: 'Retoma', n: counts.retake, Icon: Clock, tone: 'bg-violet-50/70 text-violet-600', on: 'ring-violet-400' },
+    { id: 'retake', label: 'Por retomar', n: counts.retake, Icon: Clock, tone: 'bg-violet-50/70 text-violet-600', on: 'ring-violet-400' },
     { id: 'ai', label: 'IA trabajando', n: counts.ai, Icon: Bot, tone: 'bg-sky-50/70 text-sky-600', on: 'ring-sky-400' },
     { id: 'attending', label: 'Atendiendo', n: counts.attending, Icon: UserRound, tone: 'bg-emerald-50/70 text-emerald-600', on: 'ring-emerald-400' },
   ];

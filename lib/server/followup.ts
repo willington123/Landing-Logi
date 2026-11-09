@@ -30,6 +30,12 @@ async function writeMarks(all: Record<string, FollowUpMark>) {
   await (await db()).from('settings').upsert({ id: 'wa_followups', data: all });
 }
 
+// Chats that really got the automatic follow-up (phone → when), for the panel's labels.
+export async function followUpsSent(): Promise<Record<string, string>> {
+  const marks = await readMarks().catch(() => ({}) as Record<string, FollowUpMark>);
+  return Object.fromEntries(Object.entries(marks).filter(([, m]) => m.sent).map(([id, m]) => [id, m.at]));
+}
+
 // Daytime only (8 a. m. – 8 p. m. in the store's time zone): the run later in the window sends it.
 function daytime(timeZone: string, now = new Date()) {
   const { hhmm } = localTime(now, timeZone);
