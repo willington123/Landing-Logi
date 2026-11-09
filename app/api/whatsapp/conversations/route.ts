@@ -6,6 +6,7 @@ import { chatScope, getAgents, getAssignments, getConversationAds, getConversati
 import { currentOrgId, currentRole } from '@/lib/server/tenant';
 import { storedIntegrations } from '@/lib/server/integrations';
 import { botConfigured, getBotSettings, getBotStates } from '@/lib/server/bot';
+import { followUpsSent } from '@/lib/server/followup';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ export async function GET() {
   try {
     const botStates = await getBotStates();
     const waiting = Object.keys(botStates).filter((id) => botStates[id].paused && (botStates[id].reason === 'handoff' || botStates[id].reason === 'limit'));
-    const [conversations, tagMap, tags, agents, assign, bot, ads] = await Promise.all([
+    const [conversations, tagMap, tags, agents, assign, bot, ads, followUps] = await Promise.all([
       listConversations(200, waiting),
       getConversationTags(),
       getTags(),
@@ -23,6 +24,7 @@ export async function GET() {
       getAssignments(),
       getBotSettings(),
       getConversationAds(),
+      followUpsSent(),
     ]);
     // Members who only see their chats get just those.
     const [scope, role] = await Promise.all([chatScope(), currentRole()]);
@@ -36,6 +38,8 @@ export async function GET() {
         tags: (tagMap[c.id] || []).filter((id) => known.has(id)),
         assignee: assign[c.id] && people.has(assign[c.id]) ? assign[c.id] : null,
         ad: ads[c.id] ? { id: ads[c.id].id, headline: ads[c.id].headline || null, body: ads[c.id].body || null, url: ads[c.id].url || null, thumb: ads[c.id].thumb || null, at: ads[c.id].at } : null,
+        // The automatic follow-up went out after the customer's last message (an older one doesn't count).
+        followUpAt: followUps[c.id] && c.last_inbound_at && followUps[c.id] > c.last_inbound_at ? followUps[c.id] : null,
         bot: botStates[c.id]?.paused ? { paused: true, reason: botStates[c.id].reason || null, note: botStates[c.id].note || null, at: botStates[c.id].pausedAt || null } : null,
       })),
       bot: { enabled: bot.enabled && (await botConfigured()), mode: bot.mode, name: bot.name },

@@ -64,7 +64,9 @@ function whatToDo(c: HomeChat, now: number) {
   if (c.reason === 'retake') {
     const left = c.lastInboundAt ? WINDOW_MS - (now - new Date(c.lastInboundAt).getTime()) : 0;
     const h = Math.max(0, Math.floor(left / 3600_000));
-    return `La IA contestó hace ${ago(c.since, now)} y el cliente no volvió a escribir. Escríbele tú: ${h >= 1 ? `quedan ${h} h` : 'queda menos de 1 h'} para responder gratis.`;
+    const time = h >= 1 ? `quedan ${h} h` : 'queda menos de 1 h';
+    if (c.followUpAt) return `La IA le envió un seguimiento hace ${ago(c.followUpAt, now)} y el cliente no ha respondido. Si quieres insistir, escríbele tú: ${time} para responder gratis.`;
+    return `La IA contestó hace ${ago(c.since, now)} y el cliente no volvió a escribir. Nadie le ha hecho seguimiento: escríbele tú, ${time} para responder gratis.`;
   }
   const why = c.note ? `Necesita humano: ${c.note.replace(/\.$/, '')}` : 'La IA pidió una persona';
   return c.waiting && c.lastInboundAt ? `${why}. Lleva ${ago(c.lastInboundAt, now)} esperando y nadie le ha contestado.` : `${why}.`;
@@ -86,7 +88,7 @@ function ChatRow({ c, now, multi }: { c: HomeChat; now: number; multi: boolean }
               {c.waiting ? (
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">esperando respuesta</span>
               ) : c.reason === 'retake' ? (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">la IA contestó</span>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">{c.followUpAt ? 'seguimiento enviado' : 'sin seguimiento'}</span>
               ) : null}
               {multi && c.store && <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${storeColor(c.org || '')}`}>{c.store}</span>}
               {c.fromAd && (
@@ -328,11 +330,11 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
                   <Clock className="w-5 h-5" />
                 </span>
                 <div>
-                  <p className="text-[15px] font-semibold text-slate-900">Retoma</p>
+                  <p className="text-[15px] font-semibold text-slate-900">Por retomar</p>
                   <p className="text-[28px] font-bold text-slate-900 leading-tight tabular-nums">{data.retake.count}</p>
                 </div>
               </div>
-              <p className="text-sm text-slate-600 mt-2 flex-1">La IA contestó y llevan dos horas sin respuesta.</p>
+              <p className="text-sm text-slate-600 mt-2 flex-1">La IA contestó y el cliente lleva 2 h sin responder. Escríbeles tú.</p>
               <button onClick={() => goList('retake')} className="mt-4 h-10 rounded-xl bg-violet-100/70 hover:bg-violet-100 text-violet-800 text-sm font-semibold inline-flex items-center justify-center gap-1.5">
                 Retomar <ArrowRight className="w-4 h-4" />
               </button>
@@ -418,7 +420,7 @@ export default function AttentionHome({ name, fallback }: { name?: string | null
                 {(
                   [
                     ['help', 'Necesitan ayuda', data.help.count],
-                    ['retake', 'Retoma', data.retake.count],
+                    ['retake', 'Por retomar', data.retake.count],
                   ] as const
                 ).map(([k, label, n]) => (
                   <button

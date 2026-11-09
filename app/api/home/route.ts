@@ -3,6 +3,7 @@ import { cloudEnabled, db } from '@/lib/server/db';
 import { samePhone } from '@/lib/server/wa-store';
 import { chatScope, getAgents, getAssignments, getConversationAds, getConversationTags, getTags, myAgent } from '@/lib/server/crm-store';
 import { botConfigured, getBotSettings, getBotStates } from '@/lib/server/bot';
+import { followUpsSent } from '@/lib/server/followup';
 import { rangeFromQuery } from '@/lib/server/ads-report';
 import { shouldResume } from '@/lib/bot';
 import { RETAKE_AFTER_MS, WINDOW_MS, type HomeChat, type HomeData } from '@/lib/home';
@@ -97,6 +98,7 @@ export async function GET(req: NextRequest) {
         orderById[r.id] = { number: o.orderNumber, status: r.status, product: o.comboName ? `${o.productName} · ${o.comboName}` : o.productName, total: Number(o.totalAmount) || 0 };
       }
     }
+    const followUps = retakeRows.length ? await followUpsSent() : {};
     const tagById = Object.fromEntries(tags.map((t) => [t.id, t]));
     const agentName = (id: string) => agents.find((a) => a.id === assign[id])?.name || null;
     const toChat = (c: any, reason: HomeChat['reason']): HomeChat => ({
@@ -112,6 +114,7 @@ export async function GET(req: NextRequest) {
       order: (c.order_id && orderById[c.order_id]) || null,
       assignee: agentName(c.id),
       fromAd: Boolean((ads as Record<string, unknown>)[c.id]),
+      followUpAt: followUps[c.id] && c.last_inbound_at && followUps[c.id] > c.last_inbound_at ? followUps[c.id] : null,
     });
 
     // Chats a person took over and are still with them (they go back to the AI after the hours the store chose).
