@@ -171,7 +171,7 @@ Cómo empiezas:
 ${sell}
 
 También puedes:
-- Enviar fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Cada foto tiene un nombre que dice qué es: cuando el cliente pregunte o pida algo que corresponde al nombre de una foto, envíale esa foto (indica su número) además de responderle. Por ejemplo: si pregunta el precio y hay una foto "Precios", envíala; si pide ver el producto o fotos, envía las fotos "Producto"; si pregunta tallas o medidas, la de "Tallas y medidas"; y lo mismo con cualquier otro nombre (cómo se usa, resultados, testimonios, envíos). Envía solo las fotos que corresponden a lo que pidió, no todas. La nota de voz, cuando el cliente confirme que le interesa el producto o pregunte cómo es o cómo funciona. Nunca envíes nada en respuesta a un simple saludo. No digas que las enviaste ni las anuncies ("te dejé fotos", "te mandé un audio", "mira arriba"): el cliente ya las ve en el chat. Acompáñalas con una respuesta corta y una sola pregunta para seguir la conversación (por ejemplo "¿Para qué tipo de piel lo buscas?"), sin repetir lo que dice la nota de voz. Cada foto y la nota de voz se envían una sola vez por cliente: si ya se le envió esa misma, no la repitas salvo que el cliente pida de forma explícita que se la reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
+- Enviar fotos y la nota de voz de un producto con enviar_medios, cuando el producto las tenga (sección Productos, "Material para enviar"). Cada foto tiene un nombre que dice qué es: cuando el cliente pregunte o pida algo que corresponde al nombre de una foto, envíale esa foto (indica su número) además de responderle. Por ejemplo: si pregunta el precio y hay una foto "Precios", envíala; si pide ver el producto o fotos, envía las fotos "Producto"; si pregunta tallas o medidas, la de "Tallas y medidas"; y lo mismo con cualquier otro nombre (cómo se usa, resultados, testimonios, envíos). Envía solo las fotos que corresponden a lo que pidió, no todas. La nota de voz, cuando el cliente confirme que le interesa el producto o pregunte cómo es o cómo funciona. Nunca envíes nada en respuesta a un simple saludo. No digas que las enviaste ni las anuncies ("te dejé fotos", "te mandé un audio", "mira arriba"): el cliente ya las ve en el chat. Si envías solo fotos, acompáñalas con una respuesta corta y una sola pregunta para seguir la conversación (por ejemplo "¿Para qué tipo de piel lo buscas?"). Si envías la nota de voz, no escribas ningún texto en ese turno: la nota de voz ya le explica y el cliente responderá después de escucharla. Cada foto y la nota de voz se envían una sola vez por cliente: si ya se le envió esa misma, no la repitas salvo que el cliente pida de forma explícita que se la reenvíes. Tú ya sabes lo que dice la nota de voz: usa esa información en tus respuestas y no la contradigas. No digas que es una grabación automática; puedes decir "te dejo unas fotos" o "te mando una nota de voz donde te explico".
 - Consultar los pedidos de este cliente con consultar_pedidos (solo los hechos con su número de WhatsApp) y decirle en qué estado van y el número de guía si ya fue despachado.
 
 Reglas importantes:
@@ -337,7 +337,9 @@ async function sendProductMedia(
     ...out,
     nota: out.ya_enviado.length && !out.fotos_enviadas && !out.nota_de_voz_enviada
       ? 'Ya se le había enviado antes: no lo repitas. Sigue la conversación con lo que sabes del producto.'
-      : 'Listo, ya los ve en el chat. No digas que los enviaste ni los describas; escribe solo una pregunta corta para seguir la conversación.',
+      : out.nota_de_voz_enviada
+        ? 'Listo, ya le llegó la nota de voz. No escribas nada más en este turno: la nota de voz ya le explica y el cliente responderá después de escucharla.'
+        : 'Listo, ya los ve en el chat. No digas que los enviaste ni los describas; escribe solo una pregunta corta para seguir la conversación.',
     ...(media.audio?.transcript && wantAudio ? { lo_que_dice_la_nota_de_voz: media.audio.transcript } : {}),
     ...(ctx.dryRun ? { simulador: 'No se envió nada de verdad.' } : {}),
   };
@@ -492,6 +494,7 @@ export interface BotRun {
   refused?: boolean;
   order?: string; // order number created in this run
   booked?: string; // appointment booked in this run ("Corte · martes 4 de noviembre, 3:00 p. m.")
+  sentVoice?: boolean; // the product's voice note went out in this run (then no text is sent with it)
   usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
@@ -589,6 +592,7 @@ export async function runBot(opts: {
           if (r.booked) run.booked = r.booked;
         } else if (t.name === 'enviar_medios') {
           result = await sendProductMedia(t.input as any, { phone: opts.phone, landings: knowledge.landings, media: knowledge.media || {}, dryRun: Boolean(opts.dryRun) });
+          if ((result as any)?.nota_de_voz_enviada) run.sentVoice = true;
         } else if (t.name === 'consultar_pedidos') {
           const orders = await ordersFor(opts.phone);
           result = orders.length ? { pedidos: orders } : { pedidos: [], nota: 'No hay pedidos con este número de WhatsApp. Puede que el cliente haya usado otro número en el formulario: pídele el número del pedido (empieza por LP-) o pásalo a una persona.' };

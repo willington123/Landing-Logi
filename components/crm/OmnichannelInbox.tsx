@@ -244,6 +244,20 @@ function StoreChip({ name, id }: { name: string; id: string }) {
   return <span className={`inline-flex items-center max-w-[160px] px-2 py-0.5 rounded-md text-[11px] font-medium ${storeColor(id)}`}><span className="truncate">{name}</span></span>;
 }
 
+// Marks the searched word (accents and capitals don't matter).
+function Highlight({ text, q }: { text: string; q: string }) {
+  const plain = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const i = q ? plain(text).indexOf(plain(q)) : -1;
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="bg-amber-200/70 text-slate-900 rounded px-0.5">{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
+  );
+}
+
 const adName = (ad: NonNullable<Conversation['ad']>) => ad.name || ad.headline || `Anuncio ${ad.id}`;
 function AdChip({ ad }: { ad: NonNullable<Conversation['ad']> }) {
   const label = adName(ad);
@@ -436,6 +450,9 @@ export default function OmnichannelInbox() {
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [search, setSearch] = useState('');
+  // Words found inside the messages of every chat (not only the last one), from each store shown.
+  type Hit = { id: string; conversationId: string; name: string | null; direction: 'in' | 'out'; text: string; at: string; org: string; key: string };
+  const [hits, setHits] = useState<{ q: string; list: Hit[]; loading: boolean }>({ q: '', list: [], loading: false });
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -494,6 +511,23 @@ export default function OmnichannelInbox() {
   const targets = useMemo(() => (!stores ? null : stores.length ? (chosen || []).map((s) => ({ id: s.id, name: s.name })) : [{ id: '', name: '' }]), [stores, chosen]);
   const targetsRef = useRef(targets);
   targetsRef.current = targets;
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 3 || !targets?.length) {
+      setHits({ q: '', list: [], loading: false });
+      return;
+    }
+    setHits((h) => ({ ...h, loading: true }));
+    const t = setTimeout(async () => {
+      const res = await Promise.allSettled(targets.map((s) => api<{ results: Omit<Hit, 'org' | 'key'>[] }>(`/api/whatsapp/search?q=${encodeURIComponent(q)}`, { headers: hdr(s.id) })));
+      const list: Hit[] = [];
+      res.forEach((r, i) => r.status === 'fulfilled' && r.value.results.forEach((h) => list.push({ ...h, org: targets[i].id, key: keyOf(targets[i].id, h.conversationId) })));
+      list.sort((a, b) => b.at.localeCompare(a.at));
+      setHits((cur) => (search.trim() === q || cur.q === '' ? { q, list, loading: false } : cur));
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, targets]);
   const currentRef = useRef(currentId);
   currentRef.current = currentId;
   const hdr = (org: string) => chatOrgHeaders(org && org !== currentRef.current ? org : null);
@@ -577,7 +611,11 @@ export default function OmnichannelInbox() {
       // Only replace when something changed, so polling doesn't re-scroll the thread.
       const sig = (xs: WaMessage[]) => xs.map((m) => `${m.id}:${m.status}`).join('|');
       setMessages((prev) => (sig(prev) === sig(d.messages) ? prev : d.messages));
-      setConversations((prev) => prev.map((c) => (c.key === key ? { ...c, ...d.conversation, org: c.org, key: c.key, tags: c.tags, assignee: c.assignee, bot: c.bot, ad: c.ad, unread_count: c.unread_count } : c)));
+      setConversations((prev) =>
+        prev.some((c) => c.key === key)
+          ? prev.map((c) => (c.key === key ? { ...c, ...d.conversation, org: c.org, key: c.key, tags: c.tags, assignee: c.assignee, bot: c.bot, ad: c.ad, unread_count: c.unread_count } : c))
+          : [...prev, { ...(d.conversation as Conversation), org, key, tags: [], assignee: null, bot: null, ad: null }], // an older chat opened from the search
+      );
       if (d.conversation.unread_count > 0) {
         await api(`/api/whatsapp/conversations/${id}/read`, { method: 'POST', headers: hdr(org) });
         setConversations((prev) => prev.map((c) => (c.key === key ? { ...c, unread_count: 0 } : c)));
@@ -981,7 +1019,7 @@ export default function OmnichannelInbox() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar cliente, teléfono o producto…"
+              placeholder="Buscar cliente, teléfono o una palabra…"
               className="w-full h-10 text-[16px] sm:text-[13px] bg-white border border-slate-200 rounded-xl pl-9 pr-8 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             />
             {search && (
@@ -1178,7 +1216,7 @@ export default function OmnichannelInbox() {
             )}
             {listError && <p className="m-3 text-xs text-red-600 bg-red-50 rounded-xl p-3">No se pudieron cargar las conversaciones: {listError}</p>}
             {loaded && targets && !targets.length && <p className="p-6 text-center text-[13px] text-slate-500">Elige al menos una tienda en “Bandejas que ves”.</p>}
-            {loaded && !listError && !!targets?.length && filtered.length === 0 && (
+            {loaded && !listError && !!targets?.length && filtered.length === 0 && !(search.trim().length >= 3 && hits.list.length > 0) && (
               <div className="p-6 text-center text-[13px] text-slate-500">
                 {conversations.length === 0
                   ? 'Aún no hay conversaciones. Aparecerán aquí cuando se envíe una confirmación de pedido o un cliente escriba a tu número de WhatsApp.'
@@ -1229,6 +1267,27 @@ export default function OmnichannelInbox() {
                 </div>
               );
             })}
+            {search.trim().length >= 3 && (
+              <div className="border-t border-slate-200">
+                <p className="px-4 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
+                  En los mensajes {hits.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : `(${hits.list.length}${hits.list.length >= 80 ? '+' : ''})`}
+                </p>
+                {!hits.loading && !hits.list.length && <p className="px-4 pb-4 text-[13px] text-slate-500">Ningún mensaje dice “{search.trim()}”.</p>}
+                {hits.list.map((h) => (
+                  <button key={h.org + h.id} onClick={() => setActiveKey(h.key)} className={`w-full text-left px-4 py-2.5 border-b border-slate-100 hover:bg-slate-50 ${h.key === activeKey ? 'bg-blue-50/60' : ''}`}>
+                    <span className="flex items-baseline gap-2">
+                      <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-slate-900">{h.name || phoneLabel(h.conversationId)}</span>
+                      <span className="text-[11px] text-slate-400 shrink-0">{new Date(h.at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' }).replace('.', '')}</span>
+                    </span>
+                    <span className="block text-[12px] text-slate-600 line-clamp-2">
+                      {h.direction === 'out' && <span className="text-slate-400">Tú: </span>}
+                      <Highlight text={h.text} q={search.trim()} />
+                    </span>
+                    {multi && <span className="block mt-1"><StoreChip id={h.org} name={storeName(h.org)} /></span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
