@@ -8,6 +8,7 @@ import { markConversationRead, recordOutbound } from '@/lib/server/wa-store';
 import { addConversationTags, addNote, getAutoSettings, getTags } from '@/lib/server/crm-store';
 import { botConfigured, chatHistory, getBotSettings, getBotState, runBot, setBotState } from '@/lib/server/bot';
 import { findTag, isOrderTag, isWorkingTime, type CrmTag } from '@/lib/crm';
+import { pushToStore } from '@/lib/server/push';
 import { shouldResume } from '@/lib/bot';
 import { autoAssign } from '@/lib/server/crm-store';
 
@@ -93,6 +94,7 @@ async function answer(m: InboundMessage) {
   if (replies >= settings.maxRepliesPerDay) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'limit', note: 'Límite diario de respuestas del asistente.' });
     await autoAssign(m.from, 'handoff').catch(() => null);
+    await pushToStore({ kind: 'handoff', chatId: m.from, title: `🙋 ${m.profileName || 'Un cliente'} necesita un asesor`, body: 'El asistente llegó a su límite de respuestas del día con este cliente.' });
     return;
   }
 
@@ -135,6 +137,7 @@ async function answer(m: InboundMessage) {
     await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'handoff', note: run.handoff.motivo });
     await autoAssign(m.from, 'handoff').catch(() => null);
     await addNote(m.from, `🤖 El asistente pasó el chat a una persona: ${run.handoff.motivo}`).catch(() => {});
+    await pushToStore({ kind: 'handoff', chatId: m.from, title: `🙋 ${m.profileName || 'Un cliente'} necesita un asesor`, body: run.handoff.motivo });
     const want = HANDOFF_TAG[run.handoff.tipo];
     if (want) await addTag(m.from, (tags) => findTag(tags, want[0], want[1])).catch(() => {});
   }

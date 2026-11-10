@@ -45,6 +45,7 @@ SaaS multi-tienda para tiendas de **pago contraentrega** (Colombia principalment
 - **Pedidos a mano**: `lib/server/manual-order.ts` y `components/orders/NewOrderModal.tsx`.
 - **Dropi**: `lib/server/dropi.ts` (API, igual que el plugin oficial de WooCommerce) y Excel de carga masiva `lib/dropi-bulk.ts`.
 - **Rentabilidad** (`/rentabilidad`, solo dueño y administradores): cálculo puro en `lib/profit.ts` (`computeProfit`: utilidad proyectada = confirmados × % de entrega; real = entregados vs devueltos), datos en `lib/server/profit.ts` (settings `profit_config` y `profit_ledger`), pauta de Meta por día con `adDailySpend` (`lib/server/meta-ads.ts`), comprobantes por `app/api/profit/receipt` (nunca se muestra el enlace público). Pedidos tienen estado `returned` (Devuelto).
+- **Avisos push** (con Konnexa cerrado): `lib/server/push.ts` (`pushToStore`; llaves VAPID creadas solas y dispositivos por persona en `platform_settings`), `lib/push-client.ts`, `components/layout/PushAlerts.tsx`, evento `push` en `public/sw.js`. Se avisa cuando la IA pasa un chat y cuando un mensaje solo lo puede contestar una persona; va al asesor asignado o, si no hay, a todos.
 - **Cobros**: `lib/plans.ts`, `lib/server/billing.ts`, Wompi. Las tiendas del administrador de la plataforma (`PLATFORM_ADMIN_EMAILS`) no pagan.
 
 ## Cómo probar

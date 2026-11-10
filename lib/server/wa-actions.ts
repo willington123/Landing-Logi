@@ -129,7 +129,11 @@ export async function handleInbound(m: InboundMessage) {
       console.error('Asistente IA: no se pudo iniciar', e);
       return false;
     });
-    if (!byBot) await fallback();
+    if (!byBot) {
+      await fallback();
+      // Nobody but a person will answer this one: tell them on their phone.
+      await (await import('@/lib/server/push')).pushToStore({ kind: 'message', chatId: m.from, title: m.profileName || 'Nuevo mensaje', body: m.text || 'Te envió un archivo.' });
+    }
     // The store's own flows ("un cliente escribe una palabra clave"), after the reply.
     if (m.text) await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'message', phone: m.from, text: m.text, name: m.profileName });
     return;
