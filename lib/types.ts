@@ -9,7 +9,8 @@ export type OrderStatus =
   | 'retry_scheduled'
   | 'cancelled'
   | 'shipped'
-  | 'delivered';
+  | 'delivered'
+  | 'returned'; // devuelto: the carrier brought it back (contraentrega no cobrada)
 
 export interface ProductCombo {
   id: string;

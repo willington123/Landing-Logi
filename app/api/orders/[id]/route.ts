@@ -16,7 +16,7 @@ async function whoAmI(): Promise<string | null> {
   return (user?.name || user?.email?.split('@')[0] || null)?.slice(0, 60) || null;
 }
 
-const STATUSES: OrderStatus[] = ['pending_call', 'calling', 'confirmed_by_voice', 'needs_review', 'unanswered', 'retry_scheduled', 'cancelled', 'shipped', 'delivered'];
+const STATUSES: OrderStatus[] = ['pending_call', 'calling', 'confirmed_by_voice', 'needs_review', 'unanswered', 'retry_scheduled', 'cancelled', 'shipped', 'delivered', 'returned'];
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   if (!cloudEnabled()) return NextResponse.json({ success: false, error: 'La base de datos no está configurada.' }, { status: 503 });

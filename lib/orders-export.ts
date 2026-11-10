@@ -12,6 +12,7 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
   cancelled: 'Cancelado',
   shipped: 'En camino',
   delivered: 'Entregado',
+  returned: 'Devuelto',
 };
 
 const PAYMENT_LABEL: Record<string, string> = {

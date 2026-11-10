@@ -41,6 +41,7 @@ const ORDER_LABEL: Record<string, string> = {
   cancelled: 'Cancelado',
   shipped: 'En camino',
   delivered: 'Entregado',
+  returned: 'Devuelto',
 };
 
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;

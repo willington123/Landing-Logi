@@ -33,7 +33,7 @@ export interface CapiClient {
   url?: string;
 }
 
-const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered']);
+const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered', 'returned']);
 
 async function readSetting<T>(id: string): Promise<T | null> {
   const { data, error } = await (await db()).from('settings').select('data').eq('id', id).maybeSingle();

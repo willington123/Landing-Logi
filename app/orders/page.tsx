@@ -289,6 +289,13 @@ export default function OrdersPage() {
             <span>Entregado</span>
           </span>
         );
+      case 'returned':
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/15">
+            <RotateCcw className="w-3.5 h-3.5 text-orange-600" />
+            <span>Devuelto</span>
+          </span>
+        );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/15">

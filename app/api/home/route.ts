@@ -13,7 +13,7 @@ import { fail, failFrom, ok } from '@/lib/server/http';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered']);
+const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered', 'returned']);
 const LIST_MAX = 50;
 const PAGE = 1000;
 const MAX_PAGES = 60;

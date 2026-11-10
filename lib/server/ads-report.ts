@@ -50,7 +50,7 @@ export function rangeFromQuery(q: URLSearchParams, fallback: AdRange = '7d') {
   return { range, ...rangeDates(range, new Date(), { since: q.get('since'), until: q.get('until') }) };
 }
 
-const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered']);
+const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered', 'returned']);
 
 export type AdFlag = 'winner' | 'waste' | 'cancels';
 

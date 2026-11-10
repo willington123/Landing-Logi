@@ -86,6 +86,7 @@ const STATUS_TEXT: Record<OrderStatus, string> = {
   confirmed_by_voice: 'confirmado, preparando el despacho',
   shipped: 'despachado, en camino',
   delivered: 'entregado',
+  returned: 'devuelto (la transportadora no pudo entregarlo)',
   cancelled: 'cancelado',
 };
 

@@ -3,7 +3,7 @@
 // Linked order in the WhatsApp inbox, with quick actions (confirm, cancel, ship, deliver, fix address).
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, Truck, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, RotateCcw, Truck, XCircle } from 'lucide-react';
 import type { OrderSummary } from '@/lib/server/wa-store';
 import type { OrderStatus } from '@/lib/types';
 import { crmApi } from '@/components/crm/CrmParts';
@@ -12,7 +12,7 @@ import { CARRIERS } from '@/lib/crm';
 const PENDING: string[] = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
 
-export type OrderAction = 'confirmed_by_voice' | 'cancelled' | 'shipped' | 'delivered' | 'address';
+export type OrderAction = 'confirmed_by_voice' | 'cancelled' | 'shipped' | 'delivered' | 'returned' | 'address';
 
 export function OrderPanel({
   order,
@@ -59,7 +59,7 @@ export function OrderPanel({
 
   const status = order.status;
   const pending = PENDING.includes(status);
-  const closed = status === 'cancelled' || status === 'delivered';
+  const closed = status === 'cancelled' || status === 'delivered' || status === 'returned';
   const btn = 'h-9 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 transition';
   const spin = (a: OrderAction, icon: React.ReactNode) => (busy === a ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : icon);
 
@@ -179,9 +179,14 @@ export function OrderPanel({
             </button>
           )}
           {status === 'shipped' && (
-            <button onClick={() => setStatus('delivered')} disabled={busy !== null} className={`${btn} col-span-2 bg-green-600 hover:bg-green-700 text-white`}>
-              {spin('delivered', <PackageCheck className="w-3.5 h-3.5" />)} Marcar entregado
-            </button>
+            <>
+              <button onClick={() => setStatus('delivered')} disabled={busy !== null} className={`${btn} bg-green-600 hover:bg-green-700 text-white`}>
+                {spin('delivered', <PackageCheck className="w-3.5 h-3.5" />)} Entregado
+              </button>
+              <button onClick={() => setStatus('returned')} disabled={busy !== null} className={`${btn} bg-orange-50 hover:bg-orange-100 text-orange-800 ring-1 ring-inset ring-orange-200`}>
+                {spin('returned', <RotateCcw className="w-3.5 h-3.5" />)} Devuelto
+              </button>
+            </>
           )}
           {(pending || status === 'confirmed_by_voice') &&
             (askCancel ? (

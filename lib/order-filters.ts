@@ -2,7 +2,7 @@
 import type { OrderItem, OrderStatus } from '@/lib/types';
 
 export type DateRange = 'all' | 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom';
-export type StatusTab = 'all' | 'pending' | 'review' | 'unanswered' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+export type StatusTab = 'all' | 'pending' | 'review' | 'unanswered' | 'confirmed' | 'shipped' | 'delivered' | 'returned' | 'cancelled';
 export type WaFilter = '' | 'sent' | 'failed' | 'waiting' | 'confirmed_wa' | 'none';
 
 export interface OrderFilters {
@@ -39,6 +39,7 @@ export const STATUS_TABS: { id: StatusTab; label: string; statuses: OrderStatus[
   { id: 'confirmed', label: 'Confirmados', statuses: ['confirmed_by_voice'] },
   { id: 'shipped', label: 'Enviados', statuses: ['shipped'] },
   { id: 'delivered', label: 'Entregados', statuses: ['delivered'] },
+  { id: 'returned', label: 'Devueltos', statuses: ['returned'] },
   { id: 'cancelled', label: 'Cancelados', statuses: ['cancelled'] },
 ];
 
@@ -129,7 +130,7 @@ export const inTab = (o: OrderItem, tab: StatusTab) => tab === 'all' || (STATUS_
 export function summarize(list: OrderItem[]) {
   const total = list.length;
   const cancelled = list.filter((o) => o.status === 'cancelled').length;
-  const confirmed = list.filter((o) => ['confirmed_by_voice', 'shipped', 'delivered'].includes(o.status)).length;
+  const confirmed = list.filter((o) => ['confirmed_by_voice', 'shipped', 'delivered', 'returned'].includes(o.status)).length;
   const delivered = list.filter((o) => o.status === 'delivered');
   const pending = list.filter((o) => PENDING.includes(o.status)).length;
   return {

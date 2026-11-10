@@ -26,6 +26,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelled: 'Cancelado',
   shipped: 'Enviado',
   delivered: 'Entregado',
+  returned: 'Devuelto',
 };
 const STATUS_COLOR: Record<OrderStatus, string> = {
   pending_call: 'bg-amber-400',
@@ -37,8 +38,9 @@ const STATUS_COLOR: Record<OrderStatus, string> = {
   cancelled: 'bg-rose-400',
   shipped: 'bg-teal-500',
   delivered: 'bg-green-600',
+  returned: 'bg-orange-500',
 };
-const CONFIRMED: OrderStatus[] = ['confirmed_by_voice', 'shipped', 'delivered'];
+const CONFIRMED: OrderStatus[] = ['confirmed_by_voice', 'shipped', 'delivered', 'returned'];
 
 const money = (v: number) => `$${Math.round(v).toLocaleString('es-CO')}`;
 const pct = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : '—');

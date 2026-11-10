@@ -192,6 +192,7 @@ const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   cancelled: { label: 'Cancelado', cls: 'bg-slate-100 text-slate-600 ring-slate-500/15' },
   shipped: { label: 'En camino', cls: 'bg-sky-50 text-sky-700 ring-sky-600/15' },
   delivered: { label: 'Entregado', cls: 'bg-green-50 text-green-700 ring-green-600/15' },
+  returned: { label: 'Devuelto', cls: 'bg-orange-50 text-orange-700 ring-orange-600/15' },
 };
 
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;

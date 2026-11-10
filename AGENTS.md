@@ -44,6 +44,7 @@ SaaS multi-tienda para tiendas de **pago contraentrega** (Colombia principalment
 - **Productos de WhatsApp** (sin landing): `lib/products.ts`, `lib/server/products.ts` (ids `prd-…`, no tienen fila en `landings`; por eso el pedido guarda `landing_id` vacío). `sellables()` = landings publicadas + productos activos.
 - **Pedidos a mano**: `lib/server/manual-order.ts` y `components/orders/NewOrderModal.tsx`.
 - **Dropi**: `lib/server/dropi.ts` (API, igual que el plugin oficial de WooCommerce) y Excel de carga masiva `lib/dropi-bulk.ts`.
+- **Rentabilidad** (`/rentabilidad`, solo dueño y administradores): cálculo puro en `lib/profit.ts` (`computeProfit`: utilidad proyectada = confirmados × % de entrega; real = entregados vs devueltos), datos en `lib/server/profit.ts` (settings `profit_config` y `profit_ledger`), pauta de Meta por día con `adDailySpend` (`lib/server/meta-ads.ts`), comprobantes por `app/api/profit/receipt` (nunca se muestra el enlace público). Pedidos tienen estado `returned` (Devuelto).
 - **Cobros**: `lib/plans.ts`, `lib/server/billing.ts`, Wompi. Las tiendas del administrador de la plataforma (`PLATFORM_ADMIN_EMAILS`) no pagan.
 
 ## Cómo probar
