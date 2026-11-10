@@ -63,6 +63,7 @@ export const ORDER_STATUS_OPTIONS: { id: OrderStatus; label: string }[] = [
   { id: 'unanswered', label: 'No contesta' },
   { id: 'shipped', label: 'Enviado' },
   { id: 'delivered', label: 'Entregado' },
+  { id: 'returned', label: 'Devuelto' },
   { id: 'cancelled', label: 'Cancelado' },
 ];
 export const APPT_STATUS_OPTIONS: { id: AppointmentStatus; label: string }[] = [

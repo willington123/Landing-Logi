@@ -9,7 +9,7 @@ import InstallApp from '@/components/layout/InstallApp';
 import StoreAvatar, { STORE_LOGO_EVENT } from '@/components/layout/StoreAvatar';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2, Wallet } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -45,6 +45,7 @@ const NAV_GROUPS = [
     label: 'Crecer',
     items: [
       { href: '/creativos', label: 'Creativos', icon: Megaphone },
+      { href: '/rentabilidad', label: 'Rentabilidad', icon: Wallet, managers: true },
       { href: '/automations', label: 'Automatizaciones', icon: Workflow },
       { href: '/analytics', label: 'Analíticas', icon: BarChart3 },
     ],
@@ -61,14 +62,16 @@ const NAV_GROUPS = [
 ];
 
 // "Negocio con citas": Agenda takes the place of Pedidos, and the booking page the place of Landing pages.
-function navGroups(type?: 'store' | 'appointments') {
-  if (type !== 'appointments') return NAV_GROUPS;
+function navGroups(type?: 'store' | 'appointments', role?: string) {
+  // Rentabilidad is for the owner and admins only.
+  const groups = role === 'member' ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !(i as { managers?: boolean }).managers) })) : NAV_GROUPS;
+  if (type !== 'appointments') return groups;
   const swap: Record<string, { href: string; label: string; icon: typeof CalendarDays }> = {
     '/orders': { href: '/agenda', label: 'Agenda', icon: CalendarDays },
     '/landings': { href: '/reservas', label: 'Página de reservas', icon: Globe },
   };
   const order = ['/dashboard', '/agenda', '/reservas'];
-  return NAV_GROUPS.map((g) =>
+  return groups.map((g) =>
     g.label === 'Vender' ? { ...g, items: g.items.map((i) => swap[i.href] || i).sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href)) } : g,
   );
 }
@@ -297,7 +300,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               </Link>
             </div>
           )}
-          {navGroups(account?.businessType).map((group) => (
+          {navGroups(account?.businessType, account?.org?.role).map((group) => (
             <div key={group.label}>
               <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em]">
                 {group.label}

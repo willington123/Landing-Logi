@@ -81,7 +81,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
       const d = await call<Preview>(`/api/orders/${order.id}/guide?carrier=${encodeURIComponent(carrier)}&tracking=${encodeURIComponent(tracking.trim())}`, { headers: orderOrgHeaders(order) });
       setPreview(d);
       setMessage(d.message);
-      setMarkShipped(!['shipped', 'delivered', 'cancelled'].includes(order.status));
+      setMarkShipped(!['shipped', 'delivered', 'returned', 'cancelled'].includes(order.status));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -208,7 +208,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
               {carrier.trim() ? ` · ${carrier.trim()}` : ''}. Revisa el mensaje antes de enviarlo:
             </p>
             <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
-            {!['shipped', 'delivered', 'cancelled'].includes(order.status) && (
+            {!['shipped', 'delivered', 'returned', 'cancelled'].includes(order.status) && (
               <label className="flex items-center gap-2 text-[12.5px] text-slate-700">
                 <input type="checkbox" checked={markShipped} onChange={(e) => setMarkShipped(e.target.checked)} className="w-4 h-4 accent-brand-blue" />
                 Marcar el pedido como <b>Enviado</b>

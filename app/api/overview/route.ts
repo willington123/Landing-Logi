@@ -9,7 +9,7 @@ import { failFrom, ok } from '@/lib/server/http';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered']);
+const CONFIRMED = new Set(['confirmed_by_voice', 'shipped', 'delivered', 'returned']);
 const env = (k: string) => (process.env[k] || '').trim();
 
 // "Mis tiendas": one row per store the person belongs to, with orders and sales of the period.

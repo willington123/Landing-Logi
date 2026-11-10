@@ -175,6 +175,32 @@ export async function adInsights(cfg: AdsConfig, since: string, until: string): 
   });
 }
 
+// Spend per ad and day (Rentabilidad): one row per ad with spend on each day of the range.
+export interface AdDaySpend {
+  date: string; // YYYY-MM-DD (account time zone)
+  adId: string;
+  campaign: string;
+  spend: number;
+}
+export async function adDailySpend(cfg: AdsConfig, since: string, until: string): Promise<AdDaySpend[]> {
+  if (!cfg.accountId) return [];
+  return cached(`day:${cfg.accountId}:${cfg.token.slice(-12)}:${since}:${until}`, 10 * 60000, async () => {
+    const out: AdDaySpend[] = [];
+    const params = { level: 'ad', fields: 'ad_id,campaign_name,spend', time_range: JSON.stringify({ since, until }), time_increment: '1', limit: '500' };
+    let d = await graph(`act_${cfg.accountId}/insights`, cfg.token, params);
+    for (let page = 0; page < 40; page++) {
+      for (const r of d.data || []) {
+        const spend = num(r.spend);
+        if (spend > 0) out.push({ date: String(r.date_start || since), adId: String(r.ad_id), campaign: String(r.campaign_name || ''), spend });
+      }
+      const after = d.paging?.cursors?.after;
+      if (!d.paging?.next || !after) break;
+      d = await graph(`act_${cfg.accountId}/insights`, cfg.token, { ...params, after });
+    }
+    return out;
+  });
+}
+
 export interface AdCreative {
   name: string;
   status: string; // ACTIVE, PAUSED, ...

@@ -24,6 +24,7 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { id: 'confirmed', label: 'Confirmados', statuses: ['confirmed_by_voice'], target: 'confirmed_by_voice', tone: 'bg-emerald-500' },
   { id: 'shipped', label: 'Enviados', statuses: ['shipped'], target: 'shipped', tone: 'bg-sky-500' },
   { id: 'delivered', label: 'Entregados', statuses: ['delivered'], target: 'delivered', tone: 'bg-green-600' },
+  { id: 'returned', label: 'Devueltos', statuses: ['returned'], target: 'returned', tone: 'bg-orange-500' },
   { id: 'cancelled', label: 'Cancelados', statuses: ['cancelled'], target: 'cancelled', tone: 'bg-red-500' },
 ];
 
