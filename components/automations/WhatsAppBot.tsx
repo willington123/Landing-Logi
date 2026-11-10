@@ -58,6 +58,8 @@ export default function WhatsAppBot() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fuStats, setFuStats] = useState<{ sent: number; recovered: number; revenue: number } | null>(null);
+  const [prices, setPrices] = useState<PriceRow[]>([]);
+  const [savedJson, setSavedJson] = useState(''); // what is saved, to tell unsaved changes
 
   // simulator
   const [sim, setSim] = useState<SimMsg[]>([]);
@@ -77,8 +79,10 @@ export default function WhatsAppBot() {
         .then((d) => {
           if (!d.success) return setLoadError(d.error);
           setCfg(d.settings);
+          setSavedJson(JSON.stringify(d.settings));
           setConfigured(d.configured);
           setFuStats(d.followUpStats || null);
+          setPrices(d.prices || []);
         })
         .catch((e) => setLoadError(String(e?.message || e)));
     });
@@ -87,6 +91,18 @@ export default function WhatsAppBot() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [sim, thinking]);
+
+  // Leaving with unsaved changes: the assistant would keep using the old text.
+  const dirty = Boolean(cfg && savedJson && JSON.stringify(cfg) !== savedJson);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   const save = async (next?: BotSettings) => {
     const body = next || cfg;
@@ -98,6 +114,7 @@ export default function WhatsAppBot() {
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
       setCfg(d.settings);
+      setSavedJson(JSON.stringify(d.settings));
       setMsg({ ok: true, text: d.settings.enabled ? 'Guardado. El asistente ya responde los mensajes nuevos.' : 'Guardado. El asistente está apagado.' });
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -303,6 +320,7 @@ export default function WhatsAppBot() {
               <textarea value={cfg.businessInfo} onChange={(e) => set({ businessInfo: e.target.value })} rows={14} maxLength={MAX_BUSINESS_INFO} className="mt-1.5 w-full text-[13px] border border-slate-200 rounded-xl px-3 py-2 resize-y min-h-[220px]" />
               <InfoSize text={cfg.businessInfo} model={cfg.model} />
             </label>
+            <PricesBox prices={prices} text={cfg.businessInfo} />
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2.5">
               <p className="text-[13px] font-semibold text-slate-900">🙋 Cuándo pasa el chat a un asesor</p>
               <p className="text-[11px] text-slate-600">
@@ -340,6 +358,7 @@ export default function WhatsAppBot() {
               <button onClick={() => save()} disabled={saving} className="h-10 px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Guardar
               </button>
+              {dirty && !saving && <span className="text-[12px] font-semibold text-amber-700">Tienes cambios sin guardar: el asistente sigue usando lo anterior.</span>}
               <button onClick={() => setCfg({ ...DEFAULT_BOT, enabled: cfg.enabled })} className="text-xs text-slate-500 hover:text-slate-800">
                 Restaurar texto de ejemplo
               </button>
@@ -427,5 +446,51 @@ export default function WhatsAppBot() {
         </div>
       )}
     </section>
+  );
+}
+
+interface PriceRow {
+  id: string;
+  name: string;
+  kind: 'landing' | 'product';
+  offers: { name: string; units: number; price: number; regular: number | null }[];
+}
+const cop = (n: number) => `$${n.toLocaleString('es-CO')}`;
+
+// The prices the assistant quotes and charges come from the products (landing offers / WhatsApp products), not from
+// this text. Lists them, and warns about amounts in the text that no product has (an old price left in the text).
+function PricesBox({ prices, text }: { prices: PriceRow[]; text: string }) {
+  const known = new Set(prices.flatMap((p) => p.offers.flatMap((o) => [o.price, o.regular || 0])));
+  const found = Array.from(text.matchAll(/\$\s*\d{1,3}(?:[.,]\d{3})+|\$\s*\d{4,}|\b\d{1,3}(?:\.\d{3})+\b/g))
+    .map((m) => Number(m[0].replace(/[^\d]/g, '')))
+    .filter((n) => n >= 1000);
+  const unknown = Array.from(new Set(found.filter((n) => !known.has(n)))).slice(0, 6);
+  if (!prices.length && !unknown.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+      <p className="text-[13px] font-semibold text-slate-900">💲 Precios que usa el asistente</p>
+      <p className="text-[11px] text-slate-500">
+        Salen de tus productos, no de este texto: son los que dice y los que cobra al tomar el pedido. Para cambiarlos, edita la oferta en{' '}
+        <a href="/landings" className="underline">
+          Landing pages
+        </a>{' '}
+        o en{' '}
+        <a href="/productos" className="underline">
+          Productos
+        </a>
+        . El cambio aplica al instante, también en chats donde ya había dado el precio anterior.
+      </p>
+      {prices.map((p) => (
+        <p key={p.id} className="text-[12px] text-slate-700">
+          <strong>{p.name}</strong>: {p.offers.map((o) => `${o.name} ${cop(o.price)}`).join(' · ')}
+        </p>
+      ))}
+      {unknown.length > 0 && (
+        <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+          Tu información menciona {unknown.map(cop).join(', ')}, que no {unknown.length === 1 ? 'es el precio' : 'son precios'} de ningún producto. Si es un precio viejo, cámbialo en el producto: el asistente usará el del producto. Si es otra
+          cosa (envío, por ejemplo), ignora este aviso.
+        </p>
+      )}
+    </div>
   );
 }
