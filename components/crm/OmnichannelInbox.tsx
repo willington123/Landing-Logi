@@ -41,7 +41,7 @@ import { AssignPicker, AutoTagBox, QuickReplyManager, QuickReplyMenu, TagChip, T
 import TeamManager from '@/components/crm/TeamManager';
 import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
 import { CHANNEL_LABEL, CHAT_ID_RE, chatChannel, isSocialChat, type ChatChannel } from '@/lib/social';
-import { notifyPermission, requestNotify } from '@/lib/notify';
+import { PushAlertsBanner, PushAlertsRow } from '@/components/layout/PushAlerts';
 import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel, type PanelTab } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
@@ -459,7 +459,6 @@ export default function OmnichannelInbox() {
   const [botBusy, setBotBusy] = useState(false);
   const [me, setMe] = useState('');
   const [others, setOthers] = useState<{ name: string; typing: boolean }[]>([]);
-  const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
   const typingAt = useRef(0);
   const [replies, setReplies] = useState<QuickReply[]>([]);
   // List order: newest activity first (like WhatsApp) or what needs a person first. Remembered per browser.
@@ -811,8 +810,6 @@ export default function OmnichannelInbox() {
       setStoreData((all) => ({ ...all, [currentId]: { ...all[currentId], agents: all[currentId].agents.map((a) => (a.id === d.agent.id ? { ...a, available: d.agent.available } : a)) } }));
     } catch {}
   };
-  const enableAlerts = async () => setAlerts(await requestNotify());
-  useEffect(() => setAlerts(notifyPermission()), []);
   const chooseMe = (id: string) => {
     setMe(id);
     try {
@@ -1099,11 +1096,7 @@ export default function OmnichannelInbox() {
                   <button onClick={() => (setSoundOn(!sound), !sound && playMessageSound())} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2">
                     {sound ? <Bell className="w-4 h-4 text-slate-400" /> : <BellOff className="w-4 h-4 text-slate-400" />} Sonido de mensaje nuevo: {sound ? 'activado' : 'apagado'}
                   </button>
-                  {alerts !== 'unsupported' && alerts !== 'granted' && (
-                    <button onClick={enableAlerts} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-slate-400" /> Activar avisos del navegador
-                    </button>
-                  )}
+                  <PushAlertsRow />
                   {ownAgent && (
                     <button onClick={toggleAvailable} className="w-full text-left text-slate-700 hover:text-slate-900 inline-flex items-center gap-2" title="Si estás ausente no te llegan chats nuevos del reparto automático">
                       <span className={`w-2.5 h-2.5 rounded-full ml-0.5 mr-0.5 ${ownAgent.available !== false ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -1172,6 +1165,7 @@ export default function OmnichannelInbox() {
         </div>
       </div>
 
+      <PushAlertsBanner />
       {storeErrors.length > 0 && !listError && (
         <div className="hidden md:block px-4 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-800">
           No se cargaron los chats de {storeErrors.map((s) => s.name || 'una tienda').join(', ')}: {storeErrors[0].error}

@@ -14,3 +14,18 @@ self.addEventListener('notificationclick', (event) => {
     }),
   );
 });
+// A notice sent by the server (Konnexa can be closed). If the panel is open and in front on that chat, stay quiet.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try {
+    d = event.data ? event.data.json() : {};
+  } catch (e) {}
+  const url = d.url || '/crm';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const watching = list.some((c) => c.visibilityState === 'visible' && c.focused && c.url.indexOf(url) !== -1);
+      if (watching) return;
+      return self.registration.showNotification(d.title || 'Konnexa', { body: d.body || '', icon: '/pwa/icon-192.png', badge: '/pwa/icon-192.png', tag: d.tag || url, renotify: true, data: { url } });
+    }),
+  );
+});
