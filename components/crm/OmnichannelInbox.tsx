@@ -56,7 +56,19 @@ type Conversation = WaConversation & {
   assignee?: string | null;
   bot?: BotState;
   followUpAt?: string | null; // the AI's automatic follow-up really went out
-  ad?: { id: string; headline: string | null; body: string | null; url: string | null; thumb: string | null; at: string } | null;
+  ad?: {
+    id: string;
+    headline: string | null;
+    body: string | null;
+    url: string | null;
+    thumb: string | null;
+    at: string;
+    via?: 'chat' | 'order'; // clicked a WhatsApp ad, or ordered on a landing from an ad
+    name?: string | null; // the ad's name in Meta Ads (when the ad account is connected)
+    campaign?: string | null;
+    adset?: string | null;
+    preview?: string | null;
+  } | null;
   org: string; // store ('' = the session's store when the store list isn't available)
   key: string; // org|id: the same customer can write to two stores
 };
@@ -232,13 +244,45 @@ function StoreChip({ name, id }: { name: string; id: string }) {
   return <span className={`inline-flex items-center max-w-[160px] px-2 py-0.5 rounded-md text-[11px] font-medium ${storeColor(id)}`}><span className="truncate">{name}</span></span>;
 }
 
-function AdChip({ ad, full }: { ad: NonNullable<Conversation['ad']>; full?: boolean }) {
-  const label = ad.headline || `Anuncio ${ad.id}`;
+const adName = (ad: NonNullable<Conversation['ad']>) => ad.name || ad.headline || `Anuncio ${ad.id}`;
+function AdChip({ ad }: { ad: NonNullable<Conversation['ad']> }) {
+  const label = adName(ad);
   return (
-    <span className="inline-flex items-center gap-1 max-w-full text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5" title={`Llegó desde el anuncio: ${label} (id ${ad.id})`}>
+    <span className="inline-flex items-center gap-1 max-w-[180px] text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5" title={`Llegó por el anuncio: ${label}${ad.campaign ? ` · ${ad.campaign}` : ''}`}>
       <Megaphone className="w-3 h-3 shrink-0" />
-      <span className="truncate">{full ? label : 'Anuncio'}</span>
+      <span className="truncate">{label}</span>
     </span>
+  );
+}
+
+// Under the chat header: which ad brought this customer, with its picture, campaign and a link to the real ad.
+function AdBanner({ ad }: { ad: NonNullable<Conversation['ad']> }) {
+  const [imgOk, setImgOk] = useState(true);
+  const link = ad.preview || ad.url;
+  return (
+    <div className="px-3 sm:px-4 py-2 border-b border-sky-100 bg-sky-50/60 flex items-center gap-3 text-[12px] text-sky-950">
+      {ad.thumb && imgOk ? (
+        <img src={ad.thumb} alt="" onError={() => setImgOk(false)} className="w-10 h-10 rounded-lg object-cover shrink-0 border border-sky-100" />
+      ) : (
+        <span className="w-10 h-10 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+          <Megaphone className="w-4 h-4" />
+        </span>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="truncate">
+          {ad.via === 'order' ? 'Hizo un pedido desde el anuncio' : 'Llegó por el anuncio'} <strong>{adName(ad)}</strong>
+        </p>
+        <p className="truncate text-sky-900/70">
+          {[ad.campaign, ad.adset].filter(Boolean).join(' · ') || (ad.name ? '' : 'Conecta Meta Ads en Integraciones para ver el nombre y la campaña.')}
+          {ad.at && <span> · {new Date(ad.at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' }).replace('.', '')}</span>}
+        </p>
+      </div>
+      {link && (
+        <a href={link} target="_blank" rel="noreferrer" className="h-8 px-2.5 rounded-lg bg-white border border-sky-200 text-[11px] font-semibold text-sky-800 hover:bg-sky-100 inline-flex items-center shrink-0">
+          Ver anuncio
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -421,6 +465,7 @@ export default function OmnichannelInbox() {
     return (ADV.map((a) => a.id) as string[]).includes(f) ? (f as Adv) : '';
   });
   const [tagFilter, setTagFilter] = useState(''); // tag name (stores have their own tags)
+  const [adFilter, setAdFilter] = useState(''); // ad id ('none' = didn't come from an ad)
   const [channel, setChannel] = useState<'' | ChatChannel>('');
   const [period, setPeriod] = useState<Period>('all');
   const [since, setSince] = useState('');
@@ -672,11 +717,12 @@ export default function OmnichannelInbox() {
       if (adv === 'unassigned' && c.assignee) return false;
       const tagNames = tagsOf(c).map((t) => t.name);
       if (tagFilter && !tagNames.includes(tagFilter)) return false;
+      if (adFilter && (adFilter === 'none' ? Boolean(c.ad) : adFilter === 'any' ? !c.ad : c.ad?.id !== adFilter)) return false;
       if (!q) return true;
-      return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, storeName(c.org), ...tagNames].some((v) => v?.toLowerCase().includes(q));
+      return [c.name, c.id, c.last_message, c.order?.orderNumber, c.order?.productName, c.order?.customerName, storeName(c.org), c.ad?.name, c.ad?.campaign, c.ad?.headline, ...tagNames].some((v) => v?.toLowerCase().includes(q));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, storeData, search, channel, period, since, until, adv, tagFilter, now, me]);
+  }, [conversations, storeData, search, channel, period, since, until, adv, tagFilter, adFilter, now, me]);
 
   const counts = useMemo(
     () => ({
@@ -705,7 +751,19 @@ export default function OmnichannelInbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, focus, now, storeData, order]);
 
-  const advActive = Boolean(adv || tagFilter || channel);
+  const advActive = Boolean(adv || tagFilter || adFilter || channel);
+  // Ads that brought customers, most chats first (for the "Anuncio" filter).
+  const adOptions = useMemo(() => {
+    const m = new Map<string, { id: string; label: string; n: number }>();
+    for (const c of conversations) {
+      if (!c.ad) continue;
+      const cur = m.get(c.ad.id) || { id: c.ad.id, label: adName(c.ad), n: 0 };
+      cur.n++;
+      if (c.ad.name) cur.label = c.ad.name;
+      m.set(c.ad.id, cur);
+    }
+    return Array.from(m.values()).sort((a, b) => b.n - a.n);
+  }, [conversations]);
   const meAgent = agents.find((a) => a.id === myAgentId(activeOrg)) || null;
   const ownAgent = storeData[currentId]?.me?.agentId ? storeData[currentId].agents.find((a) => a.id === storeData[currentId].me?.agentId) || null : null;
   const toggleAvailable = async () => {
@@ -976,8 +1034,23 @@ export default function OmnichannelInbox() {
                     </select>
                   </label>
                 )}
+                {adOptions.length > 0 && (
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Anuncio</span>
+                    <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)} className="mt-1.5 w-full h-9 border border-slate-200 rounded-lg px-2 bg-white text-slate-700">
+                      <option value="">Todos los chats</option>
+                      <option value="any">Llegaron por un anuncio</option>
+                      <option value="none">No llegaron por anuncio</option>
+                      {adOptions.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.label.length > 48 ? `${a.label.slice(0, 47)}…` : a.label} ({a.n})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 {advActive && (
-                  <button onClick={() => (setAdv(''), setTagFilter(''), setChannel(''))} className="text-[12px] font-semibold text-brand-blue">
+                  <button onClick={() => (setAdv(''), setTagFilter(''), setAdFilter(''), setChannel(''))} className="text-[12px] font-semibold text-brand-blue">
                     Quitar filtros
                   </button>
                 )}
@@ -1190,7 +1263,6 @@ export default function OmnichannelInbox() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  {active.ad && <AdChip ad={active.ad} full />}
                   <WindowChip left={left} />
                   <button onClick={() => setNewOrder(true)} title="Crear un pedido confirmado para este cliente" className="h-8 px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center gap-1.5">
                     <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pedido</span>
@@ -1202,6 +1274,8 @@ export default function OmnichannelInbox() {
                   <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
                 </div>
               </div>
+
+              {active.ad && <AdBanner ad={active.ad} />}
 
               {botInfo?.enabled && (
                 <div className={`px-3 sm:px-4 py-1.5 sm:py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}>

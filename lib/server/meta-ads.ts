@@ -122,6 +122,8 @@ export interface AdInsight {
   impressions: number;
   clicks: number; // link clicks
   metaChats: number; // messaging conversations started (Meta's count)
+  results: number; // Meta's "Resultados": what the ad set optimizes for (conversations, purchases, leads…)
+  resultLabel: string; // "Conversaciones", "Compras"…
 }
 
 const cache = new Map<string, { data: unknown; until: number }>();
@@ -138,13 +140,42 @@ export const forgetAdsCache = () => cache.clear();
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const action = (actions: any[] | undefined, ...types: string[]) => (actions || []).filter((a) => types.includes(a?.action_type)).reduce((n, a) => n + num(a.value), 0);
 
+// "Resultados" as Meta's Ads Manager counts them: the action the ad set optimizes for. The first type found wins
+// (Meta reports the same purchase under several names, so they are never added together).
+const RESULT_TYPES: { goals: string[]; label: string; types: string[] }[] = [
+  { goals: ['CONVERSATIONS', 'REPLIES'], label: 'Conversaciones', types: ['onsite_conversion.messaging_conversation_started_7d'] },
+  { goals: ['OFFSITE_CONVERSIONS', 'VALUE', 'CONVERSIONS'], label: 'Compras', types: ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'onsite_web_purchase'] },
+  { goals: ['LEAD_GENERATION', 'QUALITY_LEAD'], label: 'Clientes potenciales', types: ['lead', 'onsite_conversion.lead_grouped', 'offsite_conversion.fb_pixel_lead'] },
+  { goals: ['LANDING_PAGE_VIEWS'], label: 'Visitas a la página', types: ['landing_page_view', 'omni_landing_page_view'] },
+  { goals: ['LINK_CLICKS'], label: 'Clics en el enlace', types: ['link_click'] },
+  { goals: ['THRUPLAY'], label: 'Reproducciones', types: ['video_view'] },
+  { goals: ['POST_ENGAGEMENT'], label: 'Interacciones', types: ['post_engagement'] },
+];
+export function resultOf(goal: string | undefined, actions: any[] | undefined): { results: number; resultLabel: string } {
+  const first = (types: string[]) => {
+    for (const t of types) {
+      const v = action(actions, t);
+      if (v > 0) return v;
+    }
+    return 0;
+  };
+  const known = RESULT_TYPES.find((r) => r.goals.includes(String(goal || '').toUpperCase()));
+  if (known) return { results: first(known.types), resultLabel: known.label };
+  // Unknown goal: conversations for click-to-WhatsApp ads, else purchases, else link clicks.
+  for (const r of [RESULT_TYPES[0], RESULT_TYPES[1], RESULT_TYPES[4]]) {
+    const v = first(r.types);
+    if (v > 0) return { results: v, resultLabel: r.label };
+  }
+  return { results: 0, resultLabel: 'Resultados' };
+}
+
 export async function adInsights(cfg: AdsConfig, since: string, until: string): Promise<AdInsight[]> {
   if (!cfg.accountId) return [];
-  return cached(`ins:${cfg.accountId}:${cfg.token.slice(-12)}:${since}:${until}`, 10 * 60000, async () => {
+  return cached(`ins2:${cfg.accountId}:${cfg.token.slice(-12)}:${since}:${until}`, 10 * 60000, async () => {
     const out: AdInsight[] = [];
     let d = await graph(`act_${cfg.accountId}/insights`, cfg.token, {
       level: 'ad',
-      fields: 'ad_id,ad_name,campaign_name,adset_name,spend,impressions,inline_link_clicks,actions',
+      fields: 'ad_id,ad_name,campaign_name,adset_name,optimization_goal,spend,impressions,inline_link_clicks,actions',
       time_range: JSON.stringify({ since, until }),
       limit: '500',
     });
@@ -159,13 +190,14 @@ export async function adInsights(cfg: AdsConfig, since: string, until: string): 
           impressions: num(r.impressions),
           clicks: num(r.inline_link_clicks),
           metaChats: action(r.actions, 'onsite_conversion.messaging_conversation_started_7d'),
+          ...resultOf(r.optimization_goal, r.actions),
         });
       }
       const after = d.paging?.cursors?.after;
       if (!d.paging?.next || !after) break;
       d = await graph(`act_${cfg.accountId}/insights`, cfg.token, {
         level: 'ad',
-        fields: 'ad_id,ad_name,campaign_name,adset_name,spend,impressions,inline_link_clicks,actions',
+        fields: 'ad_id,ad_name,campaign_name,adset_name,optimization_goal,spend,impressions,inline_link_clicks,actions',
         time_range: JSON.stringify({ since, until }),
         limit: '500',
         after,
@@ -208,17 +240,21 @@ export interface AdCreative {
   thumbs: string[]; // every image we know, best first: the page falls back to the next one if one does not load
   kind: 'video' | 'image' | 'other';
   previewLink: string | null; // Meta's shareable preview (opens the real ad on Facebook)
+  campaign?: string;
+  adset?: string;
 }
 
 // Images and status for a list of ads, in good resolution: the creative's own image (or the image behind its
 // hash), the video's best thumbnail, and only as a last resort Meta's small "thumbnail_url". Tries the account's
 // /ads edge, then a plain multi-id read. Failures are not cached and are reported so the page can say why.
 const CREATIVE_FIELDS =
-  'id,name,effective_status,preview_shareable_link,creative{thumbnail_url,image_url,image_hash,object_type,video_id,object_story_spec{video_data{image_url,video_id},link_data{picture,image_hash}},asset_feed_spec{images{hash,url},videos{video_id,thumbnail_url}}}';
-const CREATIVE_FIELDS_PLAIN = 'id,name,effective_status,preview_shareable_link,creative{thumbnail_url,image_url,image_hash,object_type,video_id}';
+  'id,name,effective_status,preview_shareable_link,campaign{name},adset{name},creative{thumbnail_url,image_url,image_hash,object_type,video_id,object_story_spec{video_data{image_url,video_id},link_data{picture,image_hash}},asset_feed_spec{images{hash,url},videos{video_id,thumbnail_url}}}';
+const CREATIVE_FIELDS_PLAIN = 'id,name,effective_status,preview_shareable_link,campaign{name},adset{name},creative{thumbnail_url,image_url,image_hash,object_type,video_id}';
 
 interface RawCreative {
   name: string;
+  campaign: string;
+  adset: string;
   status: string;
   previewLink: string | null;
   videoId: string | null;
@@ -237,6 +273,8 @@ function toRaw(a: any): RawCreative {
   const hash = c.image_hash || story.link_data?.image_hash || feed.images?.find((i: any) => i?.hash)?.hash || null;
   return {
     name: String(a?.name || ''),
+    campaign: String(a?.campaign?.name || ''),
+    adset: String(a?.adset?.name || ''),
     status: String(a?.effective_status || ''),
     previewLink: typeof a?.preview_shareable_link === 'string' ? a.preview_shareable_link : null,
     videoId: videoId ? String(videoId) : null,
@@ -278,7 +316,7 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
   let error: string | null = null;
   for (let i = 0; i < todo.length; i += 50) {
     const chunk = todo.slice(i, i + 50);
-    const key = `cr3:${cfg.accountId}:${chunk.join(',')}`;
+    const key = `cr4:${cfg.accountId}:${chunk.join(',')}`;
     const hit = cache.get(key);
     if (hit && hit.until > Date.now()) {
       Object.assign(out, hit.data as Record<string, AdCreative>);
@@ -327,6 +365,8 @@ export async function adCreatives(cfg: AdsConfig, ids: string[]): Promise<{ crea
         thumbs,
         kind: r.kind,
         previewLink: r.previewLink,
+        campaign: r.campaign || undefined,
+        adset: r.adset || undefined,
       };
     }
     if (Object.keys(got).length) {

@@ -7,6 +7,7 @@ import { currentOrgId, currentRole } from '@/lib/server/tenant';
 import { storedIntegrations } from '@/lib/server/integrations';
 import { botConfigured, getBotSettings, getBotStates } from '@/lib/server/bot';
 import { followUpsSent } from '@/lib/server/followup';
+import { adNames } from '@/lib/server/ad-names';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,14 @@ export async function GET() {
     // Members who only see their chats get just those.
     const [scope, role] = await Promise.all([chatScope(), currentRole()]);
     const visible = scope.restricted ? conversations.filter((c) => assign[c.id] === scope.agentId) : conversations;
+    // Which ad brought each customer: the click-to-WhatsApp ad, or else the ad of the landing order linked to the chat.
+    const adOf = (c: (typeof visible)[number]) => {
+      const a = ads[c.id];
+      if (a) return { id: a.id, headline: a.headline || null, body: a.body || null, url: a.url || null, thumb: a.thumb || null, at: a.at, via: 'chat' as const };
+      const o = c.order as any;
+      return o?.adId ? { id: String(o.adId), headline: o.adHeadline || null, body: null, url: null, thumb: null, at: o.createdAt, via: 'order' as const } : null;
+    };
+    const names = await adNames(visible.map((c) => adOf(c)?.id || '').filter(Boolean)).catch(() => ({}) as Awaited<ReturnType<typeof adNames>>);
     const known = new Set(tags.map((t) => t.id));
     const people = new Set(agents.map((a) => a.id));
     return NextResponse.json({
@@ -37,7 +46,12 @@ export async function GET() {
         ...c,
         tags: (tagMap[c.id] || []).filter((id) => known.has(id)),
         assignee: assign[c.id] && people.has(assign[c.id]) ? assign[c.id] : null,
-        ad: ads[c.id] ? { id: ads[c.id].id, headline: ads[c.id].headline || null, body: ads[c.id].body || null, url: ads[c.id].url || null, thumb: ads[c.id].thumb || null, at: ads[c.id].at } : null,
+        ad: (() => {
+          const a = adOf(c);
+          if (!a) return null;
+          const n = names[a.id];
+          return { ...a, name: n?.name || null, campaign: n?.campaign || null, adset: n?.adset || null, thumb: a.thumb || n?.thumb || null, preview: n?.preview || null };
+        })(),
         // The automatic follow-up went out after the customer's last message (an older one doesn't count).
         followUpAt: followUps[c.id] && c.last_inbound_at && followUps[c.id] > c.last_inbound_at ? followUps[c.id] : null,
         bot: botStates[c.id]?.paused ? { paused: true, reason: botStates[c.id].reason || null, note: botStates[c.id].note || null, at: botStates[c.id].pausedAt || null } : null,

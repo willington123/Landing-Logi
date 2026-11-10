@@ -72,6 +72,9 @@ export interface AdRow {
   clicks: number;
   chats: number; // chats Konnexa received from this ad
   metaChats: number; // conversations Meta counted
+  results: number; // Meta's "Resultados" (what the ad optimizes for)
+  resultLabel: string;
+  cpr: number | null; // spend / results: Meta's "Costo por resultado"
   orders: number;
   confirmed: number;
   cancelled: number;
@@ -118,7 +121,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange, dates = ran
   const row = (adId: string): AdRow => {
     let r = rows.get(adId);
     if (!r) {
-      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', adset: '', status: null, thumb: null, thumbs: [], kind: null, previewLink: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
+      r = { adId, accountId: null, accountName: null, currency: null, name: '', campaign: '', adset: '', status: null, thumb: null, thumbs: [], kind: null, previewLink: null, spend: 0, impressions: 0, clicks: 0, chats: 0, metaChats: 0, results: 0, resultLabel: '', cpr: null, orders: 0, confirmed: 0, cancelled: 0, revenue: 0, cpa: null, roas: null, flags: [] };
       rows.set(adId, r);
     }
     return r;
@@ -136,6 +139,8 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange, dates = ran
       r.impressions += i.impressions;
       r.clicks += i.clicks;
       r.metaChats += i.metaChats;
+      r.results += i.results;
+      if (i.results || !r.resultLabel) r.resultLabel = i.resultLabel;
     }
   }
   let unattributed = 0;
@@ -194,6 +199,7 @@ export async function buildAdsReport(cfg: AdsConfig, range: AdRange, dates = ran
   const wasteMin = Math.max(totals.cpa || 0, 30000);
   for (const r of list) {
     r.cpa = r.confirmed && r.spend > 0 ? r.spend / r.confirmed : null;
+    r.cpr = r.results && r.spend > 0 ? r.spend / r.results : null;
     r.roas = isCop(r.currency) && r.spend > 0 ? r.revenue / r.spend : null;
     // Thresholds are in COP; for other currencies use a small fixed amount (10 USD/EUR…).
     if (r.confirmed === 0 && r.spend >= (isCop(r.currency) ? wasteMin : 10)) r.flags.push('waste');

@@ -25,6 +25,9 @@ interface Row {
   clicks: number;
   chats: number;
   metaChats: number;
+  results?: number; // Meta's "Resultados"
+  resultLabel?: string;
+  cpr?: number | null; // costo por resultado
   orders: number;
   confirmed: number;
   cancelled: number;
@@ -102,6 +105,9 @@ interface Group {
   spend: number;
   clicks: number;
   chats: number;
+  results: number;
+  resultLabel: string;
+  cpr: number | null;
   orders: number;
   confirmed: number;
   cancelled: number;
@@ -121,13 +127,15 @@ function makeGroup(level: Group['level'], key: string, name: string, ads: Row[],
       spend: a.spend + r.spend,
       clicks: a.clicks + r.clicks,
       chats: a.chats + Math.max(r.chats, r.metaChats),
+      results: a.results + (r.results || 0),
       orders: a.orders + r.orders,
       confirmed: a.confirmed + r.confirmed,
       cancelled: a.cancelled + r.cancelled,
       revenue: a.revenue + r.revenue,
     }),
-    { spend: 0, clicks: 0, chats: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0 },
+    { spend: 0, clicks: 0, chats: 0, results: 0, orders: 0, confirmed: 0, cancelled: 0, revenue: 0 },
   );
+  const labels = Array.from(new Set(ads.filter((r) => r.results).map((r) => r.resultLabel || 'Resultados')));
   const currency = ads[0]?.currency ?? null;
   const flags: Flag[] = [];
   if (ads.some((r) => r.flags.includes('winner'))) flags.push('winner');
@@ -145,6 +153,8 @@ function makeGroup(level: Group['level'], key: string, name: string, ads: Row[],
     ...g,
     cpa: g.confirmed && g.spend ? g.spend / g.confirmed : null,
     roas: g.spend && isCop(currency) ? g.revenue / g.spend : null,
+    resultLabel: labels.length === 1 ? labels[0] : 'Resultados',
+    cpr: g.results && g.spend ? g.spend / g.results : null,
     flags,
   };
 }
@@ -274,8 +284,9 @@ export default function CreativesPage() {
   // Totals of what is on screen (COP accounts only; other currencies can't be added to COP sales).
   const view = useMemo(() => {
     const cops = byAccount.filter((r) => !r.currency || r.currency.toUpperCase() === 'COP');
-    const t = cops.reduce((a, r) => ({ spend: a.spend + r.spend, orders: a.orders + r.orders, confirmed: a.confirmed + r.confirmed, revenue: a.revenue + r.revenue, chats: a.chats + r.chats }), { spend: 0, orders: 0, confirmed: 0, revenue: 0, chats: 0 });
-    return { ...t, cpa: t.confirmed && t.spend ? t.spend / t.confirmed : null, roas: t.spend ? t.revenue / t.spend : null };
+    const t = cops.reduce((a, r) => ({ spend: a.spend + r.spend, orders: a.orders + r.orders, confirmed: a.confirmed + r.confirmed, revenue: a.revenue + r.revenue, chats: a.chats + r.chats, results: a.results + (r.results || 0) }), { spend: 0, orders: 0, confirmed: 0, revenue: 0, chats: 0, results: 0 });
+    const labels = Array.from(new Set(cops.filter((r) => r.results).map((r) => r.resultLabel || 'Resultados')));
+    return { ...t, resultLabel: labels.length === 1 ? labels[0] : 'Resultados', cpr: t.results && t.spend ? t.spend / t.results : null, cpa: t.confirmed && t.spend ? t.spend / t.confirmed : null, roas: t.spend ? t.revenue / t.spend : null };
   }, [byAccount]);
 
   if (!state.loading && (state.connected === false || state.expired)) {
@@ -316,9 +327,10 @@ export default function CreativesPage() {
       {state.error && <div className="rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3">{state.error}</div>}
 
       {t && rep && (
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
           {[
             ['Gasto en anuncios', money(t.spend)],
+            [t.resultLabel === 'Resultados' ? 'Costo por resultado (CPR)' : `CPR (${t.resultLabel.toLowerCase()})`, t.cpr === null ? '—' : money(t.cpr)],
             ['Chats desde anuncios', t.chats.toLocaleString('es-CO')],
             ['Pedidos', t.orders.toLocaleString('es-CO')],
             ['Confirmados', t.confirmed.toLocaleString('es-CO')],
@@ -504,6 +516,9 @@ interface Metrics {
   spend: number;
   clicks: number;
   chats: number;
+  results: number;
+  resultLabel: string;
+  cpr: number | null;
   orders: number;
   confirmed: number;
   cancelled: number;
@@ -512,7 +527,7 @@ interface Metrics {
   roas: number | null;
   currency: string | null;
 }
-const adMetrics = (r: Row): Metrics => ({ ...r, chats: Math.max(r.chats, r.metaChats) });
+const adMetrics = (r: Row): Metrics => ({ ...r, chats: Math.max(r.chats, r.metaChats), results: r.results || 0, resultLabel: r.resultLabel || 'Resultados', cpr: r.cpr ?? null });
 const roasCls = (roas: number | null) => (roas === null ? 'text-slate-400' : roas >= 2 ? 'text-emerald-700' : roas < 1 ? 'text-red-600' : 'text-slate-900');
 const rowTint = (flags: Flag[]) => (flags.includes('waste') ? 'bg-red-50/30' : flags.includes('winner') ? 'bg-emerald-50/30' : '');
 
@@ -522,6 +537,8 @@ function TableHead({ first }: { first: string }) {
       <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
         <th className="px-4 py-2.5 font-medium">{first}</th>
         <th className="px-3 py-2.5 font-medium text-right">Gasto</th>
+        <th className="px-3 py-2.5 font-medium text-right" title="Resultados de Meta: lo que optimiza el anuncio (conversaciones, compras…)">Resultados</th>
+        <th className="px-3 py-2.5 font-medium text-right" title="Costo por resultado: gasto ÷ resultados de Meta">CPR</th>
         <th className="px-3 py-2.5 font-medium text-right">Clics</th>
         <th className="px-3 py-2.5 font-medium text-right">Chats</th>
         <th className="px-3 py-2.5 font-medium text-right">Pedidos</th>
@@ -538,6 +555,11 @@ function MetricTds({ m, money, cop }: { m: Metrics; money: Money; cop: (n: numbe
   return (
     <>
       <td className="px-3 py-3 text-right tabular-nums font-medium">{money(m.spend, m.currency)}</td>
+      <td className="px-3 py-3 text-right tabular-nums">
+        {m.results.toLocaleString('es-CO')}
+        {m.results > 0 && <span className="block text-[11px] text-slate-400">{m.resultLabel.toLowerCase()}</span>}
+      </td>
+      <td className="px-3 py-3 text-right tabular-nums font-medium">{m.cpr === null ? '—' : money(m.cpr, m.currency)}</td>
       <td className="px-3 py-3 text-right tabular-nums">{m.clicks.toLocaleString('es-CO')}</td>
       <td className="px-3 py-3 text-right tabular-nums">{m.chats.toLocaleString('es-CO')}</td>
       <td className="px-3 py-3 text-right tabular-nums">
@@ -557,11 +579,14 @@ function MiniStats({ m, money, cop }: { m: Metrics; money: Money; cop: (n: numbe
     <div className="grid grid-cols-3 gap-2 text-center">
       {[
         ['Gasto', money(m.spend, m.currency)],
-        ['Confirmados', String(m.confirmed)],
+        ['CPR', m.cpr === null ? '—' : money(m.cpr, m.currency)],
         ['ROAS', m.roas === null ? '—' : `${m.roas.toFixed(2)}x`],
+        [m.results ? m.resultLabel : 'Resultados', m.results.toLocaleString('es-CO')],
+        ['Confirmados', String(m.confirmed)],
+        ['Costo/venta', m.cpa === null ? '—' : money(m.cpa, m.currency)],
         ['Pedidos', String(m.orders)],
         ['Ventas', cop(m.revenue)],
-        ['Costo/venta', m.cpa === null ? '—' : money(m.cpa, m.currency)],
+        ['Chats', m.chats.toLocaleString('es-CO')],
       ].map(([k, v]) => (
         <div key={k} className="rounded-lg bg-slate-50 py-1.5">
           <p className="text-[10px] text-slate-500">{k}</p>
@@ -716,8 +741,10 @@ function AdCard({ r, money, cop, onOpen, hideAdset }: { r: Row; money: Money; co
         <div className="grid grid-cols-2 gap-1.5 text-[11px] mt-auto">
           {[
             ['Gasto', money(m.spend, m.currency)],
+            ['CPR', m.cpr === null ? '—' : money(m.cpr, m.currency)],
             [`Ventas (${m.confirmed})`, cop(m.revenue)],
             ['ROAS', m.roas === null ? '—' : `${m.roas.toFixed(2)}x`],
+            [m.results ? m.resultLabel : 'Resultados', m.results.toLocaleString('es-CO')],
             ['Costo/venta', m.cpa === null ? '—' : money(m.cpa, m.currency)],
           ].map(([k, v]) => (
             <div key={k} className="rounded-md bg-slate-50 px-2 py-1">
@@ -781,6 +808,8 @@ function GroupCards({ g, showCampaign, money, cop, onOpen }: { g: Group; showCam
         <div className="flex gap-2 flex-wrap text-[12px]">
           {[
             ['Gasto', money(g.spend, g.currency)],
+            [g.results ? g.resultLabel : 'Resultados', g.results.toLocaleString('es-CO')],
+            ['CPR', g.cpr === null ? '—' : money(g.cpr, g.currency)],
             ['Confirmados', String(g.confirmed)],
             ['Ventas', cop(g.revenue)],
             ['Costo/venta', g.cpa === null ? '—' : money(g.cpa, g.currency)],
@@ -962,6 +991,8 @@ function AdPreview({ r, money, onClose }: { r: Row; money: (n: number, cur?: str
           <div className="space-y-2">
             {[
               ['Gasto', money(r.spend, r.currency)],
+              [`Resultados${r.results ? ` (${(r.resultLabel || '').toLowerCase()})` : ''}`, (r.results || 0).toLocaleString('es-CO')],
+              ['Costo por resultado (CPR)', r.cpr === null || r.cpr === undefined ? '—' : money(r.cpr, r.currency)],
               ['Clics', r.clicks.toLocaleString('es-CO')],
               ['Chats', Math.max(r.chats, r.metaChats).toLocaleString('es-CO')],
               ['Pedidos', `${r.orders}${r.cancelled ? ` (${r.cancelled} cancelados)` : ''}`],

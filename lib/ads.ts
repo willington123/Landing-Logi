@@ -9,6 +9,12 @@ export interface AdRef {
   thumb?: string; // image or video thumbnail (Meta's URL, may expire)
   clid?: string; // ctwa_clid: click id for the Conversions API
   at: string; // when the customer came from the ad
+  // Filled from Meta Ads (when the ad account is connected): the ad's own name, its campaign and ad set.
+  name?: string;
+  campaign?: string;
+  adset?: string;
+  preview?: string; // link that opens the real ad
+  checkedAt?: string; // last time Meta was asked (so a missing ad isn't asked again every time)
 }
 
 export const AD_ID_RE = /^\d{6,25}$/;
@@ -32,4 +38,4 @@ export function adFromReferral(r: any, at: string): AdRef | null {
   };
 }
 
-export const adLabel = (a: { id: string; headline?: string } | null | undefined) => (a ? a.headline || `Anuncio ${a.id}` : '');
+export const adLabel = (a: { id: string; headline?: string; name?: string } | null | undefined) => (a ? a.name || a.headline || `Anuncio ${a.id}` : '');
