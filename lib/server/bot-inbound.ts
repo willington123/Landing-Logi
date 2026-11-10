@@ -62,8 +62,22 @@ async function isLatestInbound(conversationId: string, waMessageId: string) {
     .eq('conversation_id', conversationId)
     .eq('direction', 'in')
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false }) // two messages in the same second: always the same one wins
     .limit(1);
   return !data?.[0] || data[0].wa_message_id === waMessageId;
+}
+
+// Text of the last message the store sent in this chat in the last 10 minutes ('' if none).
+async function lastBotReply(conversationId: string): Promise<string> {
+  const { data } = await (await db())
+    .from('wa_messages')
+    .select('body, created_at')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'out')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const r = data?.[0];
+  return r && Date.now() - Date.parse(r.created_at) < 10 * 60000 ? String(r.body || '').trim() : '';
 }
 
 async function answer(m: InboundMessage) {
@@ -90,6 +104,14 @@ async function answer(m: InboundMessage) {
   }
   const run = await runBot({ settings, phone: m.from, customerName: m.profileName, ad, history: await chatHistory(m.from) });
 
+  // The customer wrote again while this reply was being written: that message's run answers everything, so this
+  // one stays quiet (otherwise both send almost the same text, one after the other).
+  if (!(await isLatestInbound(m.from, m.waMessageId))) run.reply = null;
+  // The voice note already explains the product: no text on top of it (the store asked for just the audio).
+  if (run.sentVoice && !run.order && !run.handoff) run.reply = null;
+  // Never the same text twice in a row.
+  if (run.reply && (await lastBotReply(m.from)) === run.reply.trim()) run.reply = null;
+
   if (run.reply) {
     const result = await sendText(m.from, run.reply);
     // A handed-over chat stays in "Sin responder" for the team.
@@ -97,6 +119,8 @@ async function answer(m: InboundMessage) {
     // The assistant answered: the chat no longer counts as unread for the team (unless it was handed to a person,
     // the reply failed, or the customer wrote again meanwhile).
     if (result.ok && !run.handoff && (await isLatestInbound(m.from, m.waMessageId))) await markConversationRead(m.from).catch(() => {});
+  } else if (run.sentVoice && !run.handoff && (await isLatestInbound(m.from, m.waMessageId))) {
+    await markConversationRead(m.from).catch(() => {}); // answered with the voice note alone
   }
   state = await setBotState(m.from, { day, replies: replies + (run.reply ? 1 : 0), ...(run.handoff ? {} : { reason: undefined, note: undefined }) });
 
