@@ -3,6 +3,7 @@ import { cloudEnabled } from '@/lib/server/db';
 import { botConfigured, getBotSettings, saveBotSettings } from '@/lib/server/bot';
 import { cleanBot } from '@/lib/bot';
 import { followUpStats } from '@/lib/server/followup';
+import { sellables } from '@/lib/server/products';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,16 @@ const noDb = () => NextResponse.json({ success: false, error: 'La base de datos 
 export async function GET() {
   if (!cloudEnabled()) return noDb();
   try {
-    return NextResponse.json({ success: true, settings: await getBotSettings(), configured: await botConfigured(), followUpStats: await followUpStats().catch(() => null) });
+    // The prices the assistant quotes and charges: the offers of the published landings and WhatsApp products.
+    const prices = (await sellables(20).catch(() => []))
+      .map((l) => ({
+        id: l.id,
+        name: l.productName || l.title || 'Producto',
+        kind: l.kind === 'product' ? 'product' : 'landing',
+        offers: (l.combos || []).filter((c) => c.promoPrice > 0).map((c) => ({ name: c.name, units: c.units, price: c.promoPrice, regular: c.regularPrice > c.promoPrice ? c.regularPrice : null })),
+      }))
+      .filter((p) => p.offers.length);
+    return NextResponse.json({ success: true, settings: await getBotSettings(), configured: await botConfigured(), followUpStats: await followUpStats().catch(() => null), prices });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }
