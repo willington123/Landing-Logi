@@ -198,7 +198,7 @@ export async function findOrderByNumber(orderNumber: string, pendingOnly = false
 
 export type OrderSummary = Pick<
   OrderItem,
-  'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'department' | 'address' | 'customerName' | 'phone' | 'createdAt' | 'carrier' | 'trackingNumber'
+  'id' | 'orderNumber' | 'productName' | 'comboName' | 'totalAmount' | 'status' | 'city' | 'department' | 'address' | 'customerName' | 'phone' | 'createdAt' | 'carrier' | 'trackingNumber' | 'adId' | 'adHeadline'
 >;
 
 async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummary>> {
@@ -223,6 +223,8 @@ async function orderSummaries(ids: string[]): Promise<Record<string, OrderSummar
       createdAt: o.createdAt,
       carrier: o.carrier || null,
       trackingNumber: o.trackingNumber || null,
+      adId: o.adId || undefined,
+      adHeadline: o.adHeadline || null,
     };
   }
   return out;
