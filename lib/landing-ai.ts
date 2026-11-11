@@ -1,4 +1,4 @@
-import { LandingPageConfig, ProductCombo, SalesPageContent, LandingDesign, ImageSection } from './types';
+import { LandingPageConfig, ProductCombo, SalesPageContent, LandingDesign, ImageSection, ImpactContent } from './types';
 
 // Icons the AI may pick; the renderer maps each name to a lucide-react icon.
 export const ICON_NAMES = [
@@ -44,6 +44,11 @@ export interface GeneratedCopy {
   solutionImagePrompt: string;
   // "Secciones de imagen" mode: Claude's art concept and one prompt per graphic section.
   concept?: { name: string; artDirection: string };
+  // "Impacto Premium" mode.
+  impact?: Omit<ImpactContent, 'heroImage' | 'packImages' | 'ingredients' | 'packBullets'> & {
+    ingredients: { name: string; text: string; imagePrompt: string }[];
+    packBullets: { units: string | number; bullets: string[] }[];
+  };
   sections?: Omit<ImageSection, 'id' | 'image'>[];
 }
 
@@ -74,6 +79,9 @@ export interface GeneratedImages {
   solution?: string;
   benefits: (string | undefined)[];
   sections?: (string | undefined)[]; // same order as copy.sections
+  impactHero?: string;
+  packs?: Record<string, string>; // units → picture
+  ingredients?: (string | undefined)[];
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -180,9 +188,23 @@ export function buildSalesLanding(
   const imageSections: ImageSection[] = (copy.sections || [])
     .map((x, i) => ({ id: `s-${i}-${t}`, kind: x.kind, alt: x.alt || '', prompt: x.prompt, aspect: x.aspect, useReviewImages: x.useReviewImages || undefined, image: images.sections?.[i] })); // failed ones stay so the editor can retry them
 
+  const impact: ImpactContent | undefined = copy.impact
+    ? {
+        ...copy.impact,
+        heroBullets: (copy.impact.heroBullets || []).slice(0, 4),
+        trust: (copy.impact.trust || []).slice(0, 4),
+        benefits: (copy.impact.benefits || []).slice(0, 4),
+        ingredients: (copy.impact.ingredients || []).slice(0, 4).map((x, i) => ({ name: x.name, text: x.text, prompt: x.imagePrompt, image: images.ingredients?.[i] })),
+        packBullets: (copy.impact.packBullets || []).map((p) => ({ units: Number(p.units) || 0, bullets: (p.bullets || []).slice(0, 3) })).filter((p) => p.units > 0),
+        heroImage: images.impactHero,
+        packImages: images.packs && Object.keys(images.packs).length ? images.packs : undefined,
+      }
+    : undefined;
+
   return {
     id: `lp-${slug}`,
     ...(imageSections.some((x) => x.image) ? { imageSections, artConcept: copy.concept } : {}),
+    ...(impact ? { template: 'impact' as const, impact } : {}),
     layout: 'sales-v2',
     country: input.country,
     design,

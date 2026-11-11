@@ -30,6 +30,20 @@ ${artDirection ? `Art direction for the whole page: ${artDirection}\n` : ''}Sect
 Typography must be bold, perfectly legible and spelled EXACTLY as quoted (Spanish, with accents). Render only the quoted texts; no other text, no watermarks, no fake logos, no fake ratings, no fake customer faces.`;
 }
 
+// "pack": N identical units of the real product together. "ingredient": a still life without the product.
+function buildPackPrompt(units: number, scene: string, palette?: string) {
+  return `Create a premium product pack shot for an e-commerce offer card.
+Show EXACTLY ${units} identical unit${units === 1 ? '' : 's'} of the product in the reference image, grouped together${units > 1 ? ' (front one centered, the others slightly behind and to the sides)' : ', centered'}. Keep the product IDENTICAL: same shape, label, colors and logo; never redesign it.
+Setting: ${scene || 'dark textured stone pedestal, dramatic rim light, subtle smoke'}.
+Style: photorealistic studio shot, square framing with the products filling about 75% of the frame, deep dark background${palette ? ` with a glow that matches ${palette}` : ''}.
+Do NOT add any text, prices, badges, watermarks or extra logos.`;
+}
+function buildIngredientPrompt(scene: string, palette?: string) {
+  return `Create a photorealistic macro still life for an ingredients section: ${scene}.
+Square framing, the subject centered and filling the frame, rich natural colors, soft dramatic light, dark background${palette ? ` with a subtle glow that matches ${palette}` : ''}.
+Do NOT show any product package or bottle. Do NOT add any text, labels, watermarks or logos.`;
+}
+
 // Data URLs over ~1.5 MB are slow to send; fall back to the small reference copy.
 function pickReference(full: string, small?: string) {
   return full.length < 1_500_000 || !small ? full : small;
@@ -72,15 +86,19 @@ export async function POST(req: NextRequest) {
     }
 
     const designText = design ? buildDesignPrompt(scene, String(body.artDirection || '').slice(0, 1500) || undefined, extraRefs.length) : '';
+    const units = Math.min(12, Math.max(1, Math.round(Number(body.units) || 1)));
+    const plainText =
+      body.mode === 'pack' ? buildPackPrompt(units, scene, body.palette) : body.mode === 'ingredient' ? buildIngredientPrompt(scene, body.palette) : buildPrompt(scene, body.palette, 'the reference image');
     const run: Record<Provider, () => Promise<string>> = {
       gemini: () =>
         design
           ? generateImage(geminiKey, [imagePart(body.imageBase64), ...extraRefs.map((x) => imagePart(x)), { text: designText }], aspect, { preferPro: true })
-          : generateImage(geminiKey, [imagePart(body.imageBase64), { text: buildPrompt(scene, body.palette, 'the reference image') }], aspect),
-      replicate: () =>
-        generateImageReplicate(design ? designText : buildPrompt(scene, body.palette, 'the reference image'), [pickReference(body.imageBase64, body.referenceImage)], aspect),
+          : body.mode === 'ingredient'
+            ? generateImage(geminiKey, [{ text: plainText }], aspect)
+            : generateImage(geminiKey, [imagePart(body.imageBase64), { text: plainText }], aspect),
+      replicate: () => generateImageReplicate(design ? designText : plainText, [pickReference(body.imageBase64, body.referenceImage)], aspect),
       // Cloudflare needs a reference smaller than 512x512; the browser sends one in referenceImage.
-      cloudflare: () => generateImageCloudflare(design ? designText : buildPrompt(scene, body.palette, 'image 0'), body.referenceImage, aspect),
+      cloudflare: () => generateImageCloudflare(design ? designText : plainText.replace('the reference image', 'image 0'), body.referenceImage, aspect),
     };
 
     const failures: { provider: Provider; err: unknown }[] = [];

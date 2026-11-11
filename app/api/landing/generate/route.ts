@@ -95,6 +95,86 @@ const SECTIONS_SCHEMA = {
 };
 (SECTIONS_SCHEMA as any).required = Object.keys(SECTIONS_SCHEMA.properties);
 
+// "Impacto Premium": the same page data plus the content of the dark, high-contrast template.
+const ICON_ENUM = { type: 'STRING', enum: [...ICON_NAMES] };
+const IMPACT_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    ...SCHEMA.properties,
+    impact: {
+      type: 'OBJECT',
+      properties: {
+        topBar: S,
+        heroKicker: S,
+        heroTitle: S,
+        heroText: S,
+        heroBullets: strArr(4),
+        trust: objArr(4, { icon: ICON_ENUM, title: S, text: S }),
+        benefitsTitle: S,
+        benefits: objArr(4, { icon: ICON_ENUM, title: S, text: S }),
+        ingredientsTitle: S,
+        ingredientsSubtitle: S,
+        ingredients: objArr(4, { name: S, text: S, imagePrompt: S }),
+        packagesTitle: S,
+        packagesSubtitle: S,
+        packBullets: { type: 'ARRAY', items: { type: 'OBJECT', properties: { units: S, bullets: strArr(3) }, required: ['units', 'bullets'] } },
+        faqTitle: S,
+        finalTitle: S,
+        finalText: S,
+        finalBadge: S,
+        heroImagePrompt: S,
+        packImagePrompt: S,
+      },
+    },
+  },
+};
+(IMPACT_SCHEMA.properties.impact as any).required = Object.keys(IMPACT_SCHEMA.properties.impact.properties);
+(IMPACT_SCHEMA as any).required = Object.keys(IMPACT_SCHEMA.properties);
+
+function impactBrief(b: any): string {
+  const offers = (Array.isArray(b.offers) ? b.offers : []).filter((o: any) => o.units > 0 && o.price > 0);
+  const regularUnit = Number(b.regularUnitPrice) || 0;
+  const best = offers.length && regularUnit ? Math.max(...offers.map((o: any) => Math.round((1 - o.price / (regularUnit * o.units)) * 100))) : 0;
+  return `
+
+=== PLANTILLA "IMPACTO PREMIUM" (manda sobre el estilo y la paleta de arriba) ===
+La página es oscura, de alto contraste y de respuesta directa, como las landings que más venden en Latinoamérica: titulares enormes en mayúsculas cursivas, una palabra clave resaltada en el color de la marca, botones grandes "ORDENAR AHORA", insignias, sellos y mucha energía. El objetivo es CONVERTIR: cada texto empuja a pedir.
+
+ESTILO (reemplaza "Voz de marca premium" y la regla de mayúsculas de arriba)
+- Directo, emocional y seguro. Frases muy cortas que se leen en 2 segundos en el celular.
+- Habla del deseo y del resultado en el día a día del cliente, en segunda persona.
+- Los títulos pueden ir en mayúsculas (el diseño los pone en mayúsculas igual). Usa **dobles asteriscos** en UNA palabra o dos de cada título para resaltarlas en color.
+- Sin relleno, sin tecnicismos, sin frases genéricas que sirvan para cualquier producto.
+
+PALETA (reemplaza la regla de "design" de arriba)
+- "dark": fondo casi negro con un matiz del producto (ej. #0B0B0F, #0A0F0B, #120A0A). Nunca claro.
+- "primary": color de impacto para botones y resaltados, tomado del producto o de su categoría (rojo intenso, naranja, dorado, verde lima, azul eléctrico, fucsia…). Debe verse muy fuerte sobre el negro.
+- "accent": un segundo tono para brillos y detalles (más claro u oscuro que primary).
+- "light": un gris muy oscuro para tarjetas (ej. #16161C). vibe: "bold".
+
+CAMPOS DE impact
+- topBar: barra superior en una línea, máx. 12 palabras, con un emoji al inicio (🔥 o ⚡). Usa SOLO datos reales: ${best > 0 ? `el mayor descuento real es ${best}% (puedes decir "hasta ${best}% de descuento")` : 'no hay descuento real: no hables de descuentos'}; envío ${b.shippingType === 'calculated' ? 'según destino (no digas gratis)' : 'gratis'}; pago contraentrega.
+- heroKicker: etiqueta de 3-5 palabras (ej. "Suplemento premium para hombres", "La crema que tu piel pedía").
+- heroTitle: el gancho principal, 4 a 8 palabras, 2-3 líneas cortas separadas por " | " (ej. "Recupera tu **energía** | y tu confianza"). Resalta 1 palabra.
+- heroText: 1-2 frases que venden el resultado y mencionan que pagas al recibir.
+- heroBullets: 4 beneficios muy cortos (3-6 palabras) que empiezan con verbo o "Más…".
+- trust: 4 sellos de confianza, cada uno con título de 2-3 palabras y texto de 2-4 palabras, usando datos reales: pago contraentrega ("Pagas al recibir"), envío (${b.shippingType === 'calculated' ? 'a todo el país' : 'gratis'}), garantía de ${b.guaranteeDays || 30} días, y uno propio del producto (ej. "Compra discreta", "Calidad premium", "Fácil de usar").
+- benefitsTitle: "Beneficios de **${b.productName || 'el producto'}**" u otro título corto con palabra resaltada. benefits: 4 beneficios (título de 2-3 palabras en mayúsculas y 1 frase corta), cada uno con ícono.
+- ingredientsTitle / ingredientsSubtitle / ingredients: si el producto tiene ingredientes o componentes (suplementos, cremas, alimentos, perfumes), los 4 principales que se vean en la foto o dio el vendedor, con 1 frase de para qué sirve. Si NO tiene ingredientes (aparatos, ropa, accesorios), usa 4 características o materiales clave y titula la sección acorde (ej. "Hecho para **durar**"). imagePrompt: en INGLÉS, foto macro de ESE ingrediente o material solo (sin el producto), ej. "raw maca roots and maca powder in a small wooden bowl".
+- packagesTitle: "Elige tu **paquete**" u otro corto. packagesSubtitle: 1 frase que empuja a llevar más.
+- packBullets: uno por cada oferta del vendedor (units = cantidad de esa oferta, como texto): 3 beneficios cortos de llevar esa cantidad (ej. "30 días de uso", "Mejor precio por unidad", "Ideal para compartir"). Calcula duraciones solo si el vendedor dio el uso; si no, no inventes días.
+- faqTitle: "Preguntas **frecuentes**" u otro corto.
+- finalTitle: cierre de 3-6 palabras con palabra resaltada (ej. "Recupera tu **energía** hoy"). finalText: 1-2 frases que invitan a pedir ya. finalBadge: 2-4 palabras para un sello (ej. "Oferta de hoy", "Pagas al recibir"); nada de "últimas unidades".
+- heroImagePrompt: en INGLÉS, para una foto publicitaria horizontal: una persona real del público objetivo (edad y estilo acordes), segura y atractiva, a la izquierda, y el producto (idéntico a la referencia) grande a la derecha sobre un pedestal o superficie, fondo oscuro con luz dramática del color primary, humo o textura sutil. Sin texto.
+- packImagePrompt: en INGLÉS, el escenario para las fotos de los paquetes (ej. "black volcanic rock pedestal, red rim light, subtle smoke").
+
+REGLAS DE PUBLICIDAD (obligatorio: si no se cumplen, Meta rechaza los anuncios)
+- Nada de promesas sexuales, de "potencia", "rendimiento en la cama", tamaño, "aumenta la testosterona" ni similares. Para productos de hombres habla de energía, vitalidad, enfoque, confianza y bienestar.
+- Nada de curar, tratar o prevenir enfermedades, bajar de peso en X días, "antes y después" ni resultados garantizados.
+- Nada de testimonios, nombres de clientes, número de clientes, calificaciones, "más vendido del país" ni sellos de certificaciones que el vendedor no dio.
+- Nada de escasez inventada ("últimas unidades", "solo quedan 3").`;
+}
+
 function sectionsBrief(b: any): string {
   const reviews = String(b.reviews || '').trim();
   const reviewImages = Number(b.reviewImagesCount) || 0;
@@ -228,8 +308,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Sube una foto del producto.' }, { status: 400 });
     }
     const sectionsMode = body.mode === 'sections';
-    const schema = sectionsMode ? SECTIONS_SCHEMA : SCHEMA;
-    const prompt = buildPrompt(body) + (sectionsMode ? sectionsBrief(body) : '');
+    const impactMode = body.mode === 'impact';
+    const schema = sectionsMode ? SECTIONS_SCHEMA : impactMode ? IMPACT_SCHEMA : SCHEMA;
+    const prompt = buildPrompt(body) + (sectionsMode ? sectionsBrief(body) : impactMode ? impactBrief(body) : '');
 
     // 1) Claude writes the page (copy, design and image prompts) when the store has it.
     const orgId = cloudEnabled() ? await currentOrgId().catch(() => null) : null;

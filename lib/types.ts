@@ -158,8 +158,37 @@ export interface ImageSection {
   useReviewImages?: boolean;
 }
 
+// "Impacto Premium" template: dark, high-contrast long sales page (hero with model + product, trust strip,
+// benefit cards, ingredients, packages, FAQ, final CTA). Texts by Claude; prices always from the combos.
+export interface ImpactContent {
+  topBar: string; // red bar on top (the countdown goes next to it when it's on)
+  heroKicker: string; // small label above the title
+  heroTitle: string; // **word** = highlighted in the brand color
+  heroText: string;
+  heroBullets: string[];
+  trust: { icon: string; title: string; text: string }[];
+  benefitsTitle: string;
+  benefits: { icon: string; title: string; text: string }[];
+  ingredientsTitle: string;
+  ingredientsSubtitle: string;
+  ingredients: { name: string; text: string; image?: string; prompt?: string }[];
+  packagesTitle: string;
+  packagesSubtitle: string;
+  packBullets: { units: number; bullets: string[] }[];
+  faqTitle: string;
+  finalTitle: string;
+  finalText: string;
+  finalBadge: string;
+  heroImage?: string; // person of the target audience with the product
+  heroImagePrompt?: string;
+  packImages?: Record<string, string>; // units → picture of that many units together
+  packImagePrompt?: string;
+}
+
 export interface LandingPageConfig {
   id: string;
+  template?: 'brand' | 'impact'; // sales-v2 look: brand store (default) or "Impacto Premium"
+  impact?: ImpactContent;
   kind?: 'product'; // a product sold only by WhatsApp (no page); see lib/products.ts
   layout?: 'classic' | 'sales-v2';
   country?: string;
