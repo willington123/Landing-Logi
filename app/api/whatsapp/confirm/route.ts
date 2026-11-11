@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const order = { ...(data.data as OrderItem), status: data.status as OrderStatus };
     const r = await sendConfirmationForOrder(order);
     if (!r?.ok) return NextResponse.json({ success: false, error: `WhatsApp no lo envió: ${r?.error || 'error desconocido'}` }, { status: 502 });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, to: r.to });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: [401, 402, 403].includes((e as any)?.status) ? (e as any).status : 500 });
   }

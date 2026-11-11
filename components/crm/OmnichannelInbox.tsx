@@ -2,6 +2,7 @@
 
 // Mensajes: one inbox for one or several stores (WhatsApp, Messenger, Instagram), via /api/whatsapp/*. Polls every 10 s.
 // Chats that need a person come first; the four cards on top (Necesitan tu ayuda, Retoma, IA trabajando, Atendiendo) filter the list.
+import { explainWaError } from '@/lib/wa-errors';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -31,6 +32,7 @@ import {
   X,
   Zap,
   PanelRight,
+  Pencil,
 } from 'lucide-react';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import ChatAttach from '@/components/crm/ChatAttach';
@@ -493,6 +495,7 @@ export default function OmnichannelInbox() {
   const [qr, setQr] = useState<{ open: boolean; slash: boolean; highlight: number }>({ open: false, slash: false, highlight: 0 });
   const [orderOpen, setOrderOpen] = useState(false); // right panel on small screens
   const [panelTab, setPanelTab] = useState<PanelTab>('todo');
+  const [editCustomer, setEditCustomer] = useState(0); // bumps to open the customer data editor in "Venta"
   const [newOrder, setNewOrder] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -720,15 +723,25 @@ export default function OmnichannelInbox() {
     return (c.tags || []).map((id) => byId[id]).filter(Boolean) as CrmTag[];
   };
 
+  // The order's phone was corrected and no longer matches this chat's number.
+  const otherPhone = (c: Conversation) => {
+    const d = (c.order?.phone || '').replace(/\D/g, '');
+    if (!d || isSocialChat(c.id)) return false;
+    const tail = d.slice(-Math.min(10, d.length));
+    return !c.id.endsWith(tail);
+  };
+
   const sendTemplate = async () => {
     if (!active?.order) return;
     setTplBusy(true);
     setTplMsg(null);
     try {
-      await crmApi('/api/whatsapp/confirm', { method: 'POST', body: JSON.stringify({ orderId: active.order.id }) });
+      const d = await crmApi<{ to?: string }>('/api/whatsapp/confirm', { method: 'POST', body: JSON.stringify({ orderId: active.order.id }) });
       setTplMsg({ ok: true, text: 'Plantilla enviada. Cuando el cliente responda, se abre de nuevo la ventana de 24 horas.' });
       loadMessages(active.key);
-      loadConversations();
+      await loadConversations();
+      // The order's phone was corrected: the template went to another chat.
+      if (d.to && d.to !== active.id) setWanted({ id: d.to, org: active.org });
     } catch (e: any) {
       setTplMsg({ ok: false, text: e.message });
     } finally {
@@ -922,8 +935,10 @@ export default function OmnichannelInbox() {
     patchActive({ tags: d.tags });
   };
 
-  const onOrderChanged = async (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => {
+  const onOrderChanged = async (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string; openChat?: string }) => {
     await loadConversations();
+    // The confirmation went to the corrected number: open that chat.
+    if (extra?.openChat && active && extra.openChat !== active.id) setWanted({ id: extra.openChat, org: active.org });
     // After shipping, leave the "despachado" message (with the tracking number if given) ready to review and send.
     if (action === 'shipped' && canReply && !text.trim()) {
       const vars = { ...replyVars(active), pedido: '', transportadora: extra?.carrier || '', guia: extra?.trackingNumber || '' };
@@ -977,6 +992,13 @@ export default function OmnichannelInbox() {
     try {
       localStorage.setItem('konnexa_chat_panel', next);
     } catch {}
+  };
+  // "Corregir datos del cliente" (under a message WhatsApp couldn't deliver): open Venta with the editor.
+  const openCustomerEditor = () => {
+    setPanelTab('sale');
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) setOrderOpen(true);
+    else setPanelChoice('open');
+    setEditCustomer((n) => n + 1);
   };
   const [adOpen, setAdOpen] = useState(false);
   useEffect(() => setAdOpen(false), [activeKey]);
@@ -1032,6 +1054,7 @@ export default function OmnichannelInbox() {
       onCreateOrder={() => setNewOrder(true)}
       tab={panelTab}
       onTab={setPanelTab}
+      editCustomer={editCustomer}
       guide={<Guide c={active} now={now} botOn={Boolean(botInfo?.enabled)} botName={botInfo?.name || 'La IA'} busy={botBusy} onBot={setBotPaused} />}
     />
   );
@@ -1465,7 +1488,12 @@ export default function OmnichannelInbox() {
                         <span>{timeLabel(m.created_at)}</span>
                         <Ticks m={m} />
                       </div>
-                      {m.status === 'failed' && m.error && <p className="mt-1 text-[11px] text-red-600">No enviado: {m.error}</p>}
+                      {m.status === 'failed' && m.error && <p className="mt-1 text-[11px] text-red-600">No enviado: {explainWaError(m.error)}</p>}
+                      {m.status === 'failed' && active.order && !isSocialChat(active.id) && m.direction !== 'in' && (
+                        <button onClick={openCustomerEditor} className="mt-1.5 h-7 px-2.5 rounded-lg bg-white border border-red-200 text-[11px] font-semibold text-red-700 hover:bg-red-50 inline-flex items-center gap-1">
+                          <Pencil className="w-3 h-3" /> Corregir datos del cliente
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1493,8 +1521,11 @@ export default function OmnichannelInbox() {
                     {active.order && PENDING_ORDER.includes(active.order.status) && wa?.confirmTemplate && (
                       <button onClick={sendTemplate} disabled={tplBusy} className="h-8 px-3 rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60">
                         {tplBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <WhatsAppIcon className="w-3.5 h-3.5" />}
-                        Enviar plantilla de confirmación ({active.order.orderNumber})
+                        {otherPhone(active) ? `Enviar confirmación al número nuevo (${active.order.phone})` : `Enviar plantilla de confirmación (${active.order.orderNumber})`}
                       </button>
+                    )}
+                    {active.order && otherPhone(active) && (
+                      <p className="text-amber-800">El teléfono del pedido se corrigió a {active.order.phone}: los mensajes nuevos van al chat de ese número.</p>
                     )}
                     {tplMsg && <p className={tplMsg.ok ? 'text-emerald-700' : 'text-red-600'}>{tplMsg.text}</p>}
                   </div>

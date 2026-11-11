@@ -1,6 +1,7 @@
 // WhatsApp Business Cloud API: sending, webhook signature check and payload parsing.
 // Server-only. Each store uses its own connection (lib/server/integrations); the store that owns the
 // keys in Vercel uses those.
+import { explainWaError } from '@/lib/wa-errors';
 import { adFromReferral, type AdRef } from '@/lib/ads';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { waConfig, type WaConfig } from '@/lib/server/integrations';
@@ -55,6 +56,8 @@ export interface SendResult {
 }
 
 const graphError = (data: any, status: number) => data?.error?.error_data?.details || data?.error?.message || `HTTP ${status}`;
+// Send errors shown to the team: in plain Spanish when Meta's code is known.
+const sendError = (data: any, status: number) => explainWaError(graphError(data, status), Number(data?.error?.code) || null);
 
 async function send(body: Record<string, unknown>, cfg?: WaConfig | null): Promise<SendResult> {
   const c = cfg ?? (await waConfig());
@@ -68,7 +71,7 @@ async function send(body: Record<string, unknown>, cfg?: WaConfig | null): Promi
       cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: graphError(data, res.status) };
+    if (!res.ok) return { ok: false, error: sendError(data, res.status) };
     return { ok: true, messageId: data?.messages?.[0]?.id };
   } catch (e: any) {
     return { ok: false, error: e?.name === 'TimeoutError' ? 'WhatsApp no respondió a tiempo' : e?.message || String(e) };
@@ -349,7 +352,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           recipient: String(s.recipient_id || '').replace(/\D/g, ''),
           status: s.status,
           timestamp: iso(s.timestamp),
-          error: s.errors?.[0] ? [s.errors[0].title || s.errors[0].message, s.errors[0].error_data?.details].filter(Boolean).join(': ') : undefined,
+          error: s.errors?.[0] ? explainWaError([s.errors[0].title || s.errors[0].message, s.errors[0].error_data?.details].filter(Boolean).join(': '), Number(s.errors[0].code) || null) : undefined,
           phoneNumberId,
         });
       }
