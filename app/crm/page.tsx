@@ -10,7 +10,7 @@ export default function CRMPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   return (
-    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] lg:h-screen bg-slate-100 overflow-hidden">
+    <div className="kx-crm-shell flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] lg:h-screen bg-slate-100 overflow-hidden">
       {/* Sidebar navigation */}
       <Sidebar onOpenWizard={() => setWizardOpen(true)} />
 
@@ -21,7 +21,7 @@ export default function CRMPage() {
           onOpenWizard={() => setWizardOpen(true)}
         />
 
-        <main className="flex-1 p-3 md:p-4 overflow-hidden flex flex-col min-h-0">
+        <main className="kx-crm-main flex-1 p-3 md:p-4 overflow-hidden flex flex-col min-h-0">
           <OmnichannelInbox />
         </main>
       </div>
