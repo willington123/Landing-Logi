@@ -32,6 +32,7 @@ import {
 import { logiStore } from '@/lib/store';
 import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem, ImageSection, ImpactContent } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
+import { IMPACT_STYLES, heroAspect } from '@/lib/landing-styles';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
 import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
@@ -414,23 +415,35 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
 
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {tab === 'content' && config.impact && (
-              <Group title="Plantilla" defaultOpen>
+              <Group title="Estilo de la página" defaultOpen>
                 <div className="grid grid-cols-2 gap-2">
-                  {([
-                    ['impact', 'Impacto Premium', 'Oscura y de alto contraste'],
-                    ['brand', 'Página de marca', 'Clara y elegante'],
-                  ] as const).map(([id, name, text]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => update({ template: id })}
-                      className={`text-left rounded-lg border p-2.5 text-xs ${(config.template || 'brand') === id ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
-                    >
-                      <strong className="block text-slate-900">{name}</strong>
-                      <span className="text-slate-500">{text}</span>
-                    </button>
-                  ))}
+                  {IMPACT_STYLES.map((x) => {
+                    const on = isImpact && (config.impact!.style || 'impact') === x.id;
+                    return (
+                      <button
+                        key={x.id}
+                        type="button"
+                        onClick={() => setConfig((c) => ({ ...c, template: 'impact', impact: { ...c.impact!, style: x.id } }))}
+                        className={`text-left rounded-lg border overflow-hidden text-xs ${on ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+                      >
+                        <img src={`/landing-styles/${x.id}.webp`} alt="" className="w-full aspect-[16/9] object-cover object-top bg-slate-100" loading="lazy" />
+                        <span className="block p-2">
+                          <strong className="block text-slate-900">{x.name}</strong>
+                          <span className="text-slate-500">{x.text}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => update({ template: 'brand' })}
+                    className={`text-left rounded-lg border p-2.5 text-xs ${!isImpact ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <strong className="block text-slate-900">Página de marca</strong>
+                    <span className="text-slate-500">La versión clara y clásica</span>
+                  </button>
                 </div>
+                <p className="text-[11px] text-slate-500">Cambiar el estilo no cambia tus textos ni precios. Las fotos ya creadas se quedan; si quieres fotos en el ambiente del nuevo estilo, vuelve a crearlas abajo en “Fotos de Impacto Premium”.</p>
               </Group>
             )}
 
@@ -728,10 +741,10 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                 {isImpact && (
                   <Group title="Fotos de Impacto Premium" defaultOpen>
                     <ImageSlot
-                      label="Portada (persona con el producto)"
+                      label="Portada"
                       src={config.impact!.heroImage}
                       onChange={(v) => updateImpact({ heroImage: v })}
-                      aspect="16:9"
+                      aspect={heroAspect(config.impact!.style)}
                       aiPrompt={config.impact!.heroImagePrompt || 'a confident person of the target audience on the left, the product big on the right on a dark pedestal, dramatic colored rim light, dark background'}
                       generate={generateImage}
                     />
