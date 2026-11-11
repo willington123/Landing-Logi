@@ -29,9 +29,29 @@ export function toJsonSchema(s: any): any {
   }
   if (type === 'array') return { type: 'array', items: toJsonSchema(s.items) };
   const out: any = { type };
-  if (Array.isArray(s.enum)) out.enum = s.enum;
+  // Long enums (the icon names) blow up the compiled grammar: send them as a described string instead.
+  // A name outside the list is harmless, the renderers fall back to a default icon.
+  if (Array.isArray(s.enum)) {
+    if (s.enum.length <= 8) out.enum = s.enum;
+    else out.description = `Uno de: ${s.enum.join(', ')}`;
+  }
   return out;
 }
+
+// Reads the JSON out of a free-text answer (in case it comes wrapped in ``` fences or with a sentence around it).
+function parseJsonText(text: string): any {
+  const t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  try {
+    return JSON.parse(t);
+  } catch {
+    const a = t.indexOf('{');
+    const b = t.lastIndexOf('}');
+    if (a >= 0 && b > a) return JSON.parse(t.slice(a, b + 1));
+    throw new Error('no json');
+  }
+}
+
+const isGrammarTooLarge = (e: any) => e instanceof Anthropic.BadRequestError && /grammar is too large|schema is too (large|complex)|too many/i.test(String(e.message));
 
 type ImageMedia = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 const MEDIA: ImageMedia[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -57,18 +77,45 @@ export async function writeLandingWithClaude(p: { orgId: string | null; prompt: 
   if (!images.length) throw new ClaudeLandingError('La foto no está en un formato que Claude pueda leer (JPG, PNG, WEBP o GIF).');
 
   const client = new Anthropic({ apiKey: key.key, timeout: 200_000, maxRetries: 1 });
+  const schema = toJsonSchema(p.schema);
+  // structured = the API enforces the schema. When the schema is too big for that, the same request goes again
+  // with the schema written in the prompt and the JSON read from the text.
+  const run = (structured: boolean) =>
+    client.beta.messages
+      .stream({
+        model: LANDING_MODEL,
+        max_tokens: 32000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: structured ? { effort: 'high', format: { type: 'json_schema', schema } } : { effort: 'high' },
+        system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              ...images,
+              {
+                type: 'text',
+                text: structured
+                  ? p.prompt
+                  : `${p.prompt}\n\n=== FORMATO DE RESPUESTA ===\nResponde SOLO con un objeto JSON válido (sin texto antes ni después, sin \`\`\`) que cumpla exactamente este JSON Schema, con todas las claves:\n${JSON.stringify(schema)}`,
+              },
+            ],
+          },
+        ],
+      })
+      .finalMessage();
   let message: Anthropic.Beta.BetaMessage;
+  let structured = true;
   try {
-    const stream = client.beta.messages.stream({
-      model: LANDING_MODEL,
-      max_tokens: 32000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'high', format: { type: 'json_schema', schema: toJsonSchema(p.schema) } },
-      system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: [...images, { type: 'text', text: p.prompt }] }],
-    });
-    message = await stream.finalMessage();
+    try {
+      message = await run(true);
+    } catch (e) {
+      if (!isGrammarTooLarge(e)) throw e;
+      console.warn('Landing con Claude: esquema muy grande para salida estricta, reintento sin ella');
+      structured = false;
+      message = await run(false);
+    }
   } catch (e: any) {
     if (e instanceof Anthropic.AuthenticationError) throw new ClaudeLandingError('La clave de Claude no es válida.');
     if (e instanceof Anthropic.RateLimitError) throw new ClaudeLandingError('Claude está ocupado (límite de uso).');
@@ -80,7 +127,7 @@ export async function writeLandingWithClaude(p: { orgId: string | null; prompt: 
   const text = message.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
   let copy: any;
   try {
-    copy = JSON.parse(text);
+    copy = structured ? JSON.parse(text) : parseJsonText(text);
   } catch {
     throw new ClaudeLandingError('Claude devolvió una respuesta que no se pudo leer.');
   }
