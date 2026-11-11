@@ -30,7 +30,7 @@ import {
   Search as SearchIcon,
 } from 'lucide-react';
 import { logiStore } from '@/lib/store';
-import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem, ImageSection } from '@/lib/types';
+import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem, ImageSection, ImpactContent } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
@@ -228,6 +228,9 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
   const update = useCallback((patch: Partial<LandingPageConfig>) => setConfig((c) => ({ ...c, ...patch })), []);
   const updateSales = useCallback((patch: Partial<SalesPageContent>) => setConfig((c) => ({ ...c, sales: { ...c.sales!, ...patch } })), []);
   const updateDesign = (patch: Partial<LandingDesign>) => setConfig((c) => ({ ...c, design: { ...c.design!, ...patch } }));
+  // "Impacto Premium" texts.
+  const updateImpact = (patch: Partial<ImpactContent>) => setConfig((c) => ({ ...c, impact: { ...c.impact!, ...patch } }));
+  const isImpact = config.template === 'impact' && Boolean(config.impact);
 
   // ----- live preview -----
   const postPreview = useCallback(() => {
@@ -410,7 +413,114 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
           </nav>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {tab === 'content' && (
+            {tab === 'content' && config.impact && (
+              <Group title="Plantilla" defaultOpen>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ['impact', 'Impacto Premium', 'Oscura y de alto contraste'],
+                    ['brand', 'Página de marca', 'Clara y elegante'],
+                  ] as const).map(([id, name, text]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => update({ template: id })}
+                      className={`text-left rounded-lg border p-2.5 text-xs ${(config.template || 'brand') === id ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <strong className="block text-slate-900">{name}</strong>
+                      <span className="text-slate-500">{text}</span>
+                    </button>
+                  ))}
+                </div>
+              </Group>
+            )}
+
+            {tab === 'content' && isImpact && (
+              <>
+                <p className="text-[11px] text-slate-500 px-1">
+                  Consejo: <code>**palabra**</code> la pinta del color principal y <code>|</code> hace un salto de línea en el título grande.
+                </p>
+                <Group title="Barra y portada" defaultOpen>
+                  <Text label="Marca (arriba a la izquierda)" value={s.brandName} onChange={(v) => updateSales({ brandName: v })} hint="La segunda palabra sale en el color principal." />
+                  <Text label="Barra de oferta (arriba)" value={config.impact!.topBar} onChange={(v) => updateImpact({ topBar: v })} hint="El contador se configura en Ofertas → Contador de oferta." />
+                  <Text label="Etiqueta sobre el título" value={config.impact!.heroKicker} onChange={(v) => updateImpact({ heroKicker: v })} />
+                  <Text label="Título grande" value={config.impact!.heroTitle} onChange={(v) => updateImpact({ heroTitle: v })} placeholder="Recupera tu **energía** | y tu confianza" />
+                  <Text label="Texto bajo el título" value={config.impact!.heroText} onChange={(v) => updateImpact({ heroText: v })} multiline />
+                  <Text label="Beneficios con ✓ (uno por línea, máx. 4)" value={config.impact!.heroBullets.join('\n')} onChange={(v) => updateImpact({ heroBullets: v.split('\n').slice(0, 4) })} multiline />
+                  <Text label="WhatsApp" value={config.whatsappNumber} onChange={(v) => update({ whatsappNumber: v })} placeholder="+57 300 000 0000" />
+                </Group>
+
+                <Group title="Sellos de confianza">
+                  {config.impact!.trust.map((x, i, arr) => (
+                    <div key={i} className="rounded-lg border border-slate-200 p-2 space-y-1.5 bg-slate-50/60">
+                      <div className="flex items-center gap-1.5">
+                        <IconSelect value={x.icon} onChange={(v) => updateImpact({ trust: arr.map((y, j) => (j === i ? { ...y, icon: v } : y)) })} />
+                        <input className={inputCls} value={x.title} onChange={(e) => updateImpact({ trust: arr.map((y, j) => (j === i ? { ...y, title: e.target.value } : y)) })} placeholder="Envío gratis" />
+                      </div>
+                      <input className={inputCls} value={x.text} onChange={(e) => updateImpact({ trust: arr.map((y, j) => (j === i ? { ...y, text: e.target.value } : y)) })} placeholder="A todo el país" />
+                    </div>
+                  ))}
+                </Group>
+
+                <Group title="Beneficios">
+                  <Text label="Título" value={config.impact!.benefitsTitle} onChange={(v) => updateImpact({ benefitsTitle: v })} />
+                  {config.impact!.benefits.map((x, i, arr) => (
+                    <div key={i} className="rounded-lg border border-slate-200 p-2 space-y-1.5 bg-slate-50/60">
+                      <div className="flex items-center gap-1.5">
+                        <IconSelect value={x.icon} onChange={(v) => updateImpact({ benefits: arr.map((y, j) => (j === i ? { ...y, icon: v } : y)) })} />
+                        <input className={inputCls} value={x.title} onChange={(e) => updateImpact({ benefits: arr.map((y, j) => (j === i ? { ...y, title: e.target.value } : y)) })} placeholder="Título" />
+                      </div>
+                      <textarea className={`${inputCls} min-h-[48px]`} value={x.text} onChange={(e) => updateImpact({ benefits: arr.map((y, j) => (j === i ? { ...y, text: e.target.value } : y)) })} placeholder="Texto" />
+                    </div>
+                  ))}
+                </Group>
+
+                <Group title="Ingredientes o características">
+                  <Text label="Título" value={config.impact!.ingredientsTitle} onChange={(v) => updateImpact({ ingredientsTitle: v })} />
+                  <Text label="Subtítulo" value={config.impact!.ingredientsSubtitle} onChange={(v) => updateImpact({ ingredientsSubtitle: v })} />
+                  {config.impact!.ingredients.map((x, i, arr) => (
+                    <div key={i} className="rounded-lg border border-slate-200 p-2 space-y-1.5 bg-slate-50/60">
+                      <div className="flex items-center gap-2">
+                        {x.image ? <img src={x.image} alt="" className="w-10 h-10 rounded-full object-cover" /> : <span className="w-10 h-10 rounded-full bg-slate-200" />}
+                        <input className={inputCls} value={x.name} onChange={(e) => updateImpact({ ingredients: arr.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)) })} placeholder="Nombre" />
+                        <RowTools onRemove={() => updateImpact({ ingredients: arr.filter((_, j) => j !== i) })} />
+                      </div>
+                      <input className={inputCls} value={x.text} onChange={(e) => updateImpact({ ingredients: arr.map((y, j) => (j === i ? { ...y, text: e.target.value } : y)) })} placeholder="Para qué sirve" />
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-slate-500">Si borras todos, la sección no aparece.</p>
+                </Group>
+
+                <Group title="Paquetes">
+                  <Text label="Título" value={config.impact!.packagesTitle} onChange={(v) => updateImpact({ packagesTitle: v })} />
+                  <Text label="Subtítulo" value={config.impact!.packagesSubtitle} onChange={(v) => updateImpact({ packagesSubtitle: v })} />
+                  {config.combos.map((c) => {
+                    const cur = config.impact!.packBullets.find((p) => p.units === c.units)?.bullets || [];
+                    return (
+                      <Text
+                        key={c.id}
+                        label={`Puntos de “${c.name}” (uno por línea)`}
+                        value={cur.join('\n')}
+                        multiline
+                        onChange={(v) => {
+                          const rest = config.impact!.packBullets.filter((p) => p.units !== c.units);
+                          updateImpact({ packBullets: [...rest, { units: c.units, bullets: v.split('\n').slice(0, 3) }] });
+                        }}
+                      />
+                    );
+                  })}
+                  <p className="text-[11px] text-slate-500">Los precios y la etiqueta “Más vendido” se cambian en la pestaña Ofertas.</p>
+                </Group>
+
+                <Group title="Preguntas y cierre">
+                  <Text label="Título de preguntas frecuentes" value={config.impact!.faqTitle} onChange={(v) => updateImpact({ faqTitle: v })} />
+                  <Text label="Título final" value={config.impact!.finalTitle} onChange={(v) => updateImpact({ finalTitle: v })} />
+                  <Text label="Texto final" value={config.impact!.finalText} onChange={(v) => updateImpact({ finalText: v })} multiline />
+                  <Text label="Sello del cierre" value={config.impact!.finalBadge} onChange={(v) => updateImpact({ finalBadge: v })} placeholder="Oferta de hoy" />
+                </Group>
+              </>
+            )}
+
+            {tab === 'content' && !isImpact && (
               <>
                 <p className="text-[11px] text-slate-500 px-1">Consejo: escribe <code>**palabra**</code> en un título para destacarla.</p>
                 <Group title="Encabezado y caja de compra" defaultOpen>
@@ -615,6 +725,38 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
             {tab === 'images' && (
               <>
                 <p className="text-[11px] text-slate-500 px-1">“Generar con IA” usa tu proveedor de imágenes configurado (ahora nano-banana) con la foto principal como referencia.</p>
+                {isImpact && (
+                  <Group title="Fotos de Impacto Premium" defaultOpen>
+                    <ImageSlot
+                      label="Portada (persona con el producto)"
+                      src={config.impact!.heroImage}
+                      onChange={(v) => updateImpact({ heroImage: v })}
+                      aspect="16:9"
+                      aiPrompt={config.impact!.heroImagePrompt || 'a confident person of the target audience on the left, the product big on the right on a dark pedestal, dramatic colored rim light, dark background'}
+                      generate={generateImage}
+                    />
+                    {config.combos.map((c) => (
+                      <ImageSlot
+                        key={c.id}
+                        label={`Paquete: ${c.name}`}
+                        src={config.impact!.packImages?.[String(c.units)]}
+                        onChange={(v) => updateImpact({ packImages: { ...(config.impact!.packImages || {}), [String(c.units)]: v || '' } })}
+                        aspect="1:1"
+                        aiPrompt={`exactly ${c.units} identical units of the product grouped together, ${config.impact!.packImagePrompt || 'dark stone pedestal, dramatic rim light'}`}
+                        generate={generateImage}
+                      />
+                    ))}
+                    {config.impact!.ingredients.map((x, i, arr) => (
+                      <ImageSlot
+                        key={i}
+                        label={`Ingrediente: ${x.name}`}
+                        src={x.image}
+                        onChange={(v) => updateImpact({ ingredients: arr.map((y, j) => (j === i ? { ...y, image: v } : y)) })}
+                        aspect="1:1"
+                      />
+                    ))}
+                  </Group>
+                )}
                 <Group title="Foto principal y galería" defaultOpen>
                   <ImageSlot label="Foto principal del producto" src={config.mainImage} onChange={(v) => v && update({ mainImage: v })} />
                   {(config.galleryImages || []).map((g, i, arr) => (

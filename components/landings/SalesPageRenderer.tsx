@@ -7,6 +7,7 @@ import { Inter, Playfair_Display, Fraunces } from 'next/font/google';
 import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import OfferCountdownBox from '@/components/landings/OfferCountdownBox';
+import ImpactSections from '@/components/landings/ImpactSections';
 import { defaultCombo } from '@/lib/offer-countdown';
 import {
   EMPTY_ADDRESS,
@@ -138,6 +139,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const headingFont = d.vibe === 'luxury' ? playfair.className : d.vibe === 'warm' ? fraunces.className : '';
   const isColombia = !config.country || config.country === 'Colombia';
   const brand = s.brandName || config.productName.split(' ')[0];
+  const isImpact = config.template === 'impact' && Boolean(config.impact);
 
   const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')} ${config.currency || 'COP'}`;
   const discount = Math.max(0, Math.round(((config.regularPrice - config.promoPrice) / (config.regularPrice || 1)) * 100));
@@ -351,7 +353,22 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const rightBenefits = config.benefits.slice(2, 4);
 
   return (
-    <div className={`${inter.className} bg-white text-slate-700 antialiased pb-24 sm:pb-0`}>
+    <div className={`${inter.className} ${isImpact ? '' : 'bg-white'} text-slate-700 antialiased pb-24 sm:pb-0`} style={isImpact ? { background: '#0B0B0F' } : undefined}>
+      {isImpact ? (
+        <ImpactSections
+          config={config}
+          d={d}
+          brand={brand}
+          combos={combos}
+          combo={combo}
+          money={money}
+          onOrder={(id) => {
+            if (id) setComboId(id);
+            setDrawer(true);
+          }}
+        />
+      ) : (
+        <>
       {/* Announcement */}
       <div className="text-center text-[13px] font-medium py-2.5 px-4 text-white" style={{ background: d.dark }}>
         <span className="inline-flex items-center gap-2">
@@ -880,6 +897,9 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
         © {new Date().getFullYear()} {brand} · Pago contraentrega · {config.country || 'Colombia'}
       </footer>
 
+        </>
+      )}
+
       {/* WhatsApp */}
       {whatsappHref && (
         <a href={whatsappHref} target="_blank" rel="noreferrer" className="fixed right-4 bottom-24 sm:bottom-6 z-40 w-14 h-14 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-xl hover:scale-105 transition" aria-label="Escribir por WhatsApp">
@@ -889,14 +909,14 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
 
       {/* Sticky mobile bar */}
       {config.enableStickyBar !== false && (
-        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 p-3 flex items-center gap-3">
+        <div className={`sm:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur border-t p-3 flex items-center gap-3 ${isImpact ? 'border-white/10' : 'bg-white/95 border-slate-200'}`} style={isImpact ? { background: '#0B0B0FF2' } : undefined}>
           <img src={config.mainImage} alt="" className="w-11 h-11 rounded-lg object-cover" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-slate-500 truncate">{config.productName}</div>
-            <div className="text-[15px] font-bold whitespace-nowrap" style={{ color: d.dark }}>${combo.promoPrice.toLocaleString('es-CO')}</div>
+            <div className={`text-xs truncate ${isImpact ? 'text-white/60' : 'text-slate-500'}`}>{config.productName}</div>
+            <div className="text-[15px] font-bold whitespace-nowrap" style={{ color: isImpact ? '#fff' : d.dark }}>${combo.promoPrice.toLocaleString('es-CO')}</div>
           </div>
-          <button onClick={() => setDrawer(true)} className="h-11 px-5 rounded-full text-sm font-bold whitespace-nowrap" style={{ background: d.primary, color: onPrimary, border: `2px solid ${d.dark}` }}>
-            {s.ctaText}
+          <button onClick={() => setDrawer(true)} className={`h-11 px-5 text-sm font-bold whitespace-nowrap ${isImpact ? 'rounded-xl uppercase' : 'rounded-full'}`} style={isImpact ? { background: d.primary, color: onPrimary } : { background: d.primary, color: onPrimary, border: `2px solid ${d.dark}` }}>
+            {isImpact ? 'Ordenar ahora' : s.ctaText}
           </button>
         </div>
       )}

@@ -112,7 +112,8 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const [tone, setTone] = useState(TONES[0].id);
   const [withImages, setWithImages] = useState(true);
   // "sections" = the page is a column of designed graphics (Claude art-directs, Nano Banana draws).
-  const [style, setStyle] = useState<'sections' | 'web'>('sections');
+  // "impact" = "Impacto Premium": dark, high-contrast sales page made to convert (real texts, AI pictures).
+  const [style, setStyle] = useState<'impact' | 'sections' | 'web'>('impact');
   const [reviewsText, setReviewsText] = useState('');
   const [reviewShots, setReviewShots] = useState<string[]>([]);
   const reviewInput = useRef<HTMLInputElement>(null);
@@ -189,7 +190,13 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
 
     const baseTasks: Task[] = [{ key: 'copy', label: claudeWrites ? 'Claude está analizando la foto y escribiendo la página' : 'Analizando la foto y escribiendo la página', state: 'running' }];
     const sectionsMode = style === 'sections';
-    if (!sectionsMode && withImages) {
+    const impactMode = style === 'impact';
+    if (impactMode) {
+      baseTasks.push({ key: 'ihero', label: 'Foto de portada (persona con el producto)', state: 'pending' });
+      for (const o of offerList.slice(0, 3)) baseTasks.push({ key: `ipack${o.units}`, label: `Foto del paquete de ${o.units} ${o.units === 1 ? 'unidad' : 'unidades'}`, state: 'pending' });
+      for (let i = 0; i < 4; i++) baseTasks.push({ key: `iing${i}`, label: `Foto de ingrediente ${i + 1}`, state: 'pending' });
+    }
+    if (!sectionsMode && !impactMode && withImages) {
       baseTasks.push(
         { key: 'hero', label: 'Imagen principal (banner)', state: 'pending' },
         { key: 'solution', label: 'Escena de uso con persona', state: 'pending' },
@@ -223,7 +230,9 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         shippingType,
         guaranteeDays: Number(guaranteeDays) || 30,
         tone,
+        regularUnitPrice: regularUnit,
         ...(sectionsMode ? { mode: 'sections', reviews: reviewsText.trim().slice(0, 2000), reviewImagesCount: reviewShots.length } : {}),
+        ...(impactMode ? { mode: 'impact' } : {}),
       });
       copy = data.copy;
       updateTask('copy', { state: 'done', label: `${data.writer === 'claude' ? 'Claude escribió la página' : 'Textos listos'}: “${copy.headline.replace(/\*\*/g, '')}”` });
@@ -273,6 +282,38 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         2
       );
       if (!images.sections.some(Boolean)) setImageNotice((n) => n || 'No se pudo dibujar ninguna sección; la página se armó con el diseño web.');
+    } else if (impactMode && copy.impact) {
+      // 2c. "Impacto Premium": cover with a person and the product, one pack shot per offer, ingredients.
+      const ic = copy.impact;
+      const palette = `${copy.design.primary}, ${copy.design.accent}, ${copy.design.dark}`;
+      const referenceImage = await compressImage(productImage, 500, 0.85);
+      images.packs = {};
+      images.ingredients = [];
+      const jobs: { key: string; body: Record<string, unknown>; max: number; set: (img: string) => void }[] = [
+        { key: 'ihero', body: { prompt: ic.heroImagePrompt, aspectRatio: '16:9' }, max: 1600, set: (i) => (images.impactHero = i) },
+        ...offerList.slice(0, 3).map((o) => ({ key: `ipack${o.units}`, body: { mode: 'pack', units: o.units, prompt: ic.packImagePrompt, aspectRatio: '1:1' }, max: 700, set: (i: string) => (images.packs![String(o.units)] = i) })),
+        ...(ic.ingredients || []).slice(0, 4).map((x, idx) => ({ key: `iing${idx}`, body: { mode: 'ingredient', prompt: x.imagePrompt || x.name, aspectRatio: '1:1' }, max: 400, set: (i: string) => (images.ingredients![idx] = i) })),
+      ];
+      let noImageQuota = false;
+      await runPool(
+        jobs.map((job) => async () => {
+          if (noImageQuota) return updateTask(job.key, { state: 'error', error: 'tu plan de Gemini no incluye imágenes' });
+          updateTask(job.key, { state: 'running' });
+          try {
+            const data = await postJSON('/api/landing/image', { ...common, imageBase64: productImage, referenceImage, palette, ...job.body });
+            const small = await compressImage(data.image, job.max, 0.82);
+            job.set(small);
+            updateTask(job.key, { state: 'done', preview: small });
+          } catch (e: any) {
+            if (e.code === 'no_image_quota') {
+              noImageQuota = true;
+              setImageNotice(e.message);
+            }
+            updateTask(job.key, { state: 'error', error: e.code === 'no_image_quota' ? 'tu plan de Gemini no incluye imágenes' : e.message });
+          }
+        }),
+        3
+      );
     } else if (!sectionsMode && withImages) {
       const palette = `${copy.design.primary}, ${copy.design.accent}, ${copy.design.dark}`;
       // Cloudflare's FLUX.2 needs a reference under 512x512.
@@ -339,6 +380,21 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
       },
       images
     );
+    if (impactMode) {
+      // Only the seller's real reviews ("Nombre, Ciudad: texto"), without invented stars.
+      landing.reviews = reviewsText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 3)
+        .slice(0, 6)
+        .map((l, i) => {
+          const m = /^([^:]{2,60}):\s*(.+)$/.exec(l);
+          const [who, where] = (m ? m[1] : 'Cliente').split(',').map((x) => x.trim());
+          return { id: `r-${i}-${Date.now()}`, author: who || 'Cliente', location: where || '', rating: 0, comment: (m ? m[2] : l).replace(/^["“]|["”]$/g, ''), verifiedPurchase: true, date: '' };
+        });
+      // The offer timer is on (it restarts every night); the seller can turn it off in the editor.
+      landing.countdown = { enabled: true, mode: 'daily', hours: 24, text: 'Termina en' };
+    }
     const pixel = logiStore.getStoreSettings().metaPixelId;
     if (pixel) landing.metaPixelId = pixel;
     logiStore.saveLanding(landing);
@@ -478,10 +534,11 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
 
 <div>
                   <span className={label}>Estilo de la página</span>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid sm:grid-cols-3 gap-2">
                     {([
+                      ['impact', 'Impacto Premium ⚡', 'Oscura y de alto contraste, hecha para vender: contador, sellos, paquetes con “más vendido” y botones grandes. Textos editables y fotos con IA.'],
                       ['sections', 'Secciones de imagen', 'Piezas gráficas únicas con textos grandes, insignias y precios. Claude las diseña y Nano Banana Pro las dibuja.'],
-                      ['web', 'Página web', 'El diseño de siempre: textos editables y 5 fotos publicitarias.'],
+                      ['web', 'Página de marca', 'Clara y elegante, estilo tienda de marca: textos editables y 5 fotos publicitarias.'],
                     ] as const).map(([id, title, text]) => (
                       <button
                         key={id}
@@ -511,7 +568,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                   </label>
                 )}
 
-                {style === 'sections' && (
+                {(style === 'sections' || style === 'impact') && (
                   <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
                     <span className="block text-xs font-bold text-slate-700">Opiniones reales de clientes (opcional)</span>
                     <textarea
@@ -520,7 +577,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                       onChange={(e) => setReviewsText(e.target.value)}
                       placeholder={'Una por línea, tal cual te la escribieron:\nMaría G., Medellín: "Me llegó en 2 días, me encantó"'}
                     />
-                    <div className="flex gap-2 items-center">
+                    <div className={`${style === 'sections' ? 'flex' : 'hidden'} gap-2 items-center`}>
                       {reviewShots.map((img, i) => (
                         <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 group">
                           <img src={img} alt="" className="w-full h-full object-cover" />
@@ -774,7 +831,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                 style={{ background: result.design?.dark || '#0F172A' }}
               >
                 <img
-                  src={result.sales?.heroImage || result.mainImage}
+                  src={result.impact?.heroImage || result.sales?.heroImage || result.mainImage}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover opacity-70"
                 />
@@ -784,9 +841,9 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
                     className="inline-block text-[11px] font-semibold px-2.5 py-1 rounded-full text-white mb-2"
                     style={{ background: result.design?.primary }}
                   >
-                    {result.sales?.eyebrow?.replace(/\*\*/g, '')}
+                    {(result.impact?.heroKicker || result.sales?.eyebrow)?.replace(/\*\*/g, '')}
                   </span>
-                  <h3 className="text-xl sm:text-3xl font-black text-white leading-tight">{result.headline.replace(/\*\*/g, '')}</h3>
+                  <h3 className="text-xl sm:text-3xl font-black text-white leading-tight">{(result.impact?.heroTitle || result.headline).replace(/\*\*/g, '').replace(/\s*\|\s*/g, ' ')}</h3>
                 </div>
               </div>
               <h3 className="text-xl font-black text-slate-900">¡Tu landing está lista!</h3>
