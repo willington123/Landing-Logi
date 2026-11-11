@@ -648,18 +648,15 @@ export default function IntegrationsPage() {
 
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 max-w-[1280px] mx-auto w-full">
           {/* Header Description */}
-          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+          <div className="flex flex-col gap-3">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
-                Integraciones
-              </h2>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <p className="text-sm text-slate-500 max-w-3xl">
                 Conecta las cuentas de tu tienda: WhatsApp, llamadas con IA, Claude y la API de conversiones de Meta. Las claves se guardan cifradas. El píxel de Meta se configura en cada landing o en Configuración.
               </p>
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600 overflow-x-auto max-w-full whitespace-nowrap">
+            <div className="flex flex-wrap items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-[13px] font-medium text-slate-600 self-start max-w-full">
               <button
                 onClick={() => setSelectedCategory('all')}
                 className={`px-3 py-1.5 rounded-lg transition ${

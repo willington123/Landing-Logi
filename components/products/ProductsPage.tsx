@@ -71,8 +71,7 @@ export default function ProductsPage() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Productos para WhatsApp</h2>
-          <p className="text-sm text-slate-500">Lo que vendes por chat sin landing. El asistente los ofrece y toma el pedido, y los usas en “Nuevo pedido”.</p>
+          <p className="text-sm text-slate-500">Productos para WhatsApp: lo que vendes por chat sin landing. El asistente los ofrece y toma el pedido, y los usas en “Nuevo pedido”.</p>
         </div>
         <button onClick={() => setEditing(newDraft())} className="h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-1.5 shrink-0">
           <Plus className="w-4 h-4" /> Nuevo producto

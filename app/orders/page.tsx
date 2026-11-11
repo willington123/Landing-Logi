@@ -321,13 +321,12 @@ export default function OrdersPage() {
 
         <main className={`px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 ${view === 'board' ? 'max-w-none' : 'max-w-[1280px]'} mx-auto w-full min-w-0`}>
           {/* Intro + filters */}
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="flex flex-col gap-3">
             <div>
               {stores && multi && <StorePicker stores={stores} sel={sel} className="mb-3" />}
-              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Pedidos contraentrega</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Revisa confirmaciones, direcciones y estado de cada pedido.</p>
+              <p className="text-sm text-slate-500">Pedidos contraentrega: revisa confirmaciones, direcciones y el estado de cada uno.</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
               <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 self-start sm:self-auto" role="tablist" aria-label="Vista">
                 {(
                   [

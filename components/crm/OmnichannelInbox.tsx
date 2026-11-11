@@ -1008,10 +1008,10 @@ export default function OmnichannelInbox() {
   return (
     <div className={`${card} flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
       {/* Top bar: stores, search, filters, period and the four attention cards */}
-      <div className={`${activeKey ? 'hidden md:block' : ''} shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-3 pb-3 space-y-3`}>
+      <div className={`${activeKey ? 'hidden md:block' : ''} shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-2.5 sm:pt-3 pb-2.5 sm:pb-3 space-y-2 sm:space-y-3`}>
         <div className="flex flex-wrap items-center gap-2">
           {stores && <StorePicker stores={stores} sel={sel} />}
-          <div className="relative order-[9] basis-full sm:order-none sm:basis-auto flex-1 min-w-[180px] sm:max-w-md">
+          <div className="relative order-1 sm:order-none flex-1 min-w-0 sm:min-w-[180px] sm:max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
@@ -1025,15 +1025,16 @@ export default function OmnichannelInbox() {
               </button>
             )}
           </div>
-          <div ref={advRef} className="relative">
+          <div ref={advRef} className="relative order-2 sm:order-none">
             <button
               onClick={() => setAdvOpen((o) => !o)}
+              aria-label="Filtros avanzados y ajustes"
               className={`h-10 px-3 rounded-xl border text-[13px] font-medium inline-flex items-center gap-1.5 ${advActive ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
             >
-              <FilterIcon className="w-4 h-4" /> Filtros avanzados <ChevronDown className="w-3.5 h-3.5" />
+              <FilterIcon className="w-4 h-4" /> <span className="hidden sm:inline">Filtros avanzados</span> <ChevronDown className="w-3.5 h-3.5 hidden sm:block" />
             </button>
             {advOpen && (
-              <div className="absolute z-40 mt-2 left-0 w-[min(calc(100vw-2rem),340px)] bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-3 text-[13px]">
+              <div className="absolute z-40 mt-2 right-0 sm:right-auto sm:left-0 w-[min(calc(100vw-2rem),340px)] bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-3 text-[13px]">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Mostrar</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1133,7 +1134,7 @@ export default function OmnichannelInbox() {
               <button
                 key={p.id}
                 onClick={() => setPeriod(p.id)}
-                className={`h-9 px-3 rounded-full text-[13px] font-medium whitespace-nowrap ${period === p.id ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-white'}`}
+                className={`h-8 sm:h-9 px-3 rounded-full text-[13px] font-medium whitespace-nowrap ${period === p.id ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-white'}`}
               >
                 {p.label}
               </button>
@@ -1147,19 +1148,19 @@ export default function OmnichannelInbox() {
           {updatedAt && <span className="ml-auto hidden xl:inline text-[12px] text-slate-400">Actualizado {updatedAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>}
         </div>
 
-        <div className="grid grid-flow-col auto-cols-[minmax(170px,1fr)] lg:grid-flow-row lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto">
+        <div className="grid grid-flow-col auto-cols-[minmax(150px,1fr)] sm:auto-cols-[minmax(170px,1fr)] lg:grid-flow-row lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto">
           {cards.map((k) => (
             <button
               key={k.id}
               onClick={() => setFocus(focus === k.id ? 'all' : k.id)}
               aria-pressed={focus === k.id}
-              className={`h-14 px-3 rounded-2xl flex items-center gap-3 text-left transition ${k.tone} ${focus === k.id ? `ring-2 ${k.on} bg-white` : 'hover:brightness-[0.98]'}`}
+              className={`h-11 sm:h-14 px-2.5 sm:px-3 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 text-left transition ${k.tone} ${focus === k.id ? `ring-2 ${k.on} bg-white` : 'hover:brightness-[0.98]'}`}
             >
-              <span className="w-9 h-9 rounded-xl bg-white/70 flex items-center justify-center shrink-0">
-                <k.Icon className="w-[18px] h-[18px]" />
+              <span className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/70 flex items-center justify-center shrink-0">
+                <k.Icon className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
               </span>
-              <span className="flex-1 min-w-0 text-[13px] sm:text-[14px] font-semibold text-slate-900 leading-tight">{k.label}</span>
-              <span className="text-[22px] sm:text-[24px] font-bold text-slate-900 tabular-nums">{k.n}</span>
+              <span className="flex-1 min-w-0 text-[12.5px] sm:text-[14px] font-semibold text-slate-900 leading-tight">{k.label}</span>
+              <span className="text-[18px] sm:text-[24px] font-bold text-slate-900 tabular-nums">{k.n}</span>
             </button>
           ))}
         </div>
@@ -1175,12 +1176,13 @@ export default function OmnichannelInbox() {
       <div className="flex-1 flex min-h-0">
         {/* Conversation list */}
         <div className={`${activeKey ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] shrink-0 border-r border-slate-200 flex-col min-h-0`}>
-          <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-            <div className="flex items-baseline justify-between">
+          <div className="px-4 pt-2.5 md:pt-4 pb-2.5 md:pb-3 border-b border-slate-100">
+            <div className="hidden md:flex items-baseline justify-between">
               <h2 className="text-lg font-bold text-slate-900">Conversaciones</h2>
               <span className="text-[13px] text-slate-400">{filtered.length}</span>
             </div>
-            <div className="mt-2 inline-flex rounded-lg bg-slate-100 p-0.5 text-[12px] font-semibold" role="group" aria-label="Orden de la lista">
+            <div className="flex items-center gap-2 md:mt-2">
+            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[12px] font-semibold" role="group" aria-label="Orden de la lista">
               {(
                 [
                   ['recent', 'Más recientes'],
@@ -1192,7 +1194,9 @@ export default function OmnichannelInbox() {
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[12px] text-slate-500">
+              <span className="md:hidden ml-auto text-[12px] text-slate-400">{filtered.length} chats</span>
+            </div>
+            <p className={`mt-1.5 text-[12px] text-slate-500 ${focus === 'all' ? 'hidden md:block' : ''}`}>
               {focus === 'all' ? (order === 'recent' ? 'Arriba quien escribió más reciente.' : 'Primero lo que necesita a una persona.') : cards.find((k) => k.id === focus)?.label}
               {focus !== 'all' && (
                 <button onClick={() => setFocus('all')} className="ml-2 font-semibold text-brand-blue">
@@ -1443,7 +1447,7 @@ export default function OmnichannelInbox() {
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
-                    <div className="relative flex flex-wrap sm:flex-nowrap items-end gap-1.5 sm:gap-2">
+                    <div className="relative flex flex-wrap 2xl:flex-nowrap items-end gap-1.5 sm:gap-2">
                       {qr.open && (
                         <QuickReplyMenu
                           replies={replies}
@@ -1497,11 +1501,11 @@ export default function OmnichannelInbox() {
                         rows={1}
                         placeholder="Mensaje…"
                         title="Enter envía, Shift+Enter salta de línea, / para respuestas rápidas"
-                        className="flex-1 min-w-0 max-sm:-order-2 max-sm:basis-[calc(100%-3rem)] resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        className="flex-1 min-w-0 max-2xl:-order-2 max-2xl:basis-[calc(100%-3.25rem)] resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                       />
-                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="max-sm:-order-1 h-10 sm:h-11 w-10 sm:w-auto sm:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
+                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="max-2xl:-order-1 h-10 sm:h-11 w-10 sm:w-11 2xl:w-auto 2xl:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        <span className="hidden sm:inline">Enviar</span>
+                        <span className="hidden 2xl:inline">Enviar</span>
                       </button>
                     </div>
                   </>

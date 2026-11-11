@@ -66,8 +66,7 @@ export default function LandingsPage() {
           {/* Intro */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Tus landing pages</h2>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <p className="text-sm text-slate-500">
                 {landings.length} {landings.length === 1 ? 'página publicada' : 'páginas publicadas'} con pago contraentrega.
               </p>
             </div>

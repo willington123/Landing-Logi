@@ -311,7 +311,6 @@ export default function CreativesPage() {
     <div className="space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Creativos</h2>
           <p className="text-sm text-slate-500">
             {state.account?.name ? `${state.account.name} · ` : ''}Gasto de Meta frente a ventas confirmadas en Konnexa.
           </p>
