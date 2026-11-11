@@ -3,6 +3,7 @@
 // Linked order in the WhatsApp inbox, with quick actions (confirm, cancel, ship, deliver, fix address).
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import CopyForDropi from '@/components/orders/CopyForDropi';
 import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, RotateCcw, Truck, XCircle } from 'lucide-react';
 import type { OrderSummary } from '@/lib/server/wa-store';
 import type { OrderStatus } from '@/lib/types';
@@ -121,6 +122,8 @@ export function OrderPanel({
           )}
         </div>
       )}
+
+      {!editing && <CopyForDropi order={order} />}
 
       {order.trackingNumber && !shipping && (
         <div className="flex gap-2 text-[13px] text-slate-700">

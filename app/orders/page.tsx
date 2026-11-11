@@ -9,6 +9,7 @@ import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
 import DropiOrderStatus from '@/components/orders/DropiOrderStatus';
 import ShippingBox, { ShipBadges } from '@/components/orders/ShippingBox';
+import CopyForDropi from '@/components/orders/CopyForDropi';
 import DropiBulkModal from '@/components/orders/DropiBulkModal';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import { WaFallbackBadge, WhatsAppOrderStatus, useNow, waFallbackPending } from '@/components/orders/WhatsAppOrderStatus';
@@ -604,6 +605,7 @@ export default function OrdersPage() {
               )}
 
               <WhatsAppOrderStatus order={selectedOrder} onSent={reloadAll} />
+              <CopyForDropi order={selectedOrder} defaultOpen={!selectedOrder.inDropi && !selectedOrder.dropi?.orderId} />
               <DropiOrderStatus order={selectedOrder} onSent={reloadAll} />
               <ShippingBox order={selectedOrder} onChanged={reloadAll} />
 
