@@ -53,15 +53,17 @@ export function CustomerPanel({
   onCreateOrder,
   tab,
   onTab,
+  editCustomer,
 }: {
   conversationId: string;
   order: OrderSummary | null;
   orderChip: (status: string) => React.ReactNode;
-  onOrderChanged: (a: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => void;
+  onOrderChanged: (a: OrderAction, extra?: { carrier?: string; trackingNumber?: string; openChat?: string }) => void;
   guide?: React.ReactNode; // "Qué hacer" for this chat
   onCreateOrder?: () => void;
   tab: PanelTab;
   onTab: (t: PanelTab) => void;
+  editCustomer?: number; // bumps to open the order's customer data editor
 }) {
   const [history, setHistory] = useState<HistoryOrder[] | null>(null);
   const [notes, setNotes] = useState<Note[] | null>(null);
@@ -184,6 +186,7 @@ export function CustomerPanel({
             <OrderPanel
               order={order}
               chip={orderChip(order.status)}
+              editRequest={editCustomer}
               onChanged={(a, extra) => {
                 loadHistory();
                 onOrderChanged(a, extra);

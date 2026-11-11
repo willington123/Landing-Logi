@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cloudEnabled, patchOrderData, updateOrderAddress, updateOrderStatus } from '@/lib/server/db';
+import { cloudEnabled, patchOrderData, updateOrderAddress, updateOrderCustomer, updateOrderStatus } from '@/lib/server/db';
 import type { OrderStatus } from '@/lib/types';
 import { getAgents, myAgent } from '@/lib/server/crm-store';
 import { getUser } from '@/lib/server/accounts';
@@ -30,6 +30,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         : null;
       await patchOrderData(params.id, { inDropi });
       return NextResponse.json({ success: true, inDropi });
+    }
+    // Customer data correction (from Mensajes): { customer: { customerName, phone, address, city, department? } }
+    if (status === undefined && body.customer && typeof body.customer === 'object') {
+      const clean = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+      const c = body.customer;
+      const customerName = clean(c.customerName, 80);
+      const phone = clean(c.phone, 30).replace(/[^\d+\s()-]/g, '');
+      const digits = phone.replace(/\D/g, '');
+      const address = clean(c.address, 240);
+      const city = clean(c.city, 80);
+      if (customerName.length < 2) return NextResponse.json({ success: false, error: 'Escribe el nombre del cliente.' }, { status: 400 });
+      if (digits.length < 7 || digits.length > 15) return NextResponse.json({ success: false, error: 'El teléfono no es válido. Escríbelo con el indicativo del país o los 10 dígitos del celular.' }, { status: 400 });
+      if (address.length < 6 || !city) return NextResponse.json({ success: false, error: 'Escribe la dirección completa y la ciudad.' }, { status: 400 });
+      const r = await updateOrderCustomer(params.id, { customerName, phone, address, city, department: clean(c.department, 80) });
+      if (!r) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 });
+      return NextResponse.json({ success: true, order: r.order, phoneChanged: r.phoneChanged });
     }
     // Address correction (from Mensajes): { address, city, department? }
     if (status === undefined && body.address !== undefined) {

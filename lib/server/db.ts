@@ -279,6 +279,28 @@ export async function updateOrderAddress(id: string, fields: { address: string; 
   return data;
 }
 
+// Customer data corrected by the team (name, phone, address). A new phone clears the last template result,
+// so the confirmation can go out again to the right number.
+export async function updateOrderCustomer(id: string, fields: { customerName: string; phone: string; address: string; city: string; department: string }) {
+  const { data: row, error: readErr } = await (await db()).from('orders').select('data').eq('id', id).maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  if (!row) return null;
+  const cur = row.data as OrderItem;
+  const digits = (v: string) => (v || '').replace(/\D/g, '');
+  const phoneChanged = digits(cur.phone) !== digits(fields.phone);
+  const addrChanged = cur.address !== fields.address || cur.city !== fields.city || cur.department !== fields.department;
+  const prevAddr = [cur.address, cur.city, cur.department].filter(Boolean).join(', ');
+  const data: OrderItem = {
+    ...cur,
+    ...fields,
+    ...(addrChanged && !cur.previousAddress ? { previousAddress: prevAddr } : {}),
+    ...(phoneChanged ? { previousPhone: cur.phone, whatsapp: undefined } : {}),
+  };
+  const { error } = await (await db()).from('orders').update({ data }).eq('id', id);
+  if (error) throw new Error(error.message);
+  return { order: data, phoneChanged };
+}
+
 // Deletes orders for good. WhatsApp conversations keep their messages; their order link is cleared.
 export async function deleteOrders(ids: string[]): Promise<number> {
   const { data, error } = await (await db()).from('orders').delete().in('id', ids).select('id');

@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import CopyForDropi from '@/components/orders/CopyForDropi';
-import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, RotateCcw, Truck, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, MapPin, Package, Pencil, PackageCheck, RotateCcw, Send, Truck, User, XCircle } from 'lucide-react';
 import type { OrderSummary } from '@/lib/server/wa-store';
 import type { OrderStatus } from '@/lib/types';
 import { crmApi } from '@/components/crm/CrmParts';
@@ -13,22 +13,28 @@ import { CARRIERS } from '@/lib/crm';
 const PENDING: string[] = ['pending_call', 'retry_scheduled', 'needs_review', 'unanswered', 'calling'];
 const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')}`;
 
-export type OrderAction = 'confirmed_by_voice' | 'cancelled' | 'shipped' | 'delivered' | 'returned' | 'address';
+export type OrderAction = 'confirmed_by_voice' | 'cancelled' | 'shipped' | 'delivered' | 'returned' | 'address' | 'customer';
 
 export function OrderPanel({
   order,
   chip,
   onChanged,
+  editRequest,
 }: {
   order: OrderSummary;
   chip: React.ReactNode;
-  onChanged: (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string }) => void;
+  editRequest?: number; // bumps to open the customer data editor (from a failed message in the chat)
+  onChanged: (action: OrderAction, extra?: { carrier?: string; trackingNumber?: string; openChat?: string }) => void;
 }) {
   const [busy, setBusy] = useState<OrderAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [askCancel, setAskCancel] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [addr, setAddr] = useState({ address: order.address || '', city: order.city || '', department: order.department || '' });
+  const blank = () => ({ customerName: order.customerName || '', phone: order.phone || '', address: order.address || '', city: order.city || '', department: order.department || '' });
+  const [addr, setAddr] = useState(blank);
+  // After the phone is corrected: offer to send the confirmation to the new number.
+  const [newPhone, setNewPhone] = useState(false);
+  const [tpl, setTpl] = useState<{ busy: boolean; msg?: string; ok?: boolean }>({ busy: false });
   const [shipping, setShipping] = useState(false);
   const [ship, setShip] = useState({ carrier: order.carrier || '', trackingNumber: order.trackingNumber || '' });
 
@@ -38,8 +44,44 @@ export function OrderPanel({
     setShipping(false);
     setError(null);
     setShip({ carrier: order.carrier || '', trackingNumber: order.trackingNumber || '' });
-    setAddr({ address: order.address || '', city: order.city || '', department: order.department || '' });
-  }, [order.id, order.address, order.city, order.department]);
+    setAddr(blank());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id, order.address, order.city, order.department, order.customerName, order.phone]);
+  useEffect(() => {
+    setNewPhone(false);
+    setTpl({ busy: false });
+  }, [order.id]);
+
+  useEffect(() => {
+    if (editRequest) setEditing(true);
+  }, [editRequest]);
+
+  const saveCustomer = async () => {
+    setBusy('customer');
+    setError(null);
+    try {
+      const d = await crmApi<{ phoneChanged?: boolean }>(`/api/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify({ customer: addr }) });
+      setEditing(false);
+      setNewPhone(Boolean(d.phoneChanged));
+      setTpl({ busy: false });
+      onChanged('customer');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const sendToNewPhone = async () => {
+    setTpl({ busy: true });
+    try {
+      const d = await crmApi<{ to?: string }>('/api/whatsapp/confirm', { method: 'POST', body: JSON.stringify({ orderId: order.id }) });
+      setTpl({ busy: false, ok: true, msg: 'Plantilla enviada al número nuevo.' });
+      setNewPhone(false);
+      onChanged('customer', { openChat: d.to });
+    } catch (e: any) {
+      setTpl({ busy: false, ok: false, msg: e.message });
+    }
+  };
 
   const run = async (action: OrderAction, body: Record<string, unknown>) => {
     setBusy(action);
@@ -84,6 +126,20 @@ export function OrderPanel({
 
       {editing ? (
         <div className="space-y-2 rounded-xl bg-slate-50 p-2.5">
+          <p className="text-[11px] font-semibold text-slate-600">Datos del cliente</p>
+          <input
+            value={addr.customerName}
+            onChange={(e) => setAddr({ ...addr, customerName: e.target.value })}
+            placeholder="Nombre"
+            className="w-full h-9 text-[13px] border border-slate-200 rounded-lg px-2.5 bg-white"
+          />
+          <input
+            value={addr.phone}
+            onChange={(e) => setAddr({ ...addr, phone: e.target.value })}
+            placeholder="Celular con WhatsApp"
+            inputMode="tel"
+            className="w-full h-9 text-[13px] border border-slate-200 rounded-lg px-2.5 bg-white"
+          />
           <input
             value={addr.address}
             onChange={(e) => setAddr({ ...addr, address: e.target.value })}
@@ -100,28 +156,59 @@ export function OrderPanel({
             />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setEditing(false)} className={`${btn} flex-1 bg-white border border-slate-200 text-slate-600`}>
+            <button
+              onClick={() => {
+                setEditing(false);
+                setAddr(blank());
+                setError(null);
+              }}
+              className={`${btn} flex-1 bg-white border border-slate-200 text-slate-600`}
+            >
               Cancelar
             </button>
-            <button onClick={() => run('address', addr)} disabled={busy !== null} className={`${btn} flex-1 bg-slate-900 text-white`}>
-              {spin('address', null)} Guardar
+            <button onClick={saveCustomer} disabled={busy !== null} className={`${btn} flex-1 bg-slate-900 text-white`}>
+              {spin('customer', null)} Guardar
             </button>
           </div>
         </div>
       ) : (
-        <div className="flex gap-2 text-[13px] text-slate-700">
-          <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-          <span className="flex-1 min-w-0">
-            {order.address}
-            <span className="block text-xs text-slate-500">{[order.city, order.department].filter(Boolean).join(', ')}</span>
-          </span>
-          {!closed && (
-            <button onClick={() => setEditing(true)} className="text-slate-400 hover:text-slate-800 self-start" aria-label="Editar dirección" title="Editar dirección">
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          )}
+        <>
+          <div className="flex gap-2 text-[13px] text-slate-700">
+            <User className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+            <span className="flex-1 min-w-0">
+              {order.customerName}
+              <span className="block text-xs text-slate-500">{order.phone}</span>
+            </span>
+            {!closed && (
+              <button
+                onClick={() => setEditing(true)}
+                className="h-7 px-2 -mt-0.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-100 inline-flex items-center gap-1 self-start"
+                aria-label="Editar datos del cliente"
+                title="Editar nombre, teléfono o dirección"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 text-[13px] text-slate-700">
+            <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+            <span className="flex-1 min-w-0">
+              {order.address}
+              <span className="block text-xs text-slate-500">{[order.city, order.department].filter(Boolean).join(', ')}</span>
+            </span>
+          </div>
+        </>
+      )}
+
+      {newPhone && !editing && (
+        <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-2.5 space-y-2">
+          <p className="text-[12px] text-emerald-900">Teléfono actualizado. ¿Le enviamos la confirmación por WhatsApp al número nuevo?</p>
+          <button onClick={sendToNewPhone} disabled={tpl.busy} className={`${btn} w-full bg-[#25D366] hover:bg-[#1ebe5a] text-white`}>
+            {tpl.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Enviar confirmación al {addr.phone || order.phone}
+          </button>
         </div>
       )}
+      {tpl.msg && <p className={`text-[12px] ${tpl.ok ? 'text-emerald-700' : 'text-red-600'}`}>{tpl.msg}</p>}
 
       {!editing && <CopyForDropi order={order} />}
 
