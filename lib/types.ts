@@ -160,7 +160,10 @@ export interface ImageSection {
 
 // "Impacto Premium" template: dark, high-contrast long sales page (hero with model + product, trust strip,
 // benefit cards, ingredients, packages, FAQ, final CTA). Texts by Claude; prices always from the combos.
+export type ImpactStyle = 'impact' | 'blast' | 'noir' | 'clinic' | 'neon';
+
 export interface ImpactContent {
+  style?: ImpactStyle; // look of the page (default 'impact'); see lib/landing-styles.ts
   topBar: string; // red bar on top (the countdown goes next to it when it's on)
   heroKicker: string; // small label above the title
   heroTitle: string; // **word** = highlighted in the brand color

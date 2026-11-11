@@ -8,6 +8,7 @@ import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import OfferCountdownBox from '@/components/landings/OfferCountdownBox';
 import ImpactSections from '@/components/landings/ImpactSections';
+import { impactTheme } from '@/lib/landing-styles';
 import { defaultCombo } from '@/lib/offer-countdown';
 import {
   EMPTY_ADDRESS,
@@ -140,6 +141,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const isColombia = !config.country || config.country === 'Colombia';
   const brand = s.brandName || config.productName.split(' ')[0];
   const isImpact = config.template === 'impact' && Boolean(config.impact);
+  const it = impactTheme(config.impact?.style, d);
 
   const money = (v: number) => `$${(v || 0).toLocaleString('es-CO')} ${config.currency || 'COP'}`;
   const discount = Math.max(0, Math.round(((config.regularPrice - config.promoPrice) / (config.regularPrice || 1)) * 100));
@@ -353,7 +355,7 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
   const rightBenefits = config.benefits.slice(2, 4);
 
   return (
-    <div className={`${inter.className} ${isImpact ? '' : 'bg-white'} text-slate-700 antialiased pb-24 sm:pb-0`} style={isImpact ? { background: '#0B0B0F' } : undefined}>
+    <div className={`${inter.className} ${isImpact ? '' : 'bg-white'} text-slate-700 antialiased pb-24 sm:pb-0`} style={isImpact ? { background: it.bg } : undefined}>
       {isImpact ? (
         <ImpactSections
           config={config}
@@ -909,13 +911,13 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
 
       {/* Sticky mobile bar */}
       {config.enableStickyBar !== false && (
-        <div className={`sm:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur border-t p-3 flex items-center gap-3 ${isImpact ? 'border-white/10' : 'bg-white/95 border-slate-200'}`} style={isImpact ? { background: '#0B0B0FF2' } : undefined}>
+        <div className={`sm:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur border-t p-3 flex items-center gap-3 ${isImpact ? '' : 'bg-white/95 border-slate-200'}`} style={isImpact ? { background: `${it.bg}F2`, borderColor: it.line } : undefined}>
           <img src={config.mainImage} alt="" className="w-11 h-11 rounded-lg object-cover" />
           <div className="flex-1 min-w-0">
-            <div className={`text-xs truncate ${isImpact ? 'text-white/60' : 'text-slate-500'}`}>{config.productName}</div>
-            <div className="text-[15px] font-bold whitespace-nowrap" style={{ color: isImpact ? '#fff' : d.dark }}>${combo.promoPrice.toLocaleString('es-CO')}</div>
+            <div className={`text-xs truncate ${isImpact ? '' : 'text-slate-500'}`} style={isImpact ? { color: it.muted } : undefined}>{config.productName}</div>
+            <div className="text-[15px] font-bold whitespace-nowrap" style={{ color: isImpact ? it.text : d.dark }}>${combo.promoPrice.toLocaleString('es-CO')}</div>
           </div>
-          <button onClick={() => setDrawer(true)} className={`h-11 px-5 text-sm font-bold whitespace-nowrap ${isImpact ? 'rounded-xl uppercase' : 'rounded-full'}`} style={isImpact ? { background: d.primary, color: onPrimary } : { background: d.primary, color: onPrimary, border: `2px solid ${d.dark}` }}>
+          <button onClick={() => setDrawer(true)} className={`h-11 px-5 text-sm font-bold whitespace-nowrap ${isImpact ? 'rounded-xl uppercase' : 'rounded-full'}`} style={isImpact ? (it.style === 'blast' ? { background: '#FFD21A', color: '#A30D0D' } : { background: it.primary, color: it.onPrimary }) : { background: d.primary, color: onPrimary, border: `2px solid ${d.dark}` }}>
             {isImpact ? 'Ordenar ahora' : s.ctaText}
           </button>
         </div>

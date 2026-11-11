@@ -131,29 +131,78 @@ const IMPACT_SCHEMA = {
 (IMPACT_SCHEMA.properties.impact as any).required = Object.keys(IMPACT_SCHEMA.properties.impact.properties);
 (IMPACT_SCHEMA as any).required = Object.keys(IMPACT_SCHEMA.properties);
 
+// What changes per look of the page (lib/landing-styles.ts): the feel, the voice, the palette and the pictures.
+const STYLE_BRIEF: Record<string, { name: string; look: string; voice: string; palette: string; hero: string; pack: string; ingredient: string }> = {
+  impact: {
+    name: 'IMPACTO PREMIUM',
+    look: 'oscura, de alto contraste y de respuesta directa: titulares enormes en mayúsculas cursivas, una palabra resaltada en el color de la marca, botones grandes "ORDENAR AHORA", insignias, sellos y mucha energía',
+    voice: 'Directo, emocional y seguro. Frases muy cortas que se leen en 2 segundos en el celular.',
+    palette: `- "dark": fondo casi negro con un matiz del producto (ej. #0B0B0F, #0A0F0B, #120A0A). Nunca claro.
+- "primary": color de impacto para botones y resaltados, tomado del producto o de su categoría (rojo intenso, naranja, dorado, verde lima, azul eléctrico, fucsia…). Debe verse muy fuerte sobre el negro.
+- "accent": un segundo tono para brillos y detalles. "light": un gris muy oscuro para tarjetas (ej. #16161C). vibe: "bold".`,
+    hero: 'una foto publicitaria HORIZONTAL: una persona real del público objetivo (edad y estilo acordes), segura y atractiva, a la izquierda, y el producto (idéntico a la referencia) grande a la derecha sobre un pedestal o superficie, fondo oscuro con luz dramática del color primary, humo o textura sutil',
+    pack: 'black volcanic rock pedestal, rim light in the brand color, subtle smoke',
+    ingredient: 'dark background, dramatic side light',
+  },
+  blast: {
+    name: 'EXPLOSIVO',
+    look: 'roja y amarilla, ruidosa y llena de energía, estilo oferta de televisión: títulos gigantes en mayúsculas cursivas, palabras resaltadas en amarillo, sello de descuento en forma de estrella, cintas amarillas inclinadas y botones amarillos enormes',
+    voice: 'Muy enérgico y entusiasta, con exclamaciones (¡…!) en títulos y botones, frases cortísimas y verbos de acción ("Desata", "Pídelo", "Aprovecha"). Nunca vulgar.',
+    palette: `- La paleta de esta plantilla es fija (rojo intenso y amarillo): pon "primary" "#FFD21A", "accent" "#E3141C", "dark" "#7A0B0B", "light" "#140707", vibe "bold".`,
+    hero: 'una foto publicitaria 4:3 llena de energía: una persona real del público objetivo con expresión de fuerza y entusiasmo y el producto (idéntico a la referencia) grande en primer plano en el centro, fondo rojo intenso con rayos de luz, chispas y brillo naranja, iluminación dramática',
+    pack: 'glossy red background with bright yellow light burst and sparks',
+    ingredient: 'bright clean light on a deep red background',
+  },
+  noir: {
+    name: 'LUJO NOIR',
+    look: 'negra y dorada, elegante y exclusiva, como una marca de lujo: títulos en letras romanas mayúsculas doradas, detalles finos dorados, mármol negro, mucho espacio y calma',
+    voice: 'Elegante, seguro y aspiracional, como una marca de lujo. Pocas palabras, sin exclamaciones ni gritos, nada de "¡OFERTA!". Habla de exclusividad, calidad y de sentirse en su mejor versión.',
+    palette: `- "primary": un dorado, champaña o bronce (ej. #C9A25C, #D4AF6A, #B08D57). "accent": un dorado más claro. "dark": negro cálido (#0A0907). "light": #15120E. vibe: "luxury".`,
+    hero: 'una foto publicitaria HORIZONTAL cinematográfica: a la IZQUIERDA una persona real del público objetivo, elegante y segura, en blanco y negro cálido con luz dorada; a la DERECHA el producto (idéntico a la referencia) sobre una roca o pedestal de mármol negro con vetas doradas; el CENTRO del cuadro queda oscuro y vacío para el título; fondo negro con humo suave y reflejos dorados',
+    pack: 'black marble pedestal with gold veins, warm golden rim light, dark smoky background',
+    ingredient: 'black marble surface, warm golden light, luxurious mood',
+  },
+  clinic: {
+    name: 'CLÍNICO LIMPIO',
+    look: 'blanca y azul, limpia, ordenada y muy confiable, como la página de un laboratorio o una marca de cuidado: mucho blanco, títulos firmes en minúscula, íconos finos y tarjetas suaves',
+    voice: 'Claro, calmado y confiable. Explica beneficios de forma concreta, sin exclamaciones ni exageraciones. Nada de jerga médica ni promesas de salud. Los títulos van en tipo oración (no todo en mayúsculas).',
+    palette: `- "primary": un azul profundo, azul pizarra o verde petróleo que combine con el producto (ej. #2F4A66, #1E3A5F, #1F5F5B). Debe verse bien sobre blanco. "accent": un verde o azul suave. "dark": #0F1B2D. "light": #F2F6FA. vibe: "fresh".`,
+    hero: 'una foto publicitaria 4:3 luminosa y limpia: el producto (idéntico a la referencia) centrado sobre un pedestal de piedra clara, con hojas verdes y cristalería de laboratorio desenfocada, fondo blanco con luz natural suave y sombras delicadas; sin personas',
+    pack: 'light stone pedestal, soft daylight, white background with a green leaf',
+    ingredient: 'clean white background, soft daylight, scientific glass dish',
+  },
+  neon: {
+    name: 'NEÓN FUTURISTA',
+    look: 'azul muy oscuro con brillos neón cian y morado, tecnológica y moderna: tarjetas de vidrio, bordes que brillan, títulos en mayúsculas cursivas y botones con degradado',
+    voice: 'Moderno y tecnológico, con palabras como "activa", "siguiente nivel", "rendimiento", "enfoque". Frases cortas y seguras. Nada de cifras o porcentajes de mejora inventados.',
+    palette: `- "primary": un neón brillante (cian #22D3EE, verde lima, azul eléctrico). "accent": un segundo neón que contraste (morado #A855F7, fucsia). "dark": #060B1A. "light": #0D1631. vibe: "tech".`,
+    hero: 'una foto publicitaria 4:3 futurista: el producto (idéntico a la referencia) centrado sobre una plataforma holográfica que brilla, con anillos de luz cian y morada, partículas y líneas digitales, fondo azul marino muy oscuro; puede haber una persona del público objetivo de perfil al fondo con luz neón',
+    pack: 'glowing holographic platform, cyan and purple neon rim light, dark navy background',
+    ingredient: 'dark navy background with soft cyan and purple neon glow',
+  },
+};
+
 function impactBrief(b: any): string {
+  const sb = STYLE_BRIEF[b.impactStyle] || STYLE_BRIEF.impact;
   const offers = (Array.isArray(b.offers) ? b.offers : []).filter((o: any) => o.units > 0 && o.price > 0);
   const regularUnit = Number(b.regularUnitPrice) || 0;
   const best = offers.length && regularUnit ? Math.max(...offers.map((o: any) => Math.round((1 - o.price / (regularUnit * o.units)) * 100))) : 0;
   return `
 
-=== PLANTILLA "IMPACTO PREMIUM" (manda sobre el estilo y la paleta de arriba) ===
-La página es oscura, de alto contraste y de respuesta directa, como las landings que más venden en Latinoamérica: titulares enormes en mayúsculas cursivas, una palabra clave resaltada en el color de la marca, botones grandes "ORDENAR AHORA", insignias, sellos y mucha energía. El objetivo es CONVERTIR: cada texto empuja a pedir.
+=== PLANTILLA "${sb.name}" (manda sobre el estilo y la paleta de arriba) ===
+Es una landing de respuesta directa de las que más venden en Latinoamérica. Su look: ${sb.look}. El objetivo es CONVERTIR: cada texto empuja a pedir.
 
 ESTILO (reemplaza "Voz de marca premium" y la regla de mayúsculas de arriba)
-- Directo, emocional y seguro. Frases muy cortas que se leen en 2 segundos en el celular.
-- Habla del deseo y del resultado en el día a día del cliente, en segunda persona.
-- Los títulos pueden ir en mayúsculas (el diseño los pone en mayúsculas igual). Usa **dobles asteriscos** en UNA palabra o dos de cada título para resaltarlas en color.
+- ${sb.voice}
+- Frases muy cortas que se leen en 2 segundos en el celular. Habla del deseo y del resultado en el día a día del cliente, en segunda persona.
+- Usa **dobles asteriscos** en UNA palabra o dos de cada título para resaltarlas en color.
 - Sin relleno, sin tecnicismos, sin frases genéricas que sirvan para cualquier producto.
 
 PALETA (reemplaza la regla de "design" de arriba)
-- "dark": fondo casi negro con un matiz del producto (ej. #0B0B0F, #0A0F0B, #120A0A). Nunca claro.
-- "primary": color de impacto para botones y resaltados, tomado del producto o de su categoría (rojo intenso, naranja, dorado, verde lima, azul eléctrico, fucsia…). Debe verse muy fuerte sobre el negro.
-- "accent": un segundo tono para brillos y detalles (más claro u oscuro que primary).
-- "light": un gris muy oscuro para tarjetas (ej. #16161C). vibe: "bold".
+${sb.palette}
 
 CAMPOS DE impact
-- topBar: barra superior en una línea, máx. 12 palabras, con un emoji al inicio (🔥 o ⚡). Usa SOLO datos reales: ${best > 0 ? `el mayor descuento real es ${best}% (puedes decir "hasta ${best}% de descuento")` : 'no hay descuento real: no hables de descuentos'}; envío ${b.shippingType === 'calculated' ? 'según destino (no digas gratis)' : 'gratis'}; pago contraentrega.
+- topBar: barra superior en una línea, máx. 12 palabras${b.impactStyle === 'noir' || b.impactStyle === 'clinic' ? ', sin emojis' : ', con un emoji al inicio (🔥 o ⚡)'}. Usa SOLO datos reales: ${best > 0 ? `el mayor descuento real es ${best}% (puedes decir "hasta ${best}% de descuento")` : 'no hay descuento real: no hables de descuentos'}; envío ${b.shippingType === 'calculated' ? 'según destino (no digas gratis)' : 'gratis'}; pago contraentrega.
 - heroKicker: etiqueta de 3-5 palabras (ej. "Suplemento premium para hombres", "La crema que tu piel pedía").
 - heroTitle: el gancho principal, 4 a 8 palabras, 2-3 líneas cortas separadas por " | " (ej. "Recupera tu **energía** | y tu confianza"). Resalta 1 palabra.
 - heroText: 1-2 frases que venden el resultado y mencionan que pagas al recibir.
@@ -165,8 +214,9 @@ CAMPOS DE impact
 - packBullets: uno por cada oferta del vendedor (units = cantidad de esa oferta, como texto): 3 beneficios cortos de llevar esa cantidad (ej. "30 días de uso", "Mejor precio por unidad", "Ideal para compartir"). Calcula duraciones solo si el vendedor dio el uso; si no, no inventes días.
 - faqTitle: "Preguntas **frecuentes**" u otro corto.
 - finalTitle: cierre de 3-6 palabras con palabra resaltada (ej. "Recupera tu **energía** hoy"). finalText: 1-2 frases que invitan a pedir ya. finalBadge: 2-4 palabras para un sello (ej. "Oferta de hoy", "Pagas al recibir"); nada de "últimas unidades".
-- heroImagePrompt: en INGLÉS, para una foto publicitaria horizontal: una persona real del público objetivo (edad y estilo acordes), segura y atractiva, a la izquierda, y el producto (idéntico a la referencia) grande a la derecha sobre un pedestal o superficie, fondo oscuro con luz dramática del color primary, humo o textura sutil. Sin texto.
-- packImagePrompt: en INGLÉS, el escenario para las fotos de los paquetes (ej. "black volcanic rock pedestal, red rim light, subtle smoke").
+- heroImagePrompt: en INGLÉS, para ${sb.hero}. Sin texto.
+- packImagePrompt: en INGLÉS, el escenario para las fotos de los paquetes, en este estilo (ej. "${sb.pack}").
+- En cada ingredients[].imagePrompt agrega al final el ambiente del estilo: "${sb.ingredient}".
 
 REGLAS DE PUBLICIDAD (obligatorio: si no se cumplen, Meta rechaza los anuncios)
 - Nada de promesas sexuales, de "potencia", "rendimiento en la cama", tamaño, "aumenta la testosterona" ni similares. Para productos de hombres habla de energía, vitalidad, enfoque, confianza y bienestar.

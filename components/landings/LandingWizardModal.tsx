@@ -16,10 +16,12 @@ import {
   RotateCcw,
   Trash2,
   Wand2,
+  Eye,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { logiStore } from '@/lib/store';
-import { LandingPageConfig } from '@/lib/types';
+import { ImpactStyle, LandingPageConfig } from '@/lib/types';
+import { IMPACT_STYLES, heroAspect } from '@/lib/landing-styles';
 import { buildSalesLanding, GeneratedCopy, GeneratedImages } from '@/lib/landing-ai';
 import { compressImage, fileToDataUrl } from '@/lib/image-utils';
 import { pushLanding } from '@/lib/cloud';
@@ -113,7 +115,11 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
   const [withImages, setWithImages] = useState(true);
   // "sections" = the page is a column of designed graphics (Claude art-directs, Nano Banana draws).
   // "impact" = "Impacto Premium": dark, high-contrast sales page made to convert (real texts, AI pictures).
-  const [style, setStyle] = useState<'impact' | 'sections' | 'web'>('impact');
+  const [style] = useState<'impact' | 'sections' | 'web'>('impact');
+  // Look of the page (Impacto, Explosivo, Lujo Noir, Clínico, Neón) and the sample being previewed.
+  const [impactStyle, setImpactStyle] = useState<ImpactStyle>('impact');
+  const [sample, setSample] = useState<ImpactStyle | null>(null);
+  const [sampleView, setSampleView] = useState<'desktop' | 'phone'>('desktop');
   const [reviewsText, setReviewsText] = useState('');
   const [reviewShots, setReviewShots] = useState<string[]>([]);
   const reviewInput = useRef<HTMLInputElement>(null);
@@ -232,7 +238,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         tone,
         regularUnitPrice: regularUnit,
         ...(sectionsMode ? { mode: 'sections', reviews: reviewsText.trim().slice(0, 2000), reviewImagesCount: reviewShots.length } : {}),
-        ...(impactMode ? { mode: 'impact' } : {}),
+        ...(impactMode ? { mode: 'impact', impactStyle } : {}),
       });
       copy = data.copy;
       updateTask('copy', { state: 'done', label: `${data.writer === 'claude' ? 'Claude escribió la página' : 'Textos listos'}: “${copy.headline.replace(/\*\*/g, '')}”` });
@@ -290,7 +296,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
       images.packs = {};
       images.ingredients = [];
       const jobs: { key: string; body: Record<string, unknown>; max: number; set: (img: string) => void }[] = [
-        { key: 'ihero', body: { prompt: ic.heroImagePrompt, aspectRatio: '16:9' }, max: 1600, set: (i) => (images.impactHero = i) },
+        { key: 'ihero', body: { prompt: ic.heroImagePrompt, aspectRatio: heroAspect(impactStyle) }, max: 1600, set: (i) => (images.impactHero = i) },
         ...offerList.slice(0, 3).map((o) => ({ key: `ipack${o.units}`, body: { mode: 'pack', units: o.units, prompt: ic.packImagePrompt, aspectRatio: '1:1' }, max: 700, set: (i: string) => (images.packs![String(o.units)] = i) })),
         ...(ic.ingredients || []).slice(0, 4).map((x, idx) => ({ key: `iing${idx}`, body: { mode: 'ingredient', prompt: x.imagePrompt || x.name, aspectRatio: '1:1' }, max: 400, set: (i: string) => (images.ingredients![idx] = i) })),
       ];
@@ -394,6 +400,7 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
         });
       // The offer timer is on (it restarts every night); the seller can turn it off in the editor.
       landing.countdown = { enabled: true, mode: 'daily', hours: 24, text: 'Termina en' };
+      if (landing.impact) landing.impact.style = impactStyle;
     }
     const pixel = logiStore.getStoreSettings().metaPixelId;
     if (pixel) landing.metaPixelId = pixel;
@@ -534,23 +541,79 @@ export default function LandingWizardModal({ isOpen, onClose, onGenerated }: Lan
 
 <div>
                   <span className={label}>Estilo de la página</span>
-                  <div className="grid sm:grid-cols-3 gap-2">
-                    {([
-                      ['impact', 'Impacto Premium ⚡', 'Oscura y de alto contraste, hecha para vender: contador, sellos, paquetes con “más vendido” y botones grandes. Textos editables y fotos con IA.'],
-                      ['sections', 'Secciones de imagen', 'Piezas gráficas únicas con textos grandes, insignias y precios. Claude las diseña y Nano Banana Pro las dibuja.'],
-                      ['web', 'Página de marca', 'Clara y elegante, estilo tienda de marca: textos editables y 5 fotos publicitarias.'],
-                    ] as const).map(([id, title, text]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setStyle(id)}
-                        className={`text-left p-3 rounded-xl border text-xs ${style === id ? 'border-[#0A6CF0] bg-[#0A6CF0]/5 ring-2 ring-[#0A6CF0]/15' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                  <div className="space-y-2">
+                    {IMPACT_STYLES.map((x) => (
+                      <div
+                        key={x.id}
+                        className={`rounded-xl border p-2 flex items-center gap-3 text-xs ${impactStyle === x.id ? 'border-[#0A6CF0] bg-[#0A6CF0]/5 ring-2 ring-[#0A6CF0]/20' : 'border-slate-200 hover:border-slate-300'}`}
                       >
-                        <strong className="text-slate-900 block mb-0.5">{title}</strong>
-                        <span className="text-slate-600">{text}</span>
-                      </button>
+                        <button type="button" onClick={() => setImpactStyle(x.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left" aria-pressed={impactStyle === x.id}>
+                          <img src={`/landing-styles/${x.id}.webp`} alt={`Muestra del estilo ${x.name}`} className="w-[72px] h-[54px] sm:w-24 sm:h-[72px] rounded-lg object-cover object-top bg-slate-100 shrink-0 border border-slate-200" loading="lazy" />
+                          <span className="min-w-0">
+                            <strong className="text-slate-900 block text-[13px]">{x.name}</strong>
+                            <span className="text-slate-600 block">{x.text}</span>
+                            <span className="text-slate-400 hidden sm:block mt-0.5">Ideal: {x.goodFor}</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSample(x.id)}
+                          className="shrink-0 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Ver<span className="hidden sm:inline"> muestra</span>
+                        </button>
+                      </div>
                     ))}
                   </div>
+                  <p className="mt-1.5 text-[11px] text-slate-500">La muestra usa un producto de ejemplo. Tu página lleva tus textos, tus precios y fotos con IA de tu producto en ese estilo.</p>
+                  {sample && (
+                    <div className="fixed inset-0 z-[80] bg-slate-900/70 flex flex-col" role="dialog" aria-modal="true" aria-label="Muestra del estilo">
+                      <div className="bg-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-slate-200">
+                        <div className="flex gap-1 overflow-x-auto">
+                          {IMPACT_STYLES.map((x) => (
+                            <button
+                              key={x.id}
+                              type="button"
+                              onClick={() => setSample(x.id)}
+                              className={`h-8 px-3 rounded-lg text-[12px] font-semibold whitespace-nowrap ${sample === x.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                            >
+                              {x.name}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <div className="hidden sm:flex rounded-lg bg-slate-100 p-0.5">
+                            {(['desktop', 'phone'] as const).map((v) => (
+                              <button key={v} type="button" onClick={() => setSampleView(v)} className={`h-7 px-2.5 rounded-md text-[12px] font-semibold ${sampleView === v ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>
+                                {v === 'desktop' ? 'Computador' : 'Celular'}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImpactStyle(sample);
+                              setSample(null);
+                            }}
+                            className="h-8 px-3 rounded-lg bg-[#0A6CF0] text-white text-[12px] font-bold"
+                          >
+                            Usar este estilo
+                          </button>
+                          <button type="button" onClick={() => setSample(null)} className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center" aria-label="Cerrar muestra">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-hidden flex justify-center bg-slate-200">
+                        <iframe
+                          key={sample}
+                          src={`/muestra/${sample}`}
+                          title="Muestra del estilo"
+                          className={`h-full bg-white ${sampleView === 'phone' ? 'w-full sm:w-[390px] sm:my-3 sm:rounded-2xl sm:shadow-xl sm:h-[calc(100%-24px)]' : 'w-full'}`}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {style === 'web' && (
