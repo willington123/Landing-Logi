@@ -9,7 +9,7 @@ import InstallApp from '@/components/layout/InstallApp';
 import StoreAvatar, { STORE_LOGO_EVENT } from '@/components/layout/StoreAvatar';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2, Wallet } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, ChevronDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2, Wallet } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -124,6 +124,22 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
   const accountRef = useRef<AccountInfo | null>(null);
   accountRef.current = account;
   const [orgMenu, setOrgMenu] = useState(false);
+  // Menu sections can be folded (remembered on this device); the section of the page you are on always shows.
+  const [folded, setFolded] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('konnexa_menu_folded') || '[]');
+      if (Array.isArray(saved)) setFolded(saved.filter((x) => typeof x === 'string'));
+    } catch {}
+  }, []);
+  const toggleGroup = (label: string) =>
+    setFolded((cur) => {
+      const next = cur.includes(label) ? cur.filter((x) => x !== label) : [...cur, label];
+      try {
+        localStorage.setItem('konnexa_menu_folded', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   const switchOrg = async (orgId: string) => {
     const res = await fetch('/api/account/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId }) });
     if (res.ok) {
@@ -289,7 +305,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 space-y-5">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 space-y-3">
           {account && account.orgs.length > 1 && (
             <div>
               <Link
@@ -300,12 +316,24 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
               </Link>
             </div>
           )}
-          {navGroups(account?.businessType, account?.org?.role).map((group) => (
+          {navGroups(account?.businessType, account?.org?.role).map((group) => {
+            const isOn = (href: string) => pathname === href || (href !== '/dashboard' && pathname?.startsWith(href + '/'));
+            const here = group.items.some((i) => isOn(i.href));
+            const closed = folded.includes(group.label) && !here;
+            const badge = closed && group.items.some((i) => i.href === '/crm') ? waiting + unread : 0;
+            return (
             <div key={group.label}>
-              <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em]">
-                {group.label}
-              </div>
-              <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                aria-expanded={!closed}
+                className="w-full flex items-center gap-1 px-3 h-6 mb-0.5 text-[11px] font-semibold text-slate-400 hover:text-slate-600 uppercase tracking-[0.08em]"
+              >
+                <span className="flex-1 text-left">{group.label}</span>
+                {badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#25D366] text-white text-[10px] font-bold flex items-center justify-center normal-case tracking-normal">{badge > 99 ? '99+' : badge}</span>}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${closed ? '-rotate-90' : ''}`} />
+              </button>
+              <div className={closed ? 'hidden' : 'space-y-0.5'}>
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active =
@@ -315,7 +343,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                       key={item.href}
                       href={item.href}
                       aria-current={active ? 'page' : undefined}
-                      className={`relative flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] transition ${
+                      className={`relative flex items-center gap-3 h-[34px] px-3 rounded-lg text-[13.5px] transition ${
                         active
                           ? 'bg-brand-navy/[0.07] text-brand-navy font-semibold'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -339,7 +367,8 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
           {account?.platformAdmin && (
             <div>
               <Link
@@ -353,12 +382,12 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
         </nav>
 
         {/* Account */}
-        <div className="p-3 border-t border-slate-200/80 space-y-2">
+        <div className="p-2.5 border-t border-slate-200/80 space-y-2">
           <InstallApp />
-          <div className="relative">
+          <div className="relative flex items-center gap-1">
             <button
               onClick={() => (account ? setOrgMenu((v) => !v) : (window.location.href = '/settings'))}
-              className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
+              className="flex-1 min-w-0 flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition text-left"
             >
               {account?.org ? (
                 <StoreAvatar name={account.org.name} logo={account.org.logo} id={account.org.id} />
@@ -380,12 +409,12 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
                 onClose={() => setOrgMenu(false)}
               />
             )}
+            {authOn && (
+              <button onClick={logout} title="Cerrar sesión" aria-label="Cerrar sesión" className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition">
+                <LogOut className="w-[18px] h-[18px]" />
+              </button>
+            )}
           </div>
-          {authOn && (
-            <button onClick={logout} className="mt-1 w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">
-              <LogOut className="w-4 h-4" /> Cerrar sesión
-            </button>
-          )}
         </div>
       </aside>
 

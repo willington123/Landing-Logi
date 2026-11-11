@@ -16,7 +16,6 @@ export default function TeamRoute() {
         <Header onOpenWizard={() => setWizardOpen(true)} title="Equipo" />
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-[860px] mx-auto w-full space-y-4">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Equipo de la tienda</h2>
             <p className="text-sm text-slate-500">Quién tiene acceso a esta tienda y con qué rol. Las invitaciones son por tienda: si tienes varias, invita a la persona en cada una.</p>
           </div>
           <TeamSettings only="team" />

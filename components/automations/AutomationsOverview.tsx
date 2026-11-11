@@ -92,6 +92,8 @@ export default function AutomationsOverview() {
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
           {data.items.map((i) => {
             const p = PILL[i.state];
+            // Only one strong button: the first thing to fix, else the first thing to turn on.
+            const first = data.items.find((x) => x.state === 'warn') || data.items.find((x) => x.state === 'off');
             return (
               <li key={i.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
@@ -107,7 +109,7 @@ export default function AutomationsOverview() {
                 </div>
                 <div className="flex items-center justify-between sm:justify-end gap-3">
                   {i.count && i.state !== 'off' && <span className="text-[12px] text-slate-600 sm:text-right">{i.count}</span>}
-                  <Go href={i.href} strong={i.state !== 'on'}>
+                  <Go href={i.href} strong={i === first}>
                     {p.action}
                   </Go>
                 </div>
