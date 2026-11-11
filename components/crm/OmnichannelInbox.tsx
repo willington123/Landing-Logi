@@ -30,6 +30,7 @@ import {
   UserRound,
   X,
   Zap,
+  PanelRight,
 } from 'lucide-react';
 import NewOrderModal from '@/components/orders/NewOrderModal';
 import ChatAttach from '@/components/crm/ChatAttach';
@@ -41,7 +42,7 @@ import { AssignPicker, AutoTagBox, QuickReplyManager, QuickReplyMenu, TagChip, T
 import TeamManager from '@/components/crm/TeamManager';
 import StorePicker, { useInboxStores } from '@/components/crm/StorePicker';
 import { CHANNEL_LABEL, CHAT_ID_RE, chatChannel, isSocialChat, type ChatChannel } from '@/lib/social';
-import { PushAlertsBanner, PushAlertsRow } from '@/components/layout/PushAlerts';
+import { PushAlertsBell, PushAlertsRow } from '@/components/layout/PushAlerts';
 import { type OrderAction } from '@/components/crm/OrderPanel';
 import { CustomerPanel, type PanelTab } from '@/components/crm/CustomerPanel';
 import { SOUND_EVENT, UNREAD_REFRESH_EVENT, playMessageSound, setSoundOn, soundOn } from '@/lib/notify';
@@ -957,6 +958,37 @@ export default function OmnichannelInbox() {
 
   // ---------- empty states ----------
 
+  const activeStatus = active ? chatStatus(active, now, botOn(active), agentName(active)) : null;
+  // "Qué hacer / Venta" beside the chat (wide screens): open by itself when the chat needs a person, folded while
+  // the AI handles it; the button keeps the person's own choice on this device.
+  const [panelChoice, setPanelChoice] = useState<'open' | 'closed' | ''>('');
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('konnexa_chat_panel');
+      if (v === 'open' || v === 'closed') setPanelChoice(v);
+    } catch {}
+  }, []);
+  const panelAuto = Boolean(active && (needsHelp(active) || isAttending(active) || (isUnanswered(active) && (!botOn(active) || active.bot?.paused)) || !aiWorking(active, now, botOn(active))));
+  const panelShown = panelChoice ? panelChoice === 'open' : panelAuto;
+  const togglePanel = () => {
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) return setOrderOpen(true);
+    const next = panelShown ? 'closed' : 'open';
+    setPanelChoice(next);
+    try {
+      localStorage.setItem('konnexa_chat_panel', next);
+    } catch {}
+  };
+  const [adOpen, setAdOpen] = useState(false);
+  useEffect(() => setAdOpen(false), [activeKey]);
+  // Phones: an open chat takes the whole screen (the app's top bar and tab bar hide).
+  useEffect(() => {
+    if (activeKey) document.body.dataset.chatOpen = '1';
+    else delete document.body.dataset.chatOpen;
+    return () => {
+      delete document.body.dataset.chatOpen;
+    };
+  }, [activeKey]);
+
   if (cloud === null) {
     return (
       <div className={`${card} flex-1 flex items-center justify-center text-slate-400`}>
@@ -989,7 +1021,6 @@ export default function OmnichannelInbox() {
     { id: 'attending', label: 'Atendiendo', n: counts.attending, Icon: UserRound, tone: 'bg-emerald-50/70 text-emerald-600', on: 'ring-emerald-400' },
   ];
   const storeErrors = Object.values(storeData).filter((s) => s.error);
-  const activeStatus = active ? chatStatus(active, now, botOn(active), agentName(active)) : null;
   const notConnected = wa && !wa.sending && active && !isSocialChat(active.id);
 
   const panel = active && (
@@ -1006,9 +1037,9 @@ export default function OmnichannelInbox() {
   );
 
   return (
-    <div className={`${card} flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
+    <div className={`${card} kx-inbox flex-1 flex flex-col min-h-0 overflow-hidden text-slate-800`}>
       {/* Top bar: stores, search, filters, period and the four attention cards */}
-      <div className={`${activeKey ? 'hidden md:block' : ''} shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-2.5 sm:pt-3 pb-2.5 sm:pb-3 space-y-2 sm:space-y-3`}>
+      <div className={`${activeKey ? 'hidden md:block' : ''} shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 sm:px-4 pt-2.5 pb-2.5 space-y-2 ${active ? '' : 'sm:pt-3 sm:pb-3 sm:space-y-3'}`}>
         <div className="flex flex-wrap items-center gap-2">
           {stores && <StorePicker stores={stores} sel={sel} />}
           <div className="relative order-1 sm:order-none flex-1 min-w-0 sm:min-w-[180px] sm:max-w-md">
@@ -1145,28 +1176,30 @@ export default function OmnichannelInbox() {
             a
             <input type="date" value={until} min={since} max={todayCo()} onChange={(e) => (setUntil(e.target.value), setPeriod('custom'))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-slate-700" aria-label="Hasta" />
           </div>
+          <span className="order-3 sm:order-none ml-auto sm:ml-0">
+            <PushAlertsBell />
+          </span>
           {updatedAt && <span className="ml-auto hidden xl:inline text-[12px] text-slate-400">Actualizado {updatedAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>}
         </div>
 
-        <div className="grid grid-flow-col auto-cols-[minmax(150px,1fr)] sm:auto-cols-[minmax(170px,1fr)] lg:grid-flow-row lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto">
+        <div className={`grid grid-flow-col auto-cols-[minmax(150px,1fr)] sm:auto-cols-[minmax(170px,1fr)] lg:grid-flow-row lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto ${active ? 'compact-cards' : ''}`}>
           {cards.map((k) => (
             <button
               key={k.id}
               onClick={() => setFocus(focus === k.id ? 'all' : k.id)}
               aria-pressed={focus === k.id}
-              className={`h-11 sm:h-14 px-2.5 sm:px-3 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 text-left transition ${k.tone} ${focus === k.id ? `ring-2 ${k.on} bg-white` : 'hover:brightness-[0.98]'}`}
+              className={`${active ? 'h-10 sm:h-10' : 'h-11 sm:h-14'} px-2.5 sm:px-3 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 text-left transition ${k.tone} ${focus === k.id ? `ring-2 ${k.on} bg-white` : 'hover:brightness-[0.98]'}`}
             >
-              <span className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/70 flex items-center justify-center shrink-0">
+              <span className={`${active ? 'w-7 h-7' : 'w-7 h-7 sm:w-9 sm:h-9'} rounded-lg sm:rounded-xl bg-white/70 flex items-center justify-center shrink-0`}>
                 <k.Icon className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
               </span>
               <span className="flex-1 min-w-0 text-[12.5px] sm:text-[14px] font-semibold text-slate-900 leading-tight">{k.label}</span>
-              <span className="text-[18px] sm:text-[24px] font-bold text-slate-900 tabular-nums">{k.n}</span>
+              <span className={`${active ? 'text-[18px]' : 'text-[18px] sm:text-[24px]'} font-bold text-slate-900 tabular-nums`}>{k.n}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <PushAlertsBanner />
       {storeErrors.length > 0 && !listError && (
         <div className="hidden md:block px-4 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-800">
           No se cargaron los chats de {storeErrors.map((s) => s.name || 'una tienda').join(', ')}: {storeErrors[0].error}
@@ -1295,23 +1328,23 @@ export default function OmnichannelInbox() {
             <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400 p-6 text-center">{activeKey && !loaded ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Selecciona una conversación'}</div>
           ) : (
             <>
-              <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-100 flex flex-wrap items-start gap-x-3 gap-y-2">
-                <button onClick={() => setActiveKey('')} className="md:hidden p-1 -ml-1 mt-1 text-slate-500" aria-label="Volver">
-                  <ArrowLeft className="w-4 h-4" />
+              <div className="px-2 sm:px-4 py-2 border-b border-slate-100 flex items-center gap-2">
+                <button onClick={() => setActiveKey('')} className="md:hidden h-9 w-9 -ml-0.5 shrink-0 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100" aria-label="Volver a la lista">
+                  <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div className="min-w-[220px] flex-1">
-                  {activeStatus && (
-                    <p className={`text-[11px] font-bold uppercase tracking-wide inline-flex items-center gap-1.5 ${activeStatus.cls}`}>
-                      <activeStatus.Icon className="w-3.5 h-3.5" /> {activeStatus.label}
-                    </p>
-                  )}
-                  <p className="text-[16px] sm:text-[17px] font-bold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
-                  <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                    {multi && <StoreChip id={active.org} name={storeName(active.org)} />}
-                    <span className="text-[13px] text-slate-500 inline-flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    <p className="text-[15px] sm:text-[16px] font-bold text-slate-900 truncate">{active.name || phoneLabel(active.id)}</p>
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[12px] text-slate-500 shrink-0">
                       <ChannelMark id={active.id} className="w-3.5 h-3.5" /> {phoneLabel(active.id)}
                     </span>
-                    {agentName(active) && <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-800 whitespace-nowrap">Con {agentName(active)}</span>}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1 min-w-0 overflow-hidden whitespace-nowrap">
+                    <span className="sm:hidden inline-flex items-center gap-1 text-[12px] text-slate-500 shrink-0">
+                      <ChannelMark id={active.id} className="w-3 h-3" /> {phoneLabel(active.id)}
+                    </span>
+                    {multi && <StoreChip id={active.org} name={storeName(active.org)} />}
+                    {agentName(active) && <span className="px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-800 shrink-0">Con {agentName(active)}</span>}
                     {tagsOf(active)
                       .filter((t) => !sameAsOrder(t.name, active.order?.status))
                       .map((t) => (
@@ -1319,48 +1352,69 @@ export default function OmnichannelInbox() {
                       ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  <WindowChip left={left} />
-                  <button onClick={() => setNewOrder(true)} title="Crear un pedido confirmado para este cliente" className="h-8 px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center gap-1.5">
-                    <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pedido</span>
-                  </button>
-                  <button onClick={() => setOrderOpen(true)} className="xl:hidden h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Qué hacer</span>
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                  <span className="hidden lg:inline-flex">
+                    <WindowChip left={left} />
+                  </span>
+                  <button onClick={() => setNewOrder(true)} title="Crear un pedido confirmado para este cliente" aria-label="Crear pedido" className="h-8 w-8 lg:w-auto lg:px-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 inline-flex items-center justify-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5" /> <span className="hidden lg:inline">Pedido</span>
                   </button>
                   <AssignPicker agents={agents} assignee={active.assignee || null} onChange={assign} onManage={() => setManage('team')} />
                   <TagPicker tags={tags} selected={active.tags || []} onChange={saveConvTags} onManage={() => setManage('tags')} />
+                  <button
+                    onClick={togglePanel}
+                    aria-pressed={panelShown}
+                    title={panelShown ? 'Ocultar “Qué hacer” y “Venta”' : 'Ver “Qué hacer” y “Venta”'}
+                    aria-label="Qué hacer y venta"
+                    className={`h-8 w-8 rounded-lg border inline-flex items-center justify-center ${panelShown ? 'xl:bg-slate-900 xl:text-white xl:border-slate-900 border-slate-200 text-slate-600' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    <PanelRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              {active.ad && <AdBanner ad={active.ad} />}
-
-              {botInfo?.enabled && (
-                <div className={`px-3 sm:px-4 py-1.5 sm:py-2 border-b text-xs flex items-center gap-2 ${active.bot?.paused ? 'bg-amber-50/70 border-amber-100 text-amber-900' : 'bg-violet-50/60 border-violet-100 text-violet-900'}`}>
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span className="flex-1 min-w-0 line-clamp-2 sm:line-clamp-none" title={active.bot?.note || undefined}>
-                    {active.bot?.paused ? (
-                      <>
-                        <strong>{botInfo.name} está en pausa</strong> en este chat
-                        {active.bot.reason === 'handoff' ? ' — lo pasó a una persona' : active.bot.reason === 'limit' ? ' — llegó al límite del día' : ' — lo estás atendiendo tú'}
-                        {active.bot.reason === 'handoff' && active.bot.note ? `: ${active.bot.note}` : '.'}
-                      </>
-                    ) : (
-                      <>
-                        <strong>{botInfo.name}</strong> responde este chat{botInfo.mode === 'away' ? ' fuera de horario' : ''}. Si escribes tú, se pausa.
-                      </>
-                    )}
-                  </span>
-                  <button
-                    onClick={() => setBotPaused(!active.bot?.paused)}
-                    disabled={botBusy}
-                    className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'}`}
-                  >
-                    {botBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : active.bot?.paused ? <Sparkles className="w-3 h-3" /> : <Hand className="w-3 h-3" />}
-                    <span className="sm:hidden">{active.bot?.paused ? 'Devolver' : 'Tomar'}</span>
-                    <span className="hidden sm:inline">{active.bot?.paused ? 'Devolver al asistente' : 'Tomar el control'}</span>
-                  </button>
+              {/* One thin line of context: how the chat is doing, the ad it came from and the assistant */}
+              {(active.ad || botInfo?.enabled || (activeStatus && !aiWorking(active, now, botOn(active)))) && (
+                <div className={`px-3 sm:px-4 py-1.5 border-b flex items-center gap-2 text-[12px] min-w-0 ${active.bot?.paused ? 'bg-amber-50/60 border-amber-100' : 'bg-slate-50/80 border-slate-100'}`}>
+                  {activeStatus && !aiWorking(active, now, botOn(active)) && (
+                    <span className={`inline-flex items-center gap-1 font-semibold shrink-0 ${activeStatus.cls}`}>
+                      <activeStatus.Icon className="w-3.5 h-3.5" /> {activeStatus.label}
+                    </span>
+                  )}
+                  {active.ad && (
+                    <button onClick={() => setAdOpen((v) => !v)} aria-expanded={adOpen} title="Ver el anuncio" className="min-w-0 inline-flex items-center gap-1.5 text-sky-900 hover:text-sky-700">
+                      {active.ad.thumb ? <img src={active.ad.thumb} alt="" className="w-5 h-5 rounded object-cover shrink-0" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} /> : <Megaphone className="w-3.5 h-3.5 shrink-0" />}
+                      <span className="truncate">
+                        <span className="hidden sm:inline text-sky-900/60">{active.ad.via === 'order' ? 'Pedido del anuncio ' : 'Anuncio '}</span>
+                        <strong className="font-semibold">{adName(active.ad)}</strong>
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${adOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                  {botInfo?.enabled && (
+                    <span className={`min-w-0 inline-flex items-center gap-1 ${active.bot?.paused ? 'text-amber-900' : 'text-violet-800'}`} title={active.bot?.note || undefined}>
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        {active.bot?.paused
+                          ? `${botInfo.name} en pausa${active.bot.reason === 'handoff' ? ` · ${active.bot.note || 'pidió una persona'}` : active.bot.reason === 'limit' ? ' · límite del día' : ''}`
+                          : `${botInfo.name} atiende${botInfo.mode === 'away' ? ' fuera de horario' : ''}`}
+                      </span>
+                    </span>
+                  )}
+                  {botInfo?.enabled && (
+                    <button
+                      onClick={() => setBotPaused(!active.bot?.paused)}
+                      disabled={botBusy}
+                      title={active.bot?.paused ? 'El asistente vuelve a responder este chat' : 'Respondes tú: el asistente se pausa en este chat'}
+                      className={`ml-auto h-7 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 disabled:opacity-50 ${active.bot?.paused ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-white border border-violet-200 text-violet-800 hover:bg-violet-50'}`}
+                    >
+                      {botBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : active.bot?.paused ? <Sparkles className="w-3 h-3" /> : <Hand className="w-3 h-3" />}
+                      {active.bot?.paused ? 'Devolver a la IA' : 'Tomar el control'}
+                    </button>
+                  )}
                 </div>
               )}
+              {adOpen && active.ad && <AdBanner ad={active.ad} />}
 
               {others.length > 0 && (
                 <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100 text-[12px] text-amber-900">
@@ -1417,7 +1471,7 @@ export default function OmnichannelInbox() {
                 ))}
               </div>
 
-              <div className="border-t border-slate-100 p-2 sm:p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3">
+              <div className="border-t border-slate-100 p-2 sm:p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3 bg-white">
                 {notConnected ? (
                   <p className="text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2.5">
                     WhatsApp{multi ? ` de ${storeName(active.org)}` : ''} no está conectado: no se pueden enviar respuestas.{' '}
@@ -1447,7 +1501,7 @@ export default function OmnichannelInbox() {
                 ) : (
                   <>
                     {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
-                    <div className="relative flex flex-wrap 2xl:flex-nowrap items-end gap-1.5 sm:gap-2">
+                    <div className="relative flex items-end gap-1 sm:gap-1.5 rounded-2xl border border-slate-200 bg-white p-1 focus-within:ring-2 focus-within:ring-slate-900/10">
                       {qr.open && (
                         <QuickReplyMenu
                           replies={replies}
@@ -1463,6 +1517,7 @@ export default function OmnichannelInbox() {
                           onClose={() => setQr({ open: false, slash: false, highlight: 0 })}
                         />
                       )}
+                      <div className="flex items-end shrink-0 text-slate-500 [&>button]:!border-0 [&>button]:!h-10 [&>button]:!w-10 [&>div>button]:!border-0 [&>div>button]:!h-10 [&>div>button]:!w-10">
                       {!isSocialChat(active.id) && (
                         <ProductPhotos
                           chatId={active.id}
@@ -1487,12 +1542,13 @@ export default function OmnichannelInbox() {
                       )}
                       <button
                         onClick={() => setQr((s) => (s.open ? { open: false, slash: false, highlight: 0 } : { open: true, slash: false, highlight: 0 }))}
-                        className={`h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+                        className={`h-10 w-10 shrink-0 rounded-xl border flex items-center justify-center transition ${qr.open ? 'bg-amber-50 border-amber-200 text-amber-600' : 'border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
                         aria-label="Respuestas rápidas"
                         title="Respuestas rápidas (o escribe /)"
                       >
                         <Zap className="w-4 h-4" />
                       </button>
+                      </div>
                       <textarea
                         ref={inputRef}
                         value={text}
@@ -1501,11 +1557,10 @@ export default function OmnichannelInbox() {
                         rows={1}
                         placeholder="Mensaje…"
                         title="Enter envía, Shift+Enter salta de línea, / para respuestas rápidas"
-                        className="flex-1 min-w-0 max-2xl:-order-2 max-2xl:basis-[calc(100%-3.25rem)] resize-none text-[16px] sm:text-[14px] leading-snug bg-white border border-slate-200 rounded-xl px-3 py-2 sm:py-2.5 min-h-[40px] sm:min-h-[44px] max-h-40 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        className="flex-1 min-w-0 resize-none text-[16px] sm:text-[14px] leading-snug bg-transparent px-2 py-2.5 min-h-[40px] max-h-40 focus:outline-none"
                       />
-                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="max-2xl:-order-1 h-10 sm:h-11 w-10 sm:w-11 2xl:w-auto 2xl:px-4 shrink-0 rounded-xl bg-brand-blue text-white text-[14px] font-semibold flex items-center justify-center gap-1.5 disabled:bg-slate-200 disabled:text-slate-400">
+                      <button onClick={handleSend} disabled={!text.trim() || sending} aria-label="Enviar" className="h-10 w-10 shrink-0 rounded-xl bg-brand-blue text-white flex items-center justify-center disabled:bg-slate-100 disabled:text-slate-400">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        <span className="hidden 2xl:inline">Enviar</span>
                       </button>
                     </div>
                   </>
@@ -1516,7 +1571,7 @@ export default function OmnichannelInbox() {
         </div>
 
         {/* Qué hacer / Venta */}
-        {active && <div className="hidden xl:block w-[340px] shrink-0 border-l border-slate-200 p-4 overflow-y-auto">{panel}</div>}
+        {active && panelShown && <div className="hidden xl:block w-[340px] shrink-0 border-l border-slate-200 p-4 overflow-y-auto">{panel}</div>}
         {active && orderOpen && (
           <div className="xl:hidden fixed inset-0 z-40 flex justify-end bg-slate-900/40" onMouseDown={(e) => e.target === e.currentTarget && setOrderOpen(false)}>
             <div className="w-full max-w-sm h-full bg-white p-4 overflow-y-auto relative">

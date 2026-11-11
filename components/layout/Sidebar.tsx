@@ -420,7 +420,7 @@ export default function Sidebar({ onOpenWizard }: { onOpenWizard?: () => void })
 
       {/* Phone: bottom tab bar, like an app. "Más" opens the full menu. */}
       <nav
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
+        className="kx-tabbar lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
         aria-label="Navegación principal"
       >
         {[

@@ -36,7 +36,7 @@ export default function Header({ title }: HeaderProps) {
 
   return (
     <>
-    <header className="h-16 sticky top-0 z-20 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/70 flex items-center gap-3 px-4 sm:px-6 lg:px-8">
+    <header className="kx-appheader h-16 sticky top-0 z-20 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/70 flex items-center gap-3 px-4 sm:px-6 lg:px-8">
       <button
         onClick={() => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT))}
         className="lg:hidden p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-200/60"

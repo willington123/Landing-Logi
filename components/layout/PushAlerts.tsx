@@ -97,3 +97,29 @@ export function PushAlertsBanner() {
     </div>
   );
 }
+
+// Small bell in the Mensajes top bar while this device has no notices yet (replaces the banner).
+export function PushAlertsBell() {
+  const { state, busy, error, on } = usePush();
+  const [open, setOpen] = useState(false);
+  if (!state || (state.status !== 'off' && state.status !== 'ios-install')) return null;
+  return (
+    <span className="relative inline-flex">
+      <button
+        onClick={() => (state.status === 'off' ? on() : setOpen((v) => !v))}
+        disabled={busy}
+        title={state.status === 'off' ? 'Activar avisos en este dispositivo: te llega un aviso cuando un cliente necesite a una persona, aunque Konnexa esté cerrado' : HELP['ios-install']}
+        aria-label="Activar avisos en este dispositivo"
+        className="relative h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-brand-blue hover:border-blue-200 flex items-center justify-center disabled:opacity-60"
+      >
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+        <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-blue" />
+      </button>
+      {(open || error) && (
+        <span className="absolute right-0 top-full mt-2 z-40 w-64 rounded-xl border border-slate-200 bg-white shadow-lg p-3 text-[12px] text-slate-700">
+          {error || HELP['ios-install']}
+        </span>
+      )}
+    </span>
+  );
+}

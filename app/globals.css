@@ -91,3 +91,22 @@ body {
     inset: -10px -8px;
   }
 }
+
+/* Mensajes on phones: an open chat takes the whole screen (no app bar, no tab bar, no frame). */
+@media (max-width: 767px) {
+  body[data-chat-open='1'] .kx-appheader,
+  body[data-chat-open='1'] .kx-tabbar {
+    display: none;
+  }
+  body[data-chat-open='1'] .kx-crm-shell {
+    height: 100dvh;
+  }
+  body[data-chat-open='1'] .kx-crm-main {
+    padding: 0;
+  }
+  body[data-chat-open='1'] .kx-inbox {
+    border-radius: 0;
+    border-width: 0;
+    box-shadow: none;
+  }
+}
