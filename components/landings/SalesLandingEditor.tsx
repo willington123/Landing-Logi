@@ -34,7 +34,7 @@ import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
 import { IMPACT_STYLES, heroAspect } from '@/lib/landing-styles';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
-import { compressImage, fileToDataUrl } from '@/lib/image-utils';
+import { compressImage, fileToDataUrl, isGif, uploadGif } from '@/lib/image-utils';
 import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
 
 // ---------- small form primitives ----------
@@ -152,9 +152,16 @@ function ImageSlot({
     if (!file) return;
     setErr(null);
     try {
-      onChange(await compressImage(await fileToDataUrl(file), 1280, 0.82));
+      if (isGif(file)) {
+        // GIFs go up as they are so they keep moving.
+        setBusy(true);
+        onChange(await uploadGif(file));
+        if (file.size > 3 * 1024 * 1024) setErr(`El GIF pesa ${(file.size / 1024 / 1024).toFixed(1)} MB: la página puede cargar más lento en celulares. Si puedes, redúcelo a menos de 3 MB.`);
+      } else onChange(await compressImage(await fileToDataUrl(file), 1280, 0.82));
     } catch (e: any) {
       setErr(e.message);
+    } finally {
+      setBusy(false);
     }
   };
   const regen = async () => {
