@@ -110,25 +110,63 @@ export async function sendAudio(to: string, link: string): Promise<SendResult> {
 // Template params can't contain newlines, tabs or more than 4 spaces in a row.
 const param = (v: string) => ({ type: 'text', text: (v || '-').replace(/[\n\t\r]+/g, ' ').replace(/ {4,}/g, '   ').trim().slice(0, 200) || '-' });
 
-// Order confirmation template: {{1}} name, {{2}} product, {{3}} total, {{4}} city.
-// The two quick-reply buttons carry the order id so the reply maps to the exact order.
-export async function sendConfirmTemplate(to: string, vars: { name: string; product: string; total: string; city: string }, orderId: string): Promise<SendResult> {
+// The store's confirmation template can be the preset (with Confirmar / Cancelar buttons) or any other approved
+// template, e.g. "pedido_en_proceso" (no buttons, city before total). Its shape comes from Meta and is cached.
+interface TemplateShape {
+  vars: number; // {{n}} in the body
+  quickReplies: number; // quick-reply buttons (they get the order id)
+  imageHeader: boolean;
+  body: string;
+}
+const shapes = new Map<string, { at: number; shape: TemplateShape | null }>();
+async function templateShape(c: WaConfig, name: string, lang: string): Promise<TemplateShape | null> {
+  const key = `${c.phoneNumberId}:${name}:${lang}`;
+  const hit = shapes.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.shape;
+  let shape: TemplateShape | null = null;
+  try {
+    const list = await listTemplates();
+    const t = list.find((x) => x.name === name && x.language === lang) || list.find((x) => x.name === name);
+    if (t) {
+      const comps = t.components || [];
+      const body = String(comps.find((x: any) => x.type === 'BODY')?.text || '');
+      const nums = Array.from(body.matchAll(/\{\{(\d+)\}\}/g)).map((m) => Number(m[1]));
+      const buttons = comps.find((x: any) => x.type === 'BUTTONS')?.buttons || [];
+      shape = {
+        vars: nums.length ? Math.max(...nums) : 0,
+        quickReplies: buttons.filter((b: any) => b.type === 'QUICK_REPLY').length,
+        imageHeader: comps.some((x: any) => x.type === 'HEADER' && x.format === 'IMAGE'),
+        body,
+      };
+    }
+  } catch {
+    shape = null; // Meta didn't answer: send as the preset
+  }
+  shapes.set(key, { at: Date.now(), shape });
+  return shape;
+}
+
+// Order confirmation template. Preset order: {{1}} name, {{2}} product, {{3}} total, {{4}} city; "pedido_en_proceso":
+// name, product, city, total. Quick-reply buttons (if the template has them) carry the order id, so the reply maps
+// to the exact order.
+export async function sendConfirmTemplate(to: string, vars: { name: string; product: string; total: string; city: string }, orderId: string): Promise<SendResult & { text?: string }> {
   if (social(to)) return NOT_WHATSAPP;
   const c = await waConfig();
   if (!c?.confirmTemplate) return { ok: false, error: 'Plantilla de confirmación no configurada' };
-  return send({
-    to,
-    type: 'template',
-    template: {
-      name: c.confirmTemplate,
-      language: { code: c.templateLang || 'es' },
-      components: [
-        { type: 'body', parameters: [param(vars.name), param(vars.product), param(vars.total), param(vars.city)] },
-        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: `confirm:${orderId}` }] },
-        { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: `cancel:${orderId}` }] },
-      ],
-    },
-  }, c);
+  const lang = c.templateLang || 'es';
+  const shape = await templateShape(c, c.confirmTemplate, lang);
+  if (shape?.imageHeader) return { ok: false, error: `La plantilla «${c.confirmTemplate}» lleva foto: elige otra para confirmar pedidos en Plantillas.` };
+  const ordered = c.confirmTemplate === 'pedido_en_proceso' ? [vars.name, vars.product, vars.city, vars.total] : [vars.name, vars.product, vars.total, vars.city];
+  const values = shape ? ordered.slice(0, shape.vars) : ordered;
+  const buttons = shape ? Math.min(shape.quickReplies, 2) : 2;
+  const components: any[] = [];
+  if (values.length) components.push({ type: 'body', parameters: values.map(param) });
+  if (buttons >= 1) components.push({ type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: `confirm:${orderId}` }] });
+  if (buttons >= 2) components.push({ type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: `cancel:${orderId}` }] });
+  const result = await send({ to, type: 'template', template: { name: c.confirmTemplate, language: { code: lang }, components } }, c);
+  // What the customer reads, for the chat.
+  const text = shape?.body ? shape.body.replace(/\{\{(\d+)\}\}/g, (_, i) => values[Number(i) - 1] ?? '') : undefined;
+  return { ...result, text };
 }
 
 // Appointment reminder template: {{1}} name, {{2}} service, {{3}} when, {{4}} with whom / where.

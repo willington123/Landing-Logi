@@ -458,9 +458,16 @@ export default function TemplatesManager() {
                   <p className="text-[11px] text-red-600">Motivo: {REJECTED[t.rejected_reason] || t.rejected_reason}</p>
                 )}
                 {isConfirm ? (
-                  <p className="text-[11px] font-semibold text-brand-navy flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Se usa para confirmar pedidos
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-brand-navy flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Se usa para confirmar pedidos
+                    </p>
+                    {!(t.components || []).some((x: any) => x.type === 'BUTTONS') && (
+                      <p className="text-[11px] text-slate-500">
+                        No tiene botones: el cliente no confirma con un toque. Konnexa se la envía al llegar cada pedido como aviso; si el cliente responde, lo atiendes tú o la IA en Mensajes.
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   info?.canManage &&
                   info.source === 'store' &&

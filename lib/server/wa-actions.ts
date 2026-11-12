@@ -10,7 +10,8 @@ import { fillQuickReply, isWorkingTime, matchRule } from '@/lib/crm';
 import { botTakesMessage } from '@/lib/server/bot-inbound';
 import type { OrderItem } from '@/lib/types';
 
-const firstName = (name: string) => (name || '').trim().split(/\s+/)[0] || 'cliente';
+// "ana ruiz" → "Ana" (customers often type their name in lowercase).
+const firstName = (name: string) => ((name || '').trim().split(/\s+/)[0] || 'cliente').replace(/^./, (c) => c.toLocaleUpperCase('es'));
 
 // Order id used in the buttons of the test message (Integrations → "Enviar mensaje de prueba").
 export const TEST_ORDER_ID = 'prueba';
@@ -26,7 +27,7 @@ export async function sendOrderConfirmation(order: OrderItem, opts: { currency?:
     city: order.city,
   };
   const result = await sendConfirmTemplate(to, vars, order.id);
-  const body = `Plantilla de confirmación: ${vars.name}, ${vars.product}, ${vars.total}, ${vars.city}. [Confirmar pedido] [Cancelar]`;
+  const body = result.text || `Plantilla de confirmación: ${vars.name}, ${vars.product}, ${vars.total}, ${vars.city}. [Confirmar pedido] [Cancelar]`;
   await recordOutbound({ phone: to, name: order.customerName, orderId: order.id, type: 'template', body, result }).catch((e) =>
     console.error('WhatsApp: no se pudo guardar el mensaje enviado', e),
   );
