@@ -285,6 +285,19 @@ export interface FlowRecipe {
 }
 export const RECIPES: FlowRecipe[] = [
   {
+    id: 'in_process',
+    business: 'orders',
+    title: 'Aviso: tu pedido está en proceso',
+    hint: 'Cuando el pedido queda confirmado, 30 minutos después le avisa que ya se está preparando (plantilla «Pedido en proceso»).',
+    flow: {
+      name: 'Pedido en proceso',
+      trigger: { type: 'order_status', status: 'confirmed_by_voice' },
+      conditions: [],
+      waitMinutes: 30,
+      actions: [{ type: 'send_template', template: 'pedido_en_proceso', lang: 'es', vars: ['{nombre}', '{producto}', '{ciudad}', '{total}'] }],
+    },
+  },
+  {
     id: 'shipped',
     business: 'orders',
     title: 'Aviso de envío con la guía',

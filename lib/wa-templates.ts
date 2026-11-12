@@ -46,3 +46,14 @@ export const GUIDE_PRESET = {
 
 // The same notice with the photo of the shipping label on top (template header image).
 export const GUIDE_PHOTO_PRESET = { ...GUIDE_PRESET, name: 'aviso_guia_foto' };
+
+// "Your order is in process" (utility): {{1}} name, {{2}} product, {{3}} city, {{4}} total.
+// Sent by the "Pedido en proceso" automation after the order is confirmed.
+export const PROCESS_PRESET = {
+  name: 'pedido_en_proceso',
+  language: 'es',
+  category: 'UTILITY' as const,
+  body: 'Hola {{1}} 👋 Tu pedido de {{2}} ya se encuentra en proceso ✅ Lo estamos preparando para enviarlo a {{3}}. Apenas salga te compartimos el número de guía. Recuerda tener {{4}} listos para pagar al recibir.',
+  examples: ['Laura', 'Faja moldeadora · 2 unidades', 'Medellín', '$129.900'],
+  buttons: [] as string[],
+};

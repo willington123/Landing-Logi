@@ -5,7 +5,7 @@ import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET } from '@/lib/wa-templates';
 import { GUIDE_SAMPLE_JPEG_BASE64 } from '@/lib/server/guide-sample';
 import { metaUploadHandle } from '@/lib/server/wa-profile';
 
@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
               ? GUIDE_PRESET
               : b.preset === 'guide_photo'
                 ? GUIDE_PHOTO_PRESET
-                : {
+                : b.preset === 'process'
+                  ? PROCESS_PRESET
+                  : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
             category: b.category === 'MARKETING' ? ('MARKETING' as const) : ('UTILITY' as const),
