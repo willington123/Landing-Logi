@@ -43,3 +43,6 @@ export const GUIDE_PRESET = {
   examples: ['Laura', 'Faja moldeadora - 2 unidades', 'Servientrega', '700123456789'],
   buttons: [] as string[],
 };
+
+// The same notice with the photo of the shipping label on top (template header image).
+export const GUIDE_PHOTO_PRESET = { ...GUIDE_PRESET, name: 'aviso_guia_foto' };

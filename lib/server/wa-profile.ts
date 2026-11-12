@@ -68,8 +68,8 @@ export async function saveWaProfile(p: Omit<WaProfile, 'profilePictureUrl'>) {
   });
 }
 
-// New profile photo: Meta's resumable upload gives a handle, and the profile takes that handle.
-export async function setWaPhoto(data: Buffer, mime: string) {
+// Meta's resumable upload: the handle a profile photo or a template's sample header image takes.
+export async function metaUploadHandle(data: Buffer, mime: string): Promise<string> {
   const c = await cfg();
   const appId = env('META_APP_ID');
   if (!appId) throw new WaProfileError('Falta META_APP_ID en Vercel para subir la foto.');
@@ -86,5 +86,12 @@ export async function setWaPhoto(data: Buffer, mime: string) {
   });
   const u = await up.json().catch(() => ({}));
   if (!up.ok || !u?.h) throw new WaProfileError(u?.error?.message || 'No se pudo subir la foto a Meta.');
-  await call('POST', `${c.phoneNumberId}/whatsapp_business_profile`, c.token, { messaging_product: 'whatsapp', profile_picture_handle: u.h });
+  return String(u.h);
+}
+
+// New profile photo: Meta's resumable upload gives a handle, and the profile takes that handle.
+export async function setWaPhoto(data: Buffer, mime: string) {
+  const c = await cfg();
+  const h = await metaUploadHandle(data, mime);
+  await call('POST', `${c.phoneNumberId}/whatsapp_business_profile`, c.token, { messaging_product: 'whatsapp', profile_picture_handle: h });
 }

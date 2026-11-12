@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Check, CheckCircle2, Gauge, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from 'lucide-react';
-import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET } from '@/lib/wa-templates';
+import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET } from '@/lib/wa-templates';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -242,6 +242,7 @@ export default function TemplatesManager() {
   const hasApptPreset = list?.some((t) => t.name === APPOINTMENT_PRESET.name);
   const hasComeBackPreset = list?.some((t) => t.name === COME_BACK_PRESET.name);
   const hasGuidePreset = list?.some((t) => t.name === GUIDE_PRESET.name);
+  const hasGuidePhotoPreset = list?.some((t) => t.name === GUIDE_PHOTO_PRESET.name);
   const varsIn = (f.body.match(/\{\{\d+\}\}/g) || []).length;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -318,6 +319,17 @@ export default function TemplatesManager() {
                 </div>
                 <button onClick={() => run('preset-guide', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'guide' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset-guide' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
+                </button>
+              </div>
+            )}
+            {!hasGuidePhotoPreset && (
+              <div className="rounded-lg bg-white border border-amber-200 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="text-[13px] font-semibold text-slate-900">Aviso de guía con foto</p>
+                  <p className="text-[11px] text-slate-500">El mismo aviso con la foto de la guía arriba. Konnexa la usa cuando adjuntas la foto en el pedido y el cliente no ha escrito en 24 horas.</p>
+                </div>
+                <button onClick={() => run('preset-guide-photo', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'guide_photo' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
+                  {busy === 'preset-guide-photo' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
                 </button>
               </div>
             )}

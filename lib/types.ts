@@ -291,6 +291,8 @@ export interface OrderItem {
   dropi?: { orderId?: number | string | null; sentAt?: string; error?: string | null; at?: string; sending?: string; exportedAt?: string }; // order sent to Dropi
   inDropi?: { at: string; by?: string | null; ref?: string | null } | null; // marked by hand: the store already uploaded it to Dropi (number optional)
   guideAt?: string; // when the tracking number was saved
+  guidePhoto?: string | null; // photo of the shipping label (public URL)
+  guidePhotoPending?: boolean; // the photo couldn't go yet (24 h window closed): it goes when the customer writes
   _org?: string; // panel only: the order's store when Pedidos shows several (not saved)
   _store?: string;
 }
