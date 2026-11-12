@@ -2,9 +2,10 @@
 
 // In the order detail: "Ya está en Dropi" (marked by hand) and the tracking number. After typing the number, the
 // store sees the WhatsApp message for the customer, can edit it, and only sends it after confirming.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { compressImage, fileToDataUrl } from '@/lib/image-utils';
 import { orderOrgHeaders } from '@/lib/inbox-stores';
-import { AlertTriangle, CheckCircle2, Loader2, Package, Send, Truck } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, Loader2, Package, Send, Truck, X } from 'lucide-react';
 import { CARRIERS } from '@/lib/crm';
 import type { OrderItem } from '@/lib/types';
 
@@ -14,6 +15,8 @@ interface Preview {
   canText: boolean;
   shippedFlow: boolean;
   template?: { status: string; preview: string } | null; // "aviso_guia" when the 24 h window is closed
+  photoTemplate?: { status: string } | null; // "aviso_guia_foto" (photo of the label on top)
+  templateText?: string; // what either template says for this order
 }
 
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -40,6 +43,11 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
   const [busy, setBusy] = useState<'preview' | 'send' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Photo of the shipping label (optional), uploaded to Storage before saving.
+  const [photo, setPhoto] = useState<string | null>(order.guidePhoto || null);
+  const [savedPhoto, setSavedPhoto] = useState<string | null>(order.guidePhoto || null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setInDropi(order.inDropi || null);
@@ -48,6 +56,8 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     setTracking(order.trackingNumber || '');
     setEditing(!order.trackingNumber);
     setPreview(null);
+    setPhoto(order.guidePhoto || null);
+    setSavedPhoto(order.guidePhoto || null);
     setAskRef(false);
     setError(null);
     setDone(null);
@@ -73,6 +83,25 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     }
   };
 
+  const pickPhoto = async (file?: File) => {
+    if (!file) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const jpg = await compressImage(await fileToDataUrl(file), 1600, 0.85);
+      const blob = await (await fetch(jpg)).blob();
+      const up = await call<{ uploadUrl: string; url: string }>(`/api/orders/${order.id}/guide/photo`, { method: 'POST', headers: orderOrgHeaders(order), body: JSON.stringify({ mime: 'image/jpeg', size: blob.size }) });
+      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }, body: blob });
+      if (!put.ok) throw new Error(`No se pudo subir la foto (HTTP ${put.status}).`);
+      setPhoto(up.url);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setPhotoBusy(false);
+      if (photoInput.current) photoInput.current.value = '';
+    }
+  };
+
   const review = async () => {
     if (!tracking.trim()) return setError('Escribe el número de guía.');
     setBusy('preview');
@@ -94,16 +123,26 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     setBusy(send ? 'send' : 'save');
     setError(null);
     try {
-      const d = await call<{ sent: boolean; template?: boolean; error?: string }>(`/api/orders/${order.id}/guide`, {
+      const d = await call<{ sent: boolean; template?: boolean; photo?: boolean; photoLater?: boolean; error?: string }>(`/api/orders/${order.id}/guide`, {
         method: 'POST',
         headers: orderOrgHeaders(order),
-        body: JSON.stringify({ carrier, trackingNumber: tracking.trim(), markShipped, send, message }),
+        body: JSON.stringify({ carrier, trackingNumber: tracking.trim(), markShipped, send, message, photo: photo || null }),
       });
+      setSavedPhoto(photo);
       setPreview(null);
       setEditing(false);
       setSaved({ carrier: carrier.trim(), trackingNumber: tracking.trim(), guideAt: new Date().toISOString() });
       if (d.error) setError(d.error);
-      else setDone(d.sent ? (d.template ? 'Guía guardada y aviso enviado al cliente con la plantilla «Aviso de guía».' : 'Guía guardada y mensaje enviado al cliente por WhatsApp.') : 'Guía guardada. No se envió mensaje.');
+      else
+        setDone(
+          !d.sent
+            ? 'Guía guardada. No se envió mensaje.'
+            : d.photoLater
+              ? 'Guía guardada y aviso enviado con la plantilla. La foto de la guía se le envía apenas el cliente responda.'
+              : d.template
+                ? `Guía guardada y aviso enviado al cliente con la plantilla${d.photo ? ' con foto' : ''}.`
+                : `Guía guardada y ${photo ? 'foto con el mensaje enviada' : 'mensaje enviado'} al cliente por WhatsApp.`,
+        );
       onChanged?.();
     } catch (e: any) {
       setError(e.message);
@@ -113,7 +152,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
   };
 
   // Window closed + approved template: the notice goes with the template.
-  const useTemplate = Boolean(preview && !preview.canText && preview.template?.status === 'APPROVED');
+  const useTemplate = Boolean(preview && !preview.canText && (preview.template?.status === 'APPROVED' || (photo && preview.photoTemplate?.status === 'APPROVED')));
   const input = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10';
 
   return (
@@ -173,6 +212,11 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
               {saved.carrier || 'Transportadora'} · <span className="font-mono font-semibold">{saved.trackingNumber}</span>
               {saved.guideAt && <span className="text-slate-400 text-[12px]"> · {when(saved.guideAt)}</span>}
             </p>
+            {savedPhoto && (
+              <a href={savedPhoto} target="_blank" rel="noreferrer" title="Ver la foto de la guía" className="shrink-0">
+                <img src={savedPhoto} alt="Foto de la guía" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+              </a>
+            )}
             <button onClick={() => setEditing(true)} className="text-[12.5px] font-medium text-slate-500 hover:text-slate-900 shrink-0">
               Cambiar
             </button>
@@ -192,6 +236,20 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
               <input value={tracking} onChange={(e) => setTracking(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && review()} placeholder="Número de guía" className={`${input} font-mono`} />
             </div>
             {carrier && !CARRIERS.includes(carrier) && <input value={carrier.trim()} onChange={(e) => setCarrier(e.target.value || ' ')} placeholder="Nombre de la transportadora" className={input} />}
+            <div className="flex items-center gap-2">
+              {photo ? (
+                <span className="relative">
+                  <img src={photo} alt="Foto de la guía" className="w-14 h-14 rounded-lg object-cover border border-slate-200" />
+                  <button onClick={() => setPhoto(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center" aria-label="Quitar la foto">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ) : null}
+              <button onClick={() => photoInput.current?.click()} disabled={photoBusy} className="h-9 px-3 rounded-lg border border-dashed border-slate-300 text-[12.5px] font-medium text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1.5 disabled:opacity-50">
+                {photoBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />} {photo ? 'Cambiar foto' : 'Adjuntar foto de la guía'}
+              </button>
+              <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+            </div>
             <div className="flex gap-2">
               <button onClick={review} disabled={busy === 'preview' || !tracking.trim()} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-40">
                 {busy === 'preview' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Guardar guía
@@ -212,11 +270,25 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
             </p>
             {useTemplate ? (
               <div className="space-y-1">
-                <p className="text-[11.5px] text-slate-500">El cliente no ha escrito en 24 horas, así que va con tu plantilla aprobada «Aviso de guía» (este texto no se puede editar):</p>
-                <p className="rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">{preview.template!.preview}</p>
+                <p className="text-[11.5px] text-slate-500">El cliente no ha escrito en 24 horas, así que va con tu plantilla aprobada «Aviso de guía{photo && preview.photoTemplate?.status === 'APPROVED' ? ' con foto' : ''}» (este texto no se puede editar):</p>
+                <p className="rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">{preview.template?.preview || preview.templateText}</p>
               </div>
             ) : (
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            )}
+            {photo && (
+              <div className="flex items-start gap-2.5">
+                <img src={photo} alt="Foto de la guía" className="w-14 h-14 rounded-lg object-cover border border-slate-200 shrink-0" />
+                <p className="text-[11.5px] text-slate-600">
+                  {preview.canText
+                    ? 'La foto va con el mensaje como texto de la foto.'
+                    : preview.photoTemplate?.status === 'APPROVED'
+                      ? 'Va con tu plantilla «Aviso de guía con foto»: la foto arriba y el texto debajo.'
+                      : useTemplate
+                        ? <>Tu plantilla «Aviso de guía» no lleva foto: la foto se le envía apenas el cliente responda. {preview.photoTemplate ? `(La plantilla con foto está en revisión: ${preview.photoTemplate.status}.)` : <>Para enviarla de una vez, <a href="/plantillas" className="font-semibold underline">crea «Aviso de guía con foto»</a>.</>}</>
+                        : 'La foto queda guardada en el pedido.'}
+                </p>
+              </div>
             )}
             {!['shipped', 'delivered', 'returned', 'cancelled'].includes(order.status) && (
               <label className="flex items-center gap-2 text-[12.5px] text-slate-700">

@@ -1,9 +1,9 @@
 // WhatsApp business flows: order confirmation and customer replies.
 import { appointmentButton } from '@/lib/server/agenda-reminders';
-import { patchOrderData, updateOrderStatus } from '@/lib/server/db';
+import { db, patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { normalizePhone } from '@/lib/server/meta-capi';
-import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendText, type InboundMessage } from '@/lib/server/whatsapp';
-import { dueWaFallbackOrders, findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound } from '@/lib/server/wa-store';
+import { confirmTemplateEnabled, formatMoney, sendConfirmTemplate, sendMedia, sendText, type InboundMessage } from '@/lib/server/whatsapp';
+import { dueWaFallbackOrders, findOrderByNumber, findPendingOrder, linkConversationOrder, recordInbound, recordOutbound, samePhone } from '@/lib/server/wa-store';
 import { getLandingInfo } from '@/lib/server/voice-store';
 import { autoSentRecently, getAutoSettings, noteAutoSent } from '@/lib/server/crm-store';
 import { fillQuickReply, isWorkingTime, matchRule } from '@/lib/crm';
@@ -91,6 +91,17 @@ export async function autoReply(m: InboundMessage) {
 }
 
 // Stores an incoming message and acts on "Confirmar pedido" / "Cancelar".
+async function sendPendingGuidePhoto(phone: string) {
+  const { data } = await (await db()).from('orders').select('data').gte('created_at', new Date(Date.now() - 60 * 24 * 3600e3).toISOString()).order('created_at', { ascending: false }).limit(500);
+  const pending = (data || []).map((r: { data: unknown }) => r.data as OrderItem).filter((o: OrderItem) => o.guidePhotoPending && o.guidePhoto && samePhone(o, phone));
+  for (const o of pending) {
+    await patchOrderData(o.id, { guidePhotoPending: false }); // first, so a second message can't send it twice
+    const caption = `📦 Esta es la foto de la guía de tu pedido${o.trackingNumber ? ` (${o.trackingNumber})` : ''}.`;
+    const result = await sendMedia(phone, 'image', o.guidePhoto!, { caption });
+    await recordOutbound({ phone, orderId: o.id, type: 'image', body: `📷 ${caption}`, result, auto: true, payload: { type: 'image', image: { link: o.guidePhoto!, caption } } });
+  }
+}
+
 export async function handleInbound(m: InboundMessage) {
   const { isNew } = await recordInbound(m);
   if (!isNew) return; // duplicate delivery
@@ -100,6 +111,9 @@ export async function handleInbound(m: InboundMessage) {
     const said = await vn.transcribeVoiceNote(m);
     if (said) m = { ...m, text: said, type: 'text' };
   }
+  // A guide photo that couldn't go with the template: the customer wrote, so the 24 h window is open now.
+  await sendPendingGuidePhoto(m.from).catch((e) => console.error('Foto de guía pendiente', e));
+
   // Automatic assignment to the team (if it's on and the chat has nobody yet).
   await (await import('@/lib/server/crm-store')).autoAssign(m.from, 'new').catch((e) => console.error('Asignación automática', e));
 

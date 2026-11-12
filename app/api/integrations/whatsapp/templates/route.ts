@@ -5,7 +5,9 @@ import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET } from '@/lib/wa-templates';
+import { GUIDE_SAMPLE_JPEG_BASE64 } from '@/lib/server/guide-sample';
+import { metaUploadHandle } from '@/lib/server/wa-profile';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +38,9 @@ export async function POST(req: NextRequest) {
             ? COME_BACK_PRESET
             : b.preset === 'guide'
               ? GUIDE_PRESET
-              : {
+              : b.preset === 'guide_photo'
+                ? GUIDE_PHOTO_PRESET
+                : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
             category: b.category === 'MARKETING' ? ('MARKETING' as const) : ('UTILITY' as const),
@@ -50,7 +54,9 @@ export async function POST(req: NextRequest) {
     const vars = Array.from(new Set((t.body.match(/\{\{(\d+)\}\}/g) || []).map((v) => v)));
     if (vars.length && t.examples.filter(Boolean).length < vars.length) return fail(`Escribe un ejemplo para cada variable ({{1}}…{{${vars.length}}}): Meta los pide para revisar la plantilla.`);
     if (t.buttons.some((x: string) => x.length > 25)) return fail('Cada botón puede tener máximo 25 caracteres.');
-    const created = await createTemplate({ ...t, examples: t.examples.slice(0, vars.length) });
+    // The photo version needs a sample image for Meta's review.
+    const headerImageHandle = b.preset === 'guide_photo' ? await metaUploadHandle(Buffer.from(GUIDE_SAMPLE_JPEG_BASE64, 'base64'), 'image/jpeg') : undefined;
+    const created = await createTemplate({ ...t, examples: t.examples.slice(0, vars.length), headerImageHandle });
     // The preset becomes the store's confirmation template right away (it can be sent once Meta approves it).
     if (b.preset === 'confirm') {
       const c = await waConfig();

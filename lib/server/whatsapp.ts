@@ -151,9 +151,12 @@ export function sendAppointmentTemplate(to: string, t: { name: string; lang: str
 }
 
 // Any approved template with body variables (its quick-reply buttons send their own text back).
-export function sendTemplate(to: string, t: { name: string; lang: string }, vars: string[]): Promise<SendResult> {
+export function sendTemplate(to: string, t: { name: string; lang: string }, vars: string[], headerImage?: string): Promise<SendResult> {
   if (social(to)) return Promise.resolve(NOT_WHATSAPP);
-  return send({ to, type: 'template', template: { name: t.name, language: { code: t.lang || 'es' }, components: vars.length ? [{ type: 'body', parameters: vars.map(param) }] : [] } });
+  const components: any[] = [];
+  if (headerImage) components.push({ type: 'header', parameters: [{ type: 'image', image: { link: headerImage } }] });
+  if (vars.length) components.push({ type: 'body', parameters: vars.map(param) });
+  return send({ to, type: 'template', template: { name: t.name, language: { code: t.lang || 'es' }, components } });
 }
 
 // Free-form message with up to 3 reply buttons (only inside the 24 h window).
@@ -393,11 +396,13 @@ export async function listTemplates(): Promise<WaTemplate[]> {
   return (data.data || []) as WaTemplate[];
 }
 
-export async function createTemplate(t: { name: string; language: string; category: 'UTILITY' | 'MARKETING'; body: string; examples: string[]; buttons: string[] }) {
+export async function createTemplate(t: { name: string; language: string; category: 'UTILITY' | 'MARKETING'; body: string; examples: string[]; buttons: string[]; headerImageHandle?: string }) {
   const c = await waConfig();
   if (!c) throw new Error('Conecta WhatsApp primero.');
   if (!c.wabaId) throw new Error('Falta el identificador de la cuenta de WhatsApp Business (WABA ID) en la conexión.');
   const components: any[] = [{ type: 'BODY', text: t.body, ...(t.examples.length ? { example: { body_text: [t.examples] } } : {}) }];
+  // Photo on top (e.g. the shipping label): Meta reviews it with a sample image (an upload handle).
+  if (t.headerImageHandle) components.unshift({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [t.headerImageHandle] } });
   if (t.buttons.length) components.push({ type: 'BUTTONS', buttons: t.buttons.map((text) => ({ type: 'QUICK_REPLY', text })) });
   const res = await fetch(`${GRAPH}/${c.wabaId}/message_templates`, {
     method: 'POST',

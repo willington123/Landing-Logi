@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db, patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { getConversation, recordOutbound } from '@/lib/server/wa-store';
-import { insideServiceWindow, listTemplates, sendTemplate, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
-import { GUIDE_PRESET } from '@/lib/wa-templates';
+import { insideServiceWindow, listTemplates, sendMedia, sendTemplate, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
+import { GUIDE_PHOTO_PRESET, GUIDE_PRESET } from '@/lib/wa-templates';
 import { getAgents, getQuickReplies, myAgent } from '@/lib/server/crm-store';
 import { getFlows } from '@/lib/server/flows';
 import { getUser } from '@/lib/server/accounts';
@@ -41,11 +41,16 @@ async function guideMessage(o: OrderItem, carrier: string, trackingNumber: strin
 }
 
 // The store's "aviso_guia" template and its state in Meta (APPROVED, PENDING, REJECTED…), or null if not created.
-async function guideTemplate(): Promise<{ status: string; lang: string } | null> {
+async function guideTemplate(name = GUIDE_PRESET.name): Promise<{ status: string; lang: string } | null> {
   const list = await listTemplates().catch(() => []);
-  const t = list.find((x) => x.name === GUIDE_PRESET.name && x.status === 'APPROVED') || list.find((x) => x.name === GUIDE_PRESET.name);
+  const t = list.find((x) => x.name === name && x.status === 'APPROVED') || list.find((x) => x.name === name);
   return t ? { status: t.status, lang: t.language || 'es' } : null;
 }
+// Only photos uploaded to our own storage (the guide photo button).
+const okPhoto = (v: unknown) => {
+  const u = String(v ?? '').trim();
+  return /^https:\/\/[^\s]+\/storage\/v1\/object\/public\/[^\s]+\/guides\/[^\s]+\.(jpg|png)$/i.test(u) || (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost[^\s]*\/guides\/[^\s]+\.(jpg|png)$/i.test(u)) ? u : null;
+};
 
 const firstName = (n?: string) => ((n || '').trim().split(/\s+/)[0] || 'cliente').replace(/^./, (x) => x.toUpperCase());
 
@@ -82,12 +87,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const whatsapp = await whatsappEnabled();
     const canText = Boolean(chat && insideServiceWindow(chat.last_inbound_at));
     const tpl = whatsapp && !canText ? await guideTemplate() : null;
+    const photoTpl = whatsapp && !canText ? await guideTemplate(GUIDE_PHOTO_PRESET.name) : null;
     return ok({
       message: await guideMessage(o, carrier, tracking),
       whatsapp,
       canText,
       // Outside the 24 h window the notice goes with the approved "aviso_guia" template (fixed text).
       template: tpl ? { status: tpl.status, preview: guideTemplateText(o, carrier, tracking) } : null,
+      templateText: guideTemplateText(o, carrier, tracking),
+      photoTemplate: photoTpl ? { status: photoTpl.status } : null,
+      photo: o.guidePhoto || null,
       // The store's own "Aviso de envío" flow also writes when the order is marked as shipped.
       shippedFlow: flows.some((f) => f.enabled && f.trigger?.type === 'order_status' && (f.trigger as { status?: string }).status === 'shipped'),
     });
@@ -107,9 +116,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const trackingNumber = clean(b.trackingNumber, 60);
     if (!trackingNumber) return fail('Escribe el número de guía.');
     const message = clean(b.message, 1000);
+    // Photo of the label: the one sent now, or the one already saved (null = remove it).
+    const photo = b.photo === null ? null : okPhoto(b.photo) || (b.photo === undefined ? o.guidePhoto || null : null);
+    if (b.photo && !okPhoto(b.photo)) return fail('La foto de la guía no es válida. Vuelve a subirla.');
     if (b.send && !message) return fail('Escribe el mensaje para el cliente.');
 
-    await patchOrderData(o.id, { carrier: carrier || null, trackingNumber, guideAt: new Date().toISOString(), ...(b.markShipped ? { shippedAt: new Date().toISOString() } : {}) });
+    await patchOrderData(o.id, { carrier: carrier || null, trackingNumber, guidePhoto: photo, guidePhotoPending: false, guideAt: new Date().toISOString(), ...(b.markShipped ? { shippedAt: new Date().toISOString() } : {}) });
     if (b.markShipped && o.status !== 'shipped' && o.status !== 'delivered') await updateOrderStatus(o.id, 'shipped');
 
     if (!b.send) return ok({ sent: false });
@@ -117,7 +129,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const chat = await getConversation(phone).catch(() => null);
     if (!(await whatsappEnabled())) return ok({ sent: false, error: 'La guía quedó guardada, pero WhatsApp no está conectado: no se envió el mensaje.' });
     if (!chat || !insideServiceWindow(chat.last_inbound_at)) {
-      // Window closed: the approved "aviso_guia" template.
+      // Window closed: an approved template. With a photo, the one that carries it on top (if Meta approved it).
+      const vars = guideVars(o, carrier, trackingNumber);
+      const text = guideTemplateText(o, carrier, trackingNumber);
+      const photoTpl = photo ? await guideTemplate(GUIDE_PHOTO_PRESET.name) : null;
+      if (photo && photoTpl?.status === 'APPROVED') {
+        const result = await sendTemplate(phone, { name: GUIDE_PHOTO_PRESET.name, lang: photoTpl.lang }, vars, photo);
+        await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'template', body: `📷 ${text}`, result, by: await whoAmI(), payload: { type: 'image', image: { link: photo } } });
+        return result.ok ? ok({ sent: true, template: true, photo: true }) : ok({ sent: false, error: `La guía quedó guardada, pero la plantilla no salió: ${result.error || 'error de WhatsApp'}` });
+      }
       const tpl = await guideTemplate();
       if (!tpl || tpl.status !== 'APPROVED')
         return ok({
@@ -126,13 +146,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             ? `La guía quedó guardada, pero la plantilla «${GUIDE_PRESET.name}» aún no está aprobada por Meta (${tpl.status}). Cuando la aprueben, podrás enviarla.`
             : 'La guía quedó guardada, pero el cliente no ha escrito en las últimas 24 horas: crea la plantilla «Aviso de guía» en Plantillas para poder avisarle.',
         });
-      const vars = guideVars(o, carrier, trackingNumber);
       const result = await sendTemplate(phone, { name: GUIDE_PRESET.name, lang: tpl.lang }, vars);
-      await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'template', body: guideTemplateText(o, carrier, trackingNumber), result, by: await whoAmI() });
-      return result.ok ? ok({ sent: true, template: true }) : ok({ sent: false, error: `La guía quedó guardada, pero la plantilla no salió: ${result.error || 'error de WhatsApp'}` });
+      await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'template', body: text, result, by: await whoAmI() });
+      if (!result.ok) return ok({ sent: false, error: `La guía quedó guardada, pero la plantilla no salió: ${result.error || 'error de WhatsApp'}` });
+      // The photo goes as soon as the customer writes (that opens the 24 h window).
+      if (photo) await patchOrderData(o.id, { guidePhotoPending: true });
+      return ok({ sent: true, template: true, photoLater: Boolean(photo) });
     }
-    const result = await sendText(phone, message);
-    await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'text', body: message, result, by: await whoAmI() });
+    // Inside the window: the photo with the message as its caption, or just the message.
+    const result = photo ? await sendMedia(phone, 'image', photo, { caption: message }) : await sendText(phone, message);
+    await recordOutbound(
+      photo
+        ? { phone, name: o.customerName, orderId: o.id, type: 'image', body: `📷 ${message}`, result, by: await whoAmI(), payload: { type: 'image', image: { link: photo, caption: message } } }
+        : { phone, name: o.customerName, orderId: o.id, type: 'text', body: message, result, by: await whoAmI() },
+    );
     return result.ok ? ok({ sent: true }) : ok({ sent: false, error: `La guía quedó guardada, pero el mensaje no salió: ${result.error || 'error de WhatsApp'}` });
   } catch (e) {
     return failFrom(e);
