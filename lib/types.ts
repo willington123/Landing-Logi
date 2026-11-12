@@ -225,6 +225,8 @@ export interface LandingPageConfig {
   whatsappDirectMessage: string;
   // After an order, send the customer to WhatsApp with the order details (default: on when there is a number).
   whatsappRedirect?: boolean;
+  // Thank-you screen when the customer is not sent to WhatsApp. {nombre} {pedido} {total} {telefono} are filled in.
+  thankYou?: { title?: string; text?: string; whatsappButton?: boolean };
   themeStyle: 'impact-vibrant' | 'dark-luxe' | 'dropship-fast' | 'clean-white' | 'tech-neon';
   primaryColor: string;
   accentColor: string;

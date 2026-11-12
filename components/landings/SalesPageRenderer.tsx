@@ -4,7 +4,7 @@
 // soft tinted sections, rich-text titles and a COD order drawer.
 import React, { useEffect, useMemo, useState } from 'react';
 import { Inter, Playfair_Display, Fraunces } from 'next/font/google';
-import { orderWhatsAppUrl } from '@/lib/whatsapp-link';
+import { orderWhatsAppUrl, DEFAULT_THANK_YOU, fillThankYou, storeWhatsAppUrl } from '@/lib/whatsapp-link';
 import WhatsAppConfirmStep from '@/components/landings/WhatsAppConfirmStep';
 import OfferCountdownBox from '@/components/landings/OfferCountdownBox';
 import ImpactSections from '@/components/landings/ImpactSections';
@@ -951,12 +951,19 @@ export default function SalesPageRenderer({ config, previewMode = false, onOrder
                 <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: d.primary, color: onPrimary }}>
                   <Check className="w-8 h-8" strokeWidth={3} />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900">¡Gracias, {done.customerName?.split(' ')[0]}!</h3>
-                {done.orderNumber && <p className="text-xs text-slate-500 mt-1">Pedido {done.orderNumber}</p>}
-                <p className="text-sm text-slate-600 mt-3 leading-relaxed">
-                  Te contactaremos al {done.phone} para confirmar la entrega. Pagarás {money(done.totalAmount)} cuando lo recibas.
-                </p>
-                <button onClick={() => { setDrawer(false); setDone(null); }} className="mt-6 h-12 px-8 rounded-full font-semibold text-white" style={{ background: d.dark }}>
+                <h3 className="text-xl font-bold text-slate-900">{fillThankYou(config.thankYou?.title?.trim() || DEFAULT_THANK_YOU.title, done, config.currency || 'COP')}</h3>
+                <p className="text-sm text-slate-600 mt-3 leading-relaxed whitespace-pre-line">{fillThankYou(config.thankYou?.text?.trim() || DEFAULT_THANK_YOU.text, done, config.currency || 'COP')}</p>
+                {config.thankYou?.whatsappButton !== false && storeWhatsAppUrl(config, done) && (
+                  <a
+                    href={previewMode ? undefined : storeWhatsAppUrl(config, done)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-6 h-12 px-6 rounded-full font-semibold text-white bg-[#25D366] hover:bg-[#1ebe5a] inline-flex items-center gap-2"
+                  >
+                    Escríbenos por WhatsApp
+                  </a>
+                )}
+                <button onClick={() => { setDrawer(false); setDone(null); }} className="mt-3 h-12 px-8 rounded-full font-semibold text-white" style={{ background: d.dark }}>
                   Listo
                 </button>
               </div>
