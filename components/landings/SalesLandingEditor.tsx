@@ -33,6 +33,7 @@ import { logiStore } from '@/lib/store';
 import { LandingPageConfig, LandingDesign, SalesPageContent, ReviewItem, FAQItem, BenefitItem, ImageSection, ImpactContent } from '@/lib/types';
 import { buildCombos, ICON_NAMES } from '@/lib/landing-ai';
 import { IMPACT_STYLES, heroAspect } from '@/lib/landing-styles';
+import { DEFAULT_THANK_YOU } from '@/lib/whatsapp-link';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl, isGif, uploadGif } from '@/lib/image-utils';
 import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
@@ -678,6 +679,51 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
 
             {tab === 'offers' && (
               <>
+                <Group title="Después de comprar" defaultOpen>
+                  <p className="text-[11px] text-slate-500">Lo que ve el cliente al terminar su pedido.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      [true, 'Llevarlo a WhatsApp', 'Se abre tu WhatsApp con los datos del pedido ya escritos; el cliente solo toca Enviar.'],
+                      [false, 'Mensaje de gracias', 'Ve un mensaje de agradecimiento en la misma página.'],
+                    ] as const).map(([v, name, text]) => {
+                      const on = (config.whatsappRedirect !== false) === v;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => update({ whatsappRedirect: v })}
+                          className={`text-left rounded-lg border p-2.5 text-xs ${on ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <strong className="block text-slate-900">{name}</strong>
+                          <span className="text-slate-500">{text}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Text label="Tu WhatsApp" value={config.whatsappNumber} onChange={(v) => update({ whatsappNumber: v })} placeholder="+57 300 000 0000" />
+                  {config.whatsappRedirect !== false && !(config.whatsappNumber || '').replace(/\D/g, '') && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-2">Escribe tu número de WhatsApp: sin él, el cliente verá el mensaje de gracias.</p>
+                  )}
+                  {config.whatsappRedirect === false && (
+                    <>
+                      <Text label="Título" value={config.thankYou?.title ?? DEFAULT_THANK_YOU.title} onChange={(v) => update({ thankYou: { ...config.thankYou, title: v } })} />
+                      <Text
+                        label="Mensaje"
+                        value={config.thankYou?.text ?? DEFAULT_THANK_YOU.text}
+                        onChange={(v) => update({ thankYou: { ...config.thankYou, text: v } })}
+                        multiline
+                        hint="Puedes usar {nombre}, {pedido}, {total} y {telefono}: se llenan con los datos de cada pedido."
+                      />
+                      <label className="text-sm text-slate-700 flex items-start gap-2">
+                        <input type="checkbox" className="mt-1" checked={config.thankYou?.whatsappButton !== false} onChange={(e) => update({ thankYou: { ...config.thankYou, whatsappButton: e.target.checked } })} />
+                        <span>
+                          Mostrar el botón «Escríbenos por WhatsApp»
+                          <span className="block text-xs text-slate-500">Para que el cliente pueda escribirte si quiere (necesita tu número).</span>
+                        </span>
+                      </label>
+                    </>
+                  )}
+                </Group>
                 <Group title="Ofertas" defaultOpen>
                   <Field label={`Precio normal por unidad (${config.currency}, opcional)`} hint="Se muestra tachado. Déjalo vacío si no hay descuento.">
                     <input className={inputCls} inputMode="numeric" value={unitDraft} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setUnitDraft(v); commitOffers(offerDrafts, v); }} />

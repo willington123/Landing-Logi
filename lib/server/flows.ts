@@ -238,7 +238,8 @@ async function buildCtx(s: FlowSubject): Promise<Ctx | null> {
   return ctx;
 }
 
-const firstName = (n?: string) => (n || '').trim().split(/\s+/)[0] || '';
+// "ana ruiz" → "Ana" (customers often type their name in lowercase).
+const firstName = (n?: string) => ((n || '').trim().split(/\s+/)[0] || '').replace(/^./, (c) => c.toLocaleUpperCase('es'));
 
 export function fill(text: string, ctx: Ctx): string {
   const o = ctx.order;

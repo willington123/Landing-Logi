@@ -233,7 +233,10 @@ export async function createOrder(order: OrderItem) {
     created_at: order.createdAt,
   });
   if (error) throw new Error(error.message);
-  await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'order_created', order });
+  const flows = await import('@/lib/server/flows');
+  await flows.emitFlowEvent({ type: 'order_created', order });
+  // Born confirmed (the assistant, a manual order): the "changes to Confirmado" automations run too.
+  if (order.status === 'confirmed_by_voice') await flows.emitFlowEvent({ type: 'order_status', order, from: 'new' });
   await (await import('@/lib/server/dropi-orders')).autoSendToDropi(order);
   return order;
 }

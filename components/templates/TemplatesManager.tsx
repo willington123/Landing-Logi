@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Check, CheckCircle2, Gauge, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from 'lucide-react';
-import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET } from '@/lib/wa-templates';
+import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET } from '@/lib/wa-templates';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -243,6 +243,7 @@ export default function TemplatesManager() {
   const hasComeBackPreset = list?.some((t) => t.name === COME_BACK_PRESET.name);
   const hasGuidePreset = list?.some((t) => t.name === GUIDE_PRESET.name);
   const hasGuidePhotoPreset = list?.some((t) => t.name === GUIDE_PHOTO_PRESET.name);
+  const hasProcessPreset = list?.some((t) => t.name === PROCESS_PRESET.name);
   const varsIn = (f.body.match(/\{\{\d+\}\}/g) || []).length;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -307,6 +308,18 @@ export default function TemplatesManager() {
                 </div>
                 <button onClick={() => run('preset', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'confirm' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
+                </button>
+              </div>
+            )}
+            {!hasProcessPreset && (
+              <div className="rounded-lg bg-white border border-emerald-200 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="text-[13px] font-semibold text-slate-900">Pedido en proceso</p>
+                  <p className="text-[11px] text-slate-500">Le cuenta al cliente que su pedido confirmado ya se está preparando. Para que salga sola, activa en Automatizaciones la receta «Aviso: tu pedido está en proceso».</p>
+                  <p className="mt-1 text-[11px] text-slate-600 italic">“{PROCESS_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => PROCESS_PRESET.examples[Number(i) - 1])}”</p>
+                </div>
+                <button onClick={() => run('preset-process', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'process' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
+                  {busy === 'preset-process' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
                 </button>
               </div>
             )}
