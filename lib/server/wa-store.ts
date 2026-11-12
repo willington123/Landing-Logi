@@ -160,8 +160,13 @@ export async function applyStatus(s: StatusUpdate) {
 
 const digits = (v: string) => (v || '').replace(/\D/g, '');
 
+// An order belongs to a chat when it was placed or confirmed from that WhatsApp, the template went there, or its
+// contact phone (or the phone it had before a correction) is that number. The contact phone alone isn't enough:
+// many customers write from one number and give another one for the delivery.
 export function samePhone(order: OrderItem & { whatsapp?: { to?: string } }, phone: string): boolean {
   if (order.whatsapp?.to === phone) return true;
+  if (order.whatsappFrom && digits(order.whatsappFrom) === digits(phone)) return true;
+  if (order.previousPhone && normalizePhone(order.previousPhone) === phone) return true;
   if (normalizePhone(order.phone) === phone) return true;
   const d = digits(order.phone);
   return d.length >= 7 && phone.endsWith(d);
