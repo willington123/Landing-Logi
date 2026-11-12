@@ -5,7 +5,7 @@ import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET } from '@/lib/wa-templates';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +34,9 @@ export async function POST(req: NextRequest) {
           ? APPOINTMENT_PRESET
           : b.preset === 'comeback'
             ? COME_BACK_PRESET
-            : {
+            : b.preset === 'guide'
+              ? GUIDE_PRESET
+              : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
             category: b.category === 'MARKETING' ? ('MARKETING' as const) : ('UTILITY' as const),

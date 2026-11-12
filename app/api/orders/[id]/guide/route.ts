@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db, patchOrderData, updateOrderStatus } from '@/lib/server/db';
 import { getConversation, recordOutbound } from '@/lib/server/wa-store';
-import { insideServiceWindow, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
+import { insideServiceWindow, listTemplates, sendTemplate, sendText, whatsappEnabled } from '@/lib/server/whatsapp';
+import { GUIDE_PRESET } from '@/lib/wa-templates';
 import { getAgents, getQuickReplies, myAgent } from '@/lib/server/crm-store';
 import { getFlows } from '@/lib/server/flows';
 import { getUser } from '@/lib/server/accounts';
@@ -39,6 +40,26 @@ async function guideMessage(o: OrderItem, carrier: string, trackingNumber: strin
   });
 }
 
+// The store's "aviso_guia" template and its state in Meta (APPROVED, PENDING, REJECTED…), or null if not created.
+async function guideTemplate(): Promise<{ status: string; lang: string } | null> {
+  const list = await listTemplates().catch(() => []);
+  const t = list.find((x) => x.name === GUIDE_PRESET.name && x.status === 'APPROVED') || list.find((x) => x.name === GUIDE_PRESET.name);
+  return t ? { status: t.status, lang: t.language || 'es' } : null;
+}
+
+const firstName = (n?: string) => ((n || '').trim().split(/\s+/)[0] || 'cliente').replace(/^./, (x) => x.toUpperCase());
+
+const guideVars = (o: OrderItem, carrier: string, tracking: string): string[] => [
+  firstName(o.customerName),
+  [o.productName, o.comboName].filter(Boolean).join(' - ') || 'tu compra',
+  carrier || 'la transportadora',
+  tracking,
+];
+const guideTemplateText = (o: OrderItem, carrier: string, tracking: string) => {
+  const v = guideVars(o, carrier, tracking);
+  return GUIDE_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => v[Number(i) - 1] || '');
+};
+
 async function whoAmI() {
   const uid = sessionUserId();
   if (!uid) return undefined;
@@ -58,10 +79,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const tracking = clean(req.nextUrl.searchParams.get('tracking'), 60);
     const chat = await getConversation(chatOf(o)).catch(() => null);
     const flows = await getFlows().catch(() => []);
+    const whatsapp = await whatsappEnabled();
+    const canText = Boolean(chat && insideServiceWindow(chat.last_inbound_at));
+    const tpl = whatsapp && !canText ? await guideTemplate() : null;
     return ok({
       message: await guideMessage(o, carrier, tracking),
-      whatsapp: await whatsappEnabled(),
-      canText: Boolean(chat && insideServiceWindow(chat.last_inbound_at)),
+      whatsapp,
+      canText,
+      // Outside the 24 h window the notice goes with the approved "aviso_guia" template (fixed text).
+      template: tpl ? { status: tpl.status, preview: guideTemplateText(o, carrier, tracking) } : null,
       // The store's own "Aviso de envío" flow also writes when the order is marked as shipped.
       shippedFlow: flows.some((f) => f.enabled && f.trigger?.type === 'order_status' && (f.trigger as { status?: string }).status === 'shipped'),
     });
@@ -90,8 +116,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const phone = chatOf(o);
     const chat = await getConversation(phone).catch(() => null);
     if (!(await whatsappEnabled())) return ok({ sent: false, error: 'La guía quedó guardada, pero WhatsApp no está conectado: no se envió el mensaje.' });
-    if (!chat || !insideServiceWindow(chat.last_inbound_at))
-      return ok({ sent: false, error: 'La guía quedó guardada, pero el cliente no ha escrito en las últimas 24 horas: WhatsApp no deja enviarle texto libre (solo una plantilla aprobada).' });
+    if (!chat || !insideServiceWindow(chat.last_inbound_at)) {
+      // Window closed: the approved "aviso_guia" template.
+      const tpl = await guideTemplate();
+      if (!tpl || tpl.status !== 'APPROVED')
+        return ok({
+          sent: false,
+          error: tpl
+            ? `La guía quedó guardada, pero la plantilla «${GUIDE_PRESET.name}» aún no está aprobada por Meta (${tpl.status}). Cuando la aprueben, podrás enviarla.`
+            : 'La guía quedó guardada, pero el cliente no ha escrito en las últimas 24 horas: crea la plantilla «Aviso de guía» en Plantillas para poder avisarle.',
+        });
+      const vars = guideVars(o, carrier, trackingNumber);
+      const result = await sendTemplate(phone, { name: GUIDE_PRESET.name, lang: tpl.lang }, vars);
+      await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'template', body: guideTemplateText(o, carrier, trackingNumber), result, by: await whoAmI() });
+      return result.ok ? ok({ sent: true, template: true }) : ok({ sent: false, error: `La guía quedó guardada, pero la plantilla no salió: ${result.error || 'error de WhatsApp'}` });
+    }
     const result = await sendText(phone, message);
     await recordOutbound({ phone, name: o.customerName, orderId: o.id, type: 'text', body: message, result, by: await whoAmI() });
     return result.ok ? ok({ sent: true }) : ok({ sent: false, error: `La guía quedó guardada, pero el mensaje no salió: ${result.error || 'error de WhatsApp'}` });

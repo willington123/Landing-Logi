@@ -32,3 +32,14 @@ export const COME_BACK_PRESET = {
   examples: ['Laura', '4 semanas', 'Corte + barba', 'Barbería El Parche'],
   buttons: ['Agendar cita', 'Ahora no'],
 };
+
+// Tracking number notice (utility): {{1}} name, {{2}} product, {{3}} carrier, {{4}} tracking number.
+// Sent instead of the free-text "guía" message when the customer hasn't written in 24 hours.
+export const GUIDE_PRESET = {
+  name: 'aviso_guia',
+  language: 'es',
+  category: 'UTILITY' as const,
+  body: 'Hola {{1}} 🚚 Tu pedido de {{2}} ya va en camino con {{3}}. Tu número de guía es {{4}}. Recuerda tener el pago listo cuando te llegue.',
+  examples: ['Laura', 'Faja moldeadora - 2 unidades', 'Servientrega', '700123456789'],
+  buttons: [] as string[],
+};

@@ -13,6 +13,7 @@ interface Preview {
   whatsapp: boolean;
   canText: boolean;
   shippedFlow: boolean;
+  template?: { status: string; preview: string } | null; // "aviso_guia" when the 24 h window is closed
 }
 
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -93,7 +94,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     setBusy(send ? 'send' : 'save');
     setError(null);
     try {
-      const d = await call<{ sent: boolean; error?: string }>(`/api/orders/${order.id}/guide`, {
+      const d = await call<{ sent: boolean; template?: boolean; error?: string }>(`/api/orders/${order.id}/guide`, {
         method: 'POST',
         headers: orderOrgHeaders(order),
         body: JSON.stringify({ carrier, trackingNumber: tracking.trim(), markShipped, send, message }),
@@ -102,7 +103,7 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
       setEditing(false);
       setSaved({ carrier: carrier.trim(), trackingNumber: tracking.trim(), guideAt: new Date().toISOString() });
       if (d.error) setError(d.error);
-      else setDone(d.sent ? 'Guía guardada y mensaje enviado al cliente por WhatsApp.' : 'Guía guardada. No se envió mensaje.');
+      else setDone(d.sent ? (d.template ? 'Guía guardada y aviso enviado al cliente con la plantilla «Aviso de guía».' : 'Guía guardada y mensaje enviado al cliente por WhatsApp.') : 'Guía guardada. No se envió mensaje.');
       onChanged?.();
     } catch (e: any) {
       setError(e.message);
@@ -111,6 +112,8 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
     }
   };
 
+  // Window closed + approved template: the notice goes with the template.
+  const useTemplate = Boolean(preview && !preview.canText && preview.template?.status === 'APPROVED');
   const input = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10';
 
   return (
@@ -207,7 +210,14 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
               Guía <span className="font-mono font-semibold text-slate-900">{tracking.trim()}</span>
               {carrier.trim() ? ` · ${carrier.trim()}` : ''}. Revisa el mensaje antes de enviarlo:
             </p>
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            {useTemplate ? (
+              <div className="space-y-1">
+                <p className="text-[11.5px] text-slate-500">El cliente no ha escrito en 24 horas, así que va con tu plantilla aprobada «Aviso de guía» (este texto no se puede editar):</p>
+                <p className="rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">{preview.template!.preview}</p>
+              </div>
+            ) : (
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 bg-emerald-50/40 px-3 py-2 text-[13px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            )}
             {!['shipped', 'delivered', 'returned', 'cancelled'].includes(order.status) && (
               <label className="flex items-center gap-2 text-[12.5px] text-slate-700">
                 <input type="checkbox" checked={markShipped} onChange={(e) => setMarkShipped(e.target.checked)} className="w-4 h-4 accent-brand-blue" />
@@ -216,14 +226,23 @@ export default function ShippingBox({ order, onChanged }: { order: OrderItem; on
             )}
             {!preview.whatsapp ? (
               <Warn>WhatsApp no está conectado: puedes guardar la guía, pero no enviar el mensaje.</Warn>
-            ) : !preview.canText ? (
-              <Warn>El cliente no ha escrito en las últimas 24 horas: WhatsApp no deja enviarle este mensaje (solo una plantilla aprobada). Puedes guardar la guía sin enviar.</Warn>
+            ) : !preview.canText && !useTemplate ? (
+              <Warn>
+                {preview.template ? (
+                  <>Tu plantilla «Aviso de guía» todavía no está aprobada por Meta ({preview.template.status}). Cuando la aprueben podrás enviarla; por ahora guarda la guía sin enviar.</>
+                ) : (
+                  <>
+                    El cliente no ha escrito en las últimas 24 horas: WhatsApp solo deja enviarle una plantilla aprobada.{' '}
+                    <a href="/plantillas" className="font-semibold underline">Crea la plantilla «Aviso de guía»</a> (un clic) y mientras Meta la aprueba, guarda la guía sin enviar.
+                  </>
+                )}
+              </Warn>
             ) : null}
             {preview.shippedFlow && markShipped && <Warn>Tu flujo «Aviso de envío» también le escribe al marcarlo como Enviado. Para no avisarle dos veces, guarda sin enviar o desmarca «Enviado».</Warn>}
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => save(true)}
-                disabled={!!busy || !preview.whatsapp || !preview.canText || !message.trim()}
+                disabled={!!busy || !preview.whatsapp || (!preview.canText && !useTemplate) || (!useTemplate && !message.trim())}
                 className="h-9 px-3 rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
               >
                 {busy === 'send' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Confirmar y enviar
