@@ -279,7 +279,8 @@ export interface OrderItem {
   confirmedAt?: string;
   callNotes?: string; // what the AI call or a call error reported
   previousAddress?: string;
-  previousPhone?: string; // phone before the team corrected it (e.g. the number had no WhatsApp)
+  previousPhone?: string;
+  correctedAt?: string; // last time the customer corrected the order in the chat (assistant) // phone before the team corrected it (e.g. the number had no WhatsApp)
   confirmedVia?: string; // 'whatsapp' when the customer confirmed by WhatsApp
   whatsappFrom?: string;
   carrier?: string | null; // transportadora, set when marked as shipped

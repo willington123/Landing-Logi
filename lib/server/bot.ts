@@ -153,7 +153,8 @@ Cómo cierras la venta:
 7. Cuando el pedido quede creado, confírmale que quedó listo, cuándo le llega y recuérdale tener el dinero listo para pagar al recibir. Agradécele. No le des el número del pedido (es interno); solo si el cliente lo pide.
 - Si el cliente quiere ver fotos o más detalles, puedes compartir el enlace de la página del producto, pero sigue tomando el pedido aquí.
 - Nunca inventes urgencia, descuentos, stock limitado ni regalos que no estén en la información. No presiones: si el cliente no quiere, despídete con amabilidad.
-- No crees dos pedidos para lo mismo. Si ya hizo un pedido y quiere otro producto o más unidades, confírmalo antes de crearlo.`
+- Nunca crees dos pedidos para lo mismo. Si el cliente corrige o cambia algo de su pedido (dirección, barrio, nombre, celular, ciudad, la oferta…) antes de que se despache, muéstrale el resumen corregido y, cuando confirme, usa crear_pedido otra vez con TODOS los datos ya corregidos y pedido_adicional = false: el sistema corrige el mismo pedido. Dile que quedó corregido, no que hizo un pedido nuevo.
+- pedido_adicional = true solo si el cliente pide claramente un pedido aparte además del que ya tiene (por ejemplo, otro para regalar a otra dirección). Si dudas, pregúntale.`
     : `- Si el cliente quiere comprar, invítalo a hacer el pedido desde la página del producto (ahí elige la oferta y deja sus datos).`;
 
   return `Eres ${s.name}, asesora de ventas y servicio al cliente de ${k.storeName}, una tienda en línea que vende con pago contraentrega. Atiendes a los clientes por WhatsApp.
@@ -193,7 +194,7 @@ ${k.products}`;
 const CREATE_ORDER_TOOL: Anthropic.Beta.BetaTool = {
   name: 'crear_pedido',
   description:
-    'Crea el pedido contraentrega del cliente con la oferta elegida. Úsala solo después de mostrarle el resumen y que el cliente confirme. El precio lo pone la tienda según la oferta (no lo envíes). Si falta o está mal algún dato, devuelve un error que dice qué pedirle al cliente.',
+    'Crea el pedido contraentrega del cliente con la oferta elegida, o corrige el que ya tiene sin despachar del mismo producto (nunca crea uno repetido). Úsala solo después de mostrarle el resumen y que el cliente confirme. El precio lo pone la tienda según la oferta (no lo envíes). Si falta o está mal algún dato, devuelve un error que dice qué pedirle al cliente.',
   input_schema: {
     type: 'object',
     properties: {
@@ -208,8 +209,13 @@ const CREATE_ORDER_TOOL: Anthropic.Beta.BetaTool = {
       complemento: { type: 'string', description: 'Apartamento, torre, casa, conjunto o punto de referencia. Vacío si no aplica.' },
       notas: { type: 'string', description: 'Indicaciones para la entrega que dio el cliente. Vacío si no hay.' },
       cliente_confirmo: { type: 'boolean', description: 'true solo si el cliente confirmó el resumen del pedido.' },
+      pedido_adicional: {
+        type: 'boolean',
+        description:
+          'false casi siempre. Si el cliente ya tiene un pedido sin despachar de este producto, crear_pedido CORRIGE ese mismo pedido con los datos nuevos (dirección, nombre, celular, oferta…). true solo si el cliente pidió de forma explícita un SEGUNDO pedido aparte, además del que ya tiene.',
+      },
     },
-    required: ['landing_id', 'unidades', 'nombre', 'celular', 'departamento', 'ciudad', 'direccion', 'barrio', 'complemento', 'notas', 'cliente_confirmo'],
+    required: ['landing_id', 'unidades', 'nombre', 'celular', 'departamento', 'ciudad', 'direccion', 'barrio', 'complemento', 'notas', 'cliente_confirmo', 'pedido_adicional'],
     additionalProperties: false,
   },
   strict: true,
@@ -226,7 +232,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: 'pasar_a_humano',
     description:
-      'Pasa la conversación a una persona del equipo y deja de responder en este chat. Úsala para reclamos, clientes molestos, cancelaciones, cambios de dirección o del pedido, solicitudes de hablar con una persona, o cualquier cosa que no puedas resolver con la información disponible.',
+      'Pasa la conversación a una persona del equipo y deja de responder en este chat. Úsala para reclamos, clientes molestos, cancelaciones, cambios de un pedido que tú no puedes corregir (ya despachado o subido a Dropi), solicitudes de hablar con una persona, o cualquier cosa que no puedas resolver con la información disponible.',
     input_schema: {
       type: 'object',
       properties: {
@@ -380,9 +386,23 @@ interface CreateOrderInput {
   complemento: string;
   notas: string;
   cliente_confirmo: boolean;
+  pedido_adicional?: boolean;
 }
 
 const clean = (v: unknown, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+// The customer's newest order of this product that can still change (not shipped, delivered, returned or cancelled).
+async function openOrderFor(phone: string, landingId: string): Promise<OrderItem | null> {
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await (await db()).from('orders').select('data, status').gte('created_at', since).order('created_at', { ascending: false }).limit(500);
+  if (error) throw new Error(error.message);
+  const closed: string[] = ['shipped', 'delivered', 'returned', 'cancelled'];
+  const row = (data || []).find((r) => {
+    const o = r.data as OrderItem;
+    return o.landingPageId === landingId && !closed.includes(r.status) && samePhone(o, phone);
+  });
+  return row ? { ...(row.data as OrderItem), status: row.status as OrderStatus } : null;
+}
 
 // Validates like the landing form, prices from the landing, and creates the order already confirmed.
 async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; landings: LandingPageConfig[]; dryRun: boolean }) {
@@ -417,12 +437,37 @@ async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; lan
   const summary = { producto: landing.productName, oferta: combo.name, unidades: combo.units, total: money(total, landing.currency || 'COP'), direccion: `${fullAddress}, ${city}` };
   if (ctx.dryRun) return { ok: true, pedido: 'LP-PRUEBA', ...summary, nota: 'Simulador: no se creó ningún pedido real.' };
 
-  // Same customer, same product and offer in the last 30 minutes: it's the same order.
-  const { data: recent } = await (await db()).from('orders').select('data').gte('created_at', new Date(Date.now() - 30 * 60000).toISOString()).limit(50);
-  const dup = (recent || [])
-    .map((r) => r.data as OrderItem)
-    .find((o) => o.source === 'whatsapp_bot' && o.landingPageId === landing.id && o.units === combo.units && samePhone(o, ctx.phone));
-  if (dup) return { ok: true, pedido: dup.orderNumber, ...summary, nota: 'Este pedido ya estaba creado; no se creó otro.' };
+  // The customer already has an order of this product that hasn't left: a new confirmation is a correction of
+  // that same order (address, name, phone, offer…), never a second order, unless they asked for another one.
+  const open = await openOrderFor(ctx.phone, landing.id);
+  if (open && !input.pedido_adicional) {
+    if (open.dropi?.orderId || open.inDropi || open.trackingNumber)
+      return {
+        error: `El pedido ${open.orderNumber} ya se subió a Dropi o a la transportadora: no lo puedes cambiar tú. Usa pasar_a_humano con tipo cambio_pedido y di qué quiere cambiar el cliente.`,
+      };
+    const changes: Partial<OrderItem> = {
+      customerName: name,
+      phone,
+      department: clean(input.departamento, 80),
+      city,
+      address: fullAddress,
+      notes: clean(input.notas, 300) || open.notes,
+      comboName: combo.name,
+      units: combo.units,
+      totalAmount: total,
+    };
+    const moved = open.address !== fullAddress || open.city !== city;
+    const updated: OrderItem = {
+      ...open,
+      ...changes,
+      ...(moved && !open.previousAddress ? { previousAddress: [open.address, open.city, open.department].filter(Boolean).join(', ') } : {}),
+      correctedAt: new Date().toISOString(),
+    } as OrderItem;
+    const { error } = await (await db()).from('orders').update({ data: updated }).eq('id', open.id);
+    if (error) throw new Error(error.message);
+    await linkConversationOrder(ctx.phone, open.id).catch(() => {});
+    return { ok: true, pedido: open.orderNumber, actualizado: true, ...summary, nota: 'Se corrigió el pedido que el cliente ya tenía con estos datos; no se creó otro. Confírmale que quedó corregido.' };
+  }
 
   const now = new Date().toISOString();
   const order: OrderItem = {
