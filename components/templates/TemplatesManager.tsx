@@ -31,6 +31,9 @@ interface Limits {
   throughput?: string | null;
   status?: string | null;
   used24h?: number | null;
+  canSend?: string | null;
+  sendProblems?: { where: string; code: number | null; text: string; solution: string | null }[];
+  permissions?: string[] | null;
 }
 
 const QUALITY: Record<string, { label: string; cls: string; help: string }> = {
@@ -41,6 +44,42 @@ const QUALITY: Record<string, { label: string; cls: string; help: string }> = {
 };
 const NAME_STATUS: Record<string, string> = { APPROVED: 'Aprobado', AVAILABLE_WITHOUT_REVIEW: 'Disponible', PENDING_REVIEW: 'En revisión', DECLINED: 'Rechazado', EXPIRED: 'Vencido', NONE: 'Sin enviar', NON_EXISTS: 'Sin enviar' };
 const fmt = (n: number) => n.toLocaleString('es-CO');
+
+// "Can this number send?": Meta's health_status and the token's permissions, with what to do.
+function SendCheck({ l }: { l: Limits }) {
+  const noSendPerm = Array.isArray(l.permissions) && !l.permissions.includes('whatsapp_business_messaging');
+  const blocked = l.canSend === 'BLOCKED' || l.canSend === 'LIMITED';
+  if (!noSendPerm && !blocked) {
+    if (l.canSend === 'AVAILABLE')
+      return (
+        <p className="text-xs text-emerald-800 bg-emerald-50 rounded-lg p-2.5 flex gap-1.5">
+          <ShieldCheck className="w-4 h-4 shrink-0" /> Meta dice que este número puede enviar mensajes.
+        </p>
+      );
+    return null;
+  }
+  return (
+    <div className="text-xs text-red-800 bg-red-50 rounded-lg p-3 space-y-2">
+      <p className="font-semibold flex gap-1.5">
+        <AlertTriangle className="w-4 h-4 shrink-0" /> {l.canSend === 'LIMITED' ? 'Meta está limitando los envíos de este número.' : 'Este número no puede enviar mensajes ahora (sí puede recibirlos).'}
+      </p>
+      {noSendPerm && (
+        <p>
+          La conexión no tiene el permiso <strong>whatsapp_business_messaging</strong> (enviar). En business.facebook.com → Usuarios del sistema, genera un token nuevo marcando
+          whatsapp_business_messaging y whatsapp_business_management, y pégalo en Integraciones → WhatsApp. Si la conectaste con «Conectar con Facebook», desconéctala y vuelve a
+          conectarla aceptando todos los permisos.
+        </p>
+      )}
+      {(l.sendProblems || []).map((p, i) => (
+        <p key={i}>
+          <strong>{p.where}:</strong> {p.text}
+          {p.code ? ` (código ${p.code})` : ''}
+          {p.solution && <span className="block text-red-700/80">Qué hacer según Meta: {p.solution}</span>}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 function LimitsCard() {
   const [l, setL] = useState<Limits | null>(null);
@@ -88,6 +127,7 @@ function LimitsCard() {
         </button>
       </div>
       {l.error && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2.5">Meta respondió: {l.error}</p>}
+      <SendCheck l={l} />
       {restricted && (
         <p className="text-xs text-red-700 bg-red-50 rounded-lg p-2.5 flex gap-1.5">
           <AlertTriangle className="w-4 h-4 shrink-0" /> Meta marcó el número como {l.status}. Revisa WhatsApp Manager: puede que no estés pudiendo enviar mensajes.

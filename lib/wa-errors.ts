@@ -29,7 +29,7 @@ const BY_CODE: Record<number, string> = {
   132016: 'Meta desactivó la plantilla. Crea o elige otra en Integraciones.',
   130472: 'Meta no lo entregó porque el cliente está en un experimento de marketing de Meta.',
   368: 'Meta bloqueó temporalmente el envío por políticas. Revisa la calidad del número en Meta.',
-  10: 'Meta no le da permiso a la app para enviar desde este número. Suele pasar cuando el número se conectó con «Conectar con Facebook» y la app de Meta todavía no tiene el acceso avanzado a whatsapp_business_messaging, o cuando la conexión perdió el permiso. Vuelve a conectar WhatsApp en Integraciones; si sigue, hay que revisarlo en la app de Meta.',
+  10: 'Meta no le da permiso a la app para enviar desde este número. Suele pasar cuando el número se conectó con «Conectar con Facebook» y la app de Meta todavía no tiene el acceso avanzado a whatsapp_business_messaging, o cuando la conexión perdió el permiso. En Plantillas → «Límites de tu número» verás qué dice Meta y qué falta.',
   200: 'La conexión de WhatsApp no tiene el permiso para enviar mensajes. Vuelve a conectar WhatsApp en Integraciones con todos los permisos.',
   190: 'La conexión de WhatsApp venció o se desconectó. Vuelve a conectar WhatsApp en Integraciones.',
 };
