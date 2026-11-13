@@ -325,6 +325,21 @@ function ReusePortfolio({ onDone }: { onDone: () => void }) {
       .then((d) => setSources(d.sources))
       .catch(() => setSources([]));
   }, []);
+  const [extraWaba, setExtraWaba] = useState('');
+  const [searching, setSearching] = useState(false);
+  const findWaba = async () => {
+    const id = extraWaba.replace(/\D/g, '');
+    if (!from || !id) return;
+    setSearching(true);
+    setMsg(null);
+    try {
+      setData(await call(`/api/integrations/whatsapp/numbers?from=${encodeURIComponent(from)}&waba=${id}`, 'GET'));
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setSearching(false);
+    }
+  };
   const choose = async (id: string) => {
     setFrom(id);
     setData(null);
@@ -391,6 +406,20 @@ function ReusePortfolio({ onDone }: { onDone: () => void }) {
         </div>
       )}
       {data?.note && <p className="text-[11px] text-slate-500">{data.note}</p>}
+      {from && data && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-slate-500">
+            ¿No aparece el número? Pega el <strong>identificador de su cuenta de WhatsApp</strong> (Meta Business → Configuración → Cuentas de WhatsApp → la cuenta; es el número
+            largo debajo del nombre).
+          </p>
+          <div className="flex gap-2">
+            <input className={input} inputMode="numeric" placeholder="Identificador de la cuenta de WhatsApp" value={extraWaba} onChange={(e) => setExtraWaba(e.target.value)} />
+            <button type="button" onClick={findWaba} disabled={searching || !extraWaba.replace(/\D/g, '')} className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-[12.5px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0">
+              {searching && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Buscar
+            </button>
+          </div>
+        </div>
+      )}
       {data && (
         <button type="button" disabled={busy || !pick} onClick={connect} className={primary}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />} Conectar este número

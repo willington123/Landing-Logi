@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
     const from = req.nextUrl.searchParams.get('from');
     if (!from) return ok({ sources: await waSources(uid, orgId) });
     const src = await sourceCredentials(uid, from);
-    return ok(await portfolioNumbers(uid, src.token, src.wabaId));
+    const extra = (req.nextUrl.searchParams.get('waba') || '').replace(/\D/g, '').slice(0, 30) || null;
+    const res = await portfolioNumbers(uid, src.token, src.wabaId, extra);
+    if (extra && !res.wabas.some((w) => w.id === extra)) return fail('Con esa conexión no se puede usar esa cuenta de WhatsApp. Revisa el identificador y que esté asignada (control total) al usuario del sistema de esa conexión.');
+    return ok(res);
   } catch (e: any) {
     if (e instanceof Forbidden) return fail(e.message, 403);
     if (e instanceof SourceError) return fail(e.message, 400);
