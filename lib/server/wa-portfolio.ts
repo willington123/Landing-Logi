@@ -64,8 +64,10 @@ export interface WabaNumbers {
 }
 
 // WhatsApp accounts of the portfolio (the source's WABA, plus the others the token can see) and their numbers.
-export async function portfolioNumbers(uid: string, token: string, wabaId: string | null): Promise<{ wabas: WabaNumbers[]; note: string | null }> {
+export async function portfolioNumbers(uid: string, token: string, wabaId: string | null, extraWaba?: string | null): Promise<{ wabas: WabaNumbers[]; note: string | null }> {
   const ids = new Map<string, string | null>();
+  // A WhatsApp account the person pasted (e.g. one shared with this portfolio that Meta doesn't list).
+  if (extraWaba) ids.set(extraWaba, null);
   if (wabaId) ids.set(wabaId, null);
   let note: string | null = null;
   if (wabaId) {
@@ -81,19 +83,25 @@ export async function portfolioNumbers(uid: string, token: string, wabaId: strin
         for (const x of shared?.data || []) ids.set(String(x.id), x.name || null);
       }
     } catch {
-      note = 'Solo se ven los números de la cuenta de WhatsApp de esa tienda (el token no puede listar las demás del portafolio).';
+      note = 'Meta no deja que esa conexión liste las demás cuentas del portafolio. Si el número que buscas está en otra cuenta (por ejemplo, una compartida), pega abajo el identificador de esa cuenta de WhatsApp.';
     }
   }
   // Backup: the WhatsApp accounts the token itself is allowed to use (its granular scopes), which also covers
   // accounts shared with the portfolio when Meta doesn't list them above.
   const appId = env('META_APP_ID');
   const appSecret = env('META_APP_SECRET');
-  if (appId && appSecret) {
-    const dbg = await graphGet(`debug_token?input_token=${encodeURIComponent(token)}`, `${appId}|${appSecret}`).catch(() => null);
+  {
+    const dbg =
+      (appId && appSecret ? await graphGet(`debug_token?input_token=${encodeURIComponent(token)}`, `${appId}|${appSecret}`).catch(() => null) : null) ||
+      (await graphGet(`debug_token?input_token=${encodeURIComponent(token)}`, token).catch(() => null));
     for (const g of dbg?.data?.granular_scopes || []) {
       if (!String(g.scope || '').startsWith('whatsapp_business')) continue;
       for (const id of g.target_ids || []) if (!ids.has(String(id))) ids.set(String(id), null);
     }
+  }
+  if (extraWaba) {
+    const w = await graphGet(`${extraWaba}?fields=name`, token).catch(() => null);
+    if (w?.name) ids.set(extraWaba, w.name);
   }
   const mine = new Map((await userOrgs(uid)).map((o) => [o.id, o.name]));
   const wabas: WabaNumbers[] = [];
