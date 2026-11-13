@@ -489,6 +489,11 @@ export interface NumberHealth {
   limit: number | null | undefined; // undefined = unknown, null = unlimited
   throughput: string | null; // STANDARD | HIGH
   status: string | null; // CONNECTED, FLAGGED, RESTRICTED…
+  // Meta's own answer to "can this number send?" (health_status): AVAILABLE | LIMITED | BLOCKED, with its reasons.
+  canSend: string | null;
+  sendProblems: { where: string; code: number | null; text: string; solution: string | null }[];
+  // Permissions of the connection's token (null = Meta didn't say, e.g. some business tokens).
+  permissions: string[] | null;
 }
 
 // Meta adds and renames fields over time: the extra ones are asked separately so a missing field never
@@ -506,6 +511,22 @@ export async function numberHealth(): Promise<{ ok: true; health: NumberHealth }
     const basic = await get('display_phone_number,verified_name,name_status,quality_rating');
     const extra = await get('messaging_limit_tier,throughput,status').catch(() => ({}) as Record<string, any>);
     const tier = typeof extra.messaging_limit_tier === 'string' ? extra.messaging_limit_tier : null;
+    const hs = await get('health_status').catch(() => ({}) as Record<string, any>);
+    const entities: any[] = Array.isArray(hs.health_status?.entities) ? hs.health_status.entities : [];
+    const WHERE: Record<string, string> = { PHONE_NUMBER: 'Número', WABA: 'Cuenta de WhatsApp', BUSINESS: 'Portafolio de Meta', APP: 'App de Meta', MESSAGE_TEMPLATE: 'Plantilla' };
+    const sendProblems = entities.flatMap((e) =>
+      (Array.isArray(e.errors) ? e.errors : []).map((x: any) => ({
+        where: WHERE[e.entity_type] || String(e.entity_type || ''),
+        code: Number(x.error_code) || null,
+        text: String(x.error_description || ''),
+        solution: x.possible_solution ? String(x.possible_solution) : null,
+      })),
+    );
+    // System-user tokens list their permissions; business integration tokens may not answer.
+    const perms = await fetch(`${GRAPH}/me/permissions`, { headers: { Authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(8000), cache: 'no-store' })
+      .then(async (r) => (r.ok ? ((await r.json()).data as any[]) : null))
+      .catch(() => null);
+    const permissions = Array.isArray(perms) ? perms.filter((p) => p.status === 'granted').map((p) => String(p.permission)) : null;
     return {
       ok: true,
       health: {
@@ -517,6 +538,9 @@ export async function numberHealth(): Promise<{ ok: true; health: NumberHealth }
         limit: tier ? (tier in LIMIT_TIERS ? LIMIT_TIERS[tier] : undefined) : undefined,
         throughput: extra.throughput?.level || null,
         status: extra.status || null,
+        canSend: hs.health_status?.can_send_message || null,
+        sendProblems,
+        permissions,
       },
     };
   } catch (e: any) {
