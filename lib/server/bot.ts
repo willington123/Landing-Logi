@@ -154,6 +154,7 @@ Cómo cierras la venta:
 - Si el cliente quiere ver fotos o más detalles, puedes compartir el enlace de la página del producto, pero sigue tomando el pedido aquí.
 - Nunca inventes urgencia, descuentos, stock limitado ni regalos que no estén en la información. No presiones: si el cliente no quiere, despídete con amabilidad.
 - Nunca crees dos pedidos para lo mismo. Si el cliente corrige o cambia algo de su pedido (dirección, barrio, nombre, celular, ciudad, la oferta…) antes de que se despache, muéstrale el resumen corregido y, cuando confirme, usa crear_pedido otra vez con TODOS los datos ya corregidos y pedido_adicional = false: el sistema corrige el mismo pedido. Dile que quedó corregido, no que hizo un pedido nuevo.
+- Después de crear el pedido, si el cliente solo agradece o dice "ok", "listo", "dale" o "correcto", responde en una frase corta. No repitas el resumen ni lo vuelvas a confirmar.
 - pedido_adicional = true solo si el cliente pide claramente un pedido aparte además del que ya tiene (por ejemplo, otro para regalar a otra dirección). Si dudas, pregúntale.`
     : `- Si el cliente quiere comprar, invítalo a hacer el pedido desde la página del producto (ahí elige la oferta y deja sus datos).`;
 
@@ -370,6 +371,23 @@ async function ordersFor(phone: string) {
     }));
 }
 
+// Context for every reply: this customer's orders that can still change.
+async function openOrdersText(phone: string): Promise<string> {
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await (await db()).from('orders').select('data, status').gte('created_at', since).order('created_at', { ascending: false }).limit(500);
+  if (error) throw new Error(error.message);
+  const closed: string[] = ['shipped', 'delivered', 'returned', 'cancelled'];
+  const open = (data || [])
+    .map((r) => ({ ...(r.data as OrderItem), status: r.status as OrderStatus }))
+    .filter((o) => !closed.includes(o.status) && samePhone(o, phone))
+    .slice(0, 3);
+  if (!open.length) return '';
+  const lines = open.map((o) => `- ${o.orderNumber}: ${o.productName} - ${o.comboName}, ${money(o.totalAmount)}, para ${o.customerName} en ${o.address}, ${o.city}. Estado: ${STATUS_TEXT[o.status] || o.status}.`);
+  return `Pedidos de este cliente que ya están registrados y aún no salen (no son nuevos):
+${lines.join('\n')}
+Si el cliente solo responde algo como "ok", "listo", "dale", "correcto", "perfecto" o "gracias", contesta con UNA frase corta y cálida (ej. "¡Con gusto, Sandra! Cualquier cosa me escribes 💖"), sin repetir el resumen, sin volver a confirmarlo y sin usar crear_pedido. Nunca digas que "ahora sí" quedó registrado ni pidas disculpas por confusiones: el pedido ya está registrado. Usa crear_pedido otra vez solo si el cliente cambia un dato.`;
+}
+
 // ---------- taking the order in the chat ----------
 
 const STREET_RE = new RegExp(`\\b(${[...STREET_TYPES, 'cl', 'cll', 'cra', 'kr', 'kra', 'cr', 'av', 'ak', 'ac', 'tv', 'trans', 'dg', 'diag', 'cir', 'via', 'vía', 'manzana', 'mz', 'km', 'kilometro', 'kilómetro', 'vereda', 'finca', 'sector', 'lote'].map((t) => t.toLowerCase().replace(/ /g, '\\s+')).join('|')})(?=[^a-zñáéíóú]|$)`, 'i');
@@ -389,6 +407,7 @@ interface CreateOrderInput {
   pedido_adicional?: boolean;
 }
 
+const digitsOnly = (v?: string) => (v || '').replace(/\D/g, '');
 const clean = (v: unknown, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 // The customer's newest order of this product that can still change (not shipped, delivered, returned or cancelled).
@@ -441,6 +460,22 @@ async function createBotOrder(input: CreateOrderInput, ctx: { phone: string; lan
   // that same order (address, name, phone, offer…), never a second order, unless they asked for another one.
   const open = await openOrderFor(ctx.phone, landing.id);
   if (open && !input.pedido_adicional) {
+    const same =
+      open.customerName === name &&
+      digitsOnly(open.phone) === digitsOnly(phone) &&
+      open.address === fullAddress &&
+      open.city === city &&
+      (open.department || '') === clean(input.departamento, 80) &&
+      open.units === combo.units &&
+      (!clean(input.notas, 300) || open.notes === clean(input.notas, 300));
+    if (same)
+      return {
+        ok: true,
+        pedido: open.orderNumber,
+        sin_cambios: true,
+        ...summary,
+        nota: 'Este pedido ya estaba registrado con estos mismos datos: no se cambió nada. No repitas el resumen ni digas que "ahora sí" quedó; responde corto.',
+      };
     if (open.dropi?.orderId || open.inDropi || open.trackingNumber)
       return {
         error: `El pedido ${open.orderNumber} ya se subió a Dropi o a la transportadora: no lo puedes cambiar tú. Usa pasar_a_humano con tipo cambio_pedido y di qué quiere cambiar el cliente.`,
@@ -575,6 +610,11 @@ export async function runBot(opts: {
     },
   ];
   if (TAG_TOOL) system.push({ type: 'text', text: `Etiquetas que ya tiene este chat: ${chatTagNames.length ? chatTagNames.join(', ') : 'ninguna'}.` });
+  // The customer's orders that haven't left yet: so a "listo" / "gracias" after the order isn't taken as a new one.
+  if (!appointments && !/^[mi]\d/.test(opts.phone)) {
+    const open = await openOrdersText(opts.phone).catch(() => '');
+    if (open) system.push({ type: 'text', text: open });
+  }
   if (opts.ad && (opts.ad.headline || opts.ad.body)) {
     // Ad text is written by the store, but keep it short and clearly marked as data.
     const adText = [opts.ad.headline, opts.ad.body].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 400);
