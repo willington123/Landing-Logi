@@ -64,7 +64,8 @@ export interface WabaNumbers {
 }
 
 // WhatsApp accounts of the portfolio (the source's WABA, plus the others the token can see) and their numbers.
-export async function portfolioNumbers(uid: string, token: string, wabaId: string | null, extraWaba?: string | null): Promise<{ wabas: WabaNumbers[]; note: string | null }> {
+export async function portfolioNumbers(uid: string, token: string, wabaId: string | null, extraWaba?: string | null): Promise<{ wabas: WabaNumbers[]; note: string | null; extraError?: string | null }> {
+  let extraError: string | null = null;
   const ids = new Map<string, string | null>();
   // A WhatsApp account the person pasted (e.g. one shared with this portfolio that Meta doesn't list).
   if (extraWaba) ids.set(extraWaba, null);
@@ -106,7 +107,10 @@ export async function portfolioNumbers(uid: string, token: string, wabaId: strin
   const mine = new Map((await userOrgs(uid)).map((o) => [o.id, o.name]));
   const wabas: WabaNumbers[] = [];
   for (const [id, name] of Array.from(ids)) {
-    const d = await graphGet(`${id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&limit=100`, token).catch(() => null);
+    const d = await graphGet(`${id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&limit=100`, token).catch((e: any) => {
+      if (id === extraWaba) extraError = e?.message || String(e);
+      return null;
+    });
     if (!d) continue;
     const numbers = [];
     for (const n of d.data || []) {
@@ -121,5 +125,5 @@ export async function portfolioNumbers(uid: string, token: string, wabaId: strin
     }
     wabas.push({ id, name, numbers });
   }
-  return { wabas, note };
+  return { wabas, note, extraError };
 }
