@@ -17,7 +17,10 @@ export async function GET(req: NextRequest) {
     const src = await sourceCredentials(uid, from);
     const extra = (req.nextUrl.searchParams.get('waba') || '').replace(/\D/g, '').slice(0, 30) || null;
     const res = await portfolioNumbers(uid, src.token, src.wabaId, extra);
-    if (extra && !res.wabas.some((w) => w.id === extra)) return fail('Con esa conexión no se puede usar esa cuenta de WhatsApp. Revisa el identificador y que esté asignada (control total) al usuario del sistema de esa conexión.');
+    if (extra && !res.wabas.some((w) => w.id === extra))
+      return fail(
+        `Con esa conexión no se puede usar la cuenta ${extra}. Revisa que sea el identificador de la cuenta de WhatsApp (no el del número ni el del portafolio) y que esté asignada con control total al usuario del sistema de esa conexión; si la asignaste después de crear el token, genera un token nuevo.${res.extraError ? ` Meta respondió: ${res.extraError}` : ''}`,
+      );
     return ok(res);
   } catch (e: any) {
     if (e instanceof Forbidden) return fail(e.message, 403);
