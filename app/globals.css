@@ -99,7 +99,13 @@ body {
     display: none;
   }
   body[data-chat-open='1'] .kx-crm-shell {
-    height: 100dvh;
+    /* The visible area (smaller while the keyboard is open), pinned to where the phone shows it. */
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--kx-vvtop, 0px);
+    height: var(--kx-vvh, 100dvh);
+    z-index: 40;
   }
   body[data-chat-open='1'] .kx-crm-main {
     padding: 0;
