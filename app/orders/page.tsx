@@ -40,6 +40,7 @@ import {
 import { downloadOrdersExcel } from '@/lib/orders-export';
 import { OrderFilterBar } from '@/components/orders/OrderFilterBar';
 import OrdersBoard from '@/components/orders/OrdersBoard';
+import { BulkStatus, OrderStatusActions } from '@/components/orders/OrderStatusActions';
 import { EMPTY_FILTERS, cleanSavedFilters, dateBounds, inTab, matchesBase, type OrderFilters } from '@/lib/order-filters';
 
 const FILTERS_KEY = 'lp_order_filters';
@@ -92,6 +93,7 @@ export default function OrdersPage() {
   const [landingNames, setLandingNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [dropiBulk, setDropiBulk] = useState(false);
   const [newOrder, setNewOrder] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -393,12 +395,28 @@ export default function OrdersPage() {
 
           {view === 'board' && <OrdersBoard orders={baseOrders} landingNames={landingNames} onOpen={setSelectedOrder} onChanged={() => (refreshData(), loadExtra())} currentStoreId={currentStore?.id} />}
 
+          {view === 'list' && bulkMsg && (
+            <p className="flex items-center justify-between gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2 text-[13px] text-emerald-800">
+              {bulkMsg}
+              <button type="button" onClick={() => setBulkMsg(null)} className="text-emerald-700/70 hover:text-emerald-900" aria-label="Cerrar">
+                ✕
+              </button>
+            </p>
+          )}
           {view === 'list' && visibleChecked.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <span className="text-sm text-slate-700">
                 {visibleChecked.length} {visibleChecked.length === 1 ? 'pedido seleccionado' : 'pedidos seleccionados'}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <BulkStatus
+                  orders={visibleChecked}
+                  onDone={(msg) => {
+                    setBulkMsg(msg);
+                    setChecked(new Set());
+                    reloadAll();
+                  }}
+                />
                 <button
                   type="button"
                   onClick={() => setChecked(new Set())}
@@ -572,6 +590,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="space-y-3 text-xs">
+              <OrderStatusActions order={selectedOrder} onChanged={reloadAll} />
               <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl">
                 <div>
                   <span className="text-slate-500 text-xs font-medium">Cliente</span>
