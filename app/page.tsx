@@ -13,10 +13,10 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Konnexa · Landings y pedidos contraentrega con IA',
   description:
-    'Crea landings con IA a partir de una foto, confirma pedidos contraentrega por WhatsApp y con llamadas de IA, y vende por chat con un asistente. Prueba 7 días gratis.',
+    'Landings con IA, un asistente que vende por WhatsApp, Messenger e Instagram, pedidos confirmados y listos para despachar, y la rentabilidad real de tus anuncios. Prueba 7 días gratis.',
   openGraph: {
     title: 'Konnexa · Vende contraentrega sin perder pedidos',
-    description: 'Landings con IA, confirmación por WhatsApp y llamadas con IA, y un asistente que vende por chat. 7 días gratis, sin tarjeta.',
+    description: 'Landings con IA, un asistente que vende por chat, pedidos confirmados y la rentabilidad de tus anuncios. 7 días gratis, sin tarjeta.',
     images: ['/brand/konnexa-logo.png'],
     locale: 'es_CO',
     type: 'website',
