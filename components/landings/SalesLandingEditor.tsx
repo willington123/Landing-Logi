@@ -37,6 +37,7 @@ import { DEFAULT_THANK_YOU } from '@/lib/whatsapp-link';
 import { DEFAULT_COUNTDOWN } from '@/lib/offer-countdown';
 import { compressImage, fileToDataUrl, isGif, uploadGif } from '@/lib/image-utils';
 import { isCloud, pushLanding, swapStrings } from '@/lib/cloud';
+import { landingLink, storeDomain } from '@/components/account/DomainsCard';
 
 // ---------- small form primitives ----------
 const inputCls =
@@ -246,6 +247,9 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
     iframeRef.current?.contentWindow?.postMessage({ type: 'lp-preview', config }, window.location.origin);
   }, [config]);
   useEffect(() => {
+    storeDomain();
+  }, []);
+  useEffect(() => {
     const t = setTimeout(postPreview, 120);
     return () => clearTimeout(t);
   }, [postPreview]);
@@ -364,7 +368,8 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
     setConfig((c) => ({ ...c, imageSections: (c.imageSections || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
 
   const copyLink = () => {
-    navigator.clipboard.writeText(window.location.origin + config.publishedUrl);
+    const url = config.slug ? landingLink(config.slug, config.publishedUrl) : window.location.origin + config.publishedUrl;
+    navigator.clipboard.writeText(url).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };

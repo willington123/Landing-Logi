@@ -9,6 +9,7 @@ import Header from '@/components/layout/Header';
 import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import TeamSettings from '@/components/account/TeamSettings';
 import StoreLogo from '@/components/account/StoreLogo';
+import DomainsCard from '@/components/account/DomainsCard';
 import {
   Settings,
   Store,
@@ -236,6 +237,7 @@ export default function SettingsPage() {
               </button>
             </div>
           </form>
+          <DomainsCard />
           <TeamSettings />
         </main>
       </div>
