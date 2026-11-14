@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import PublicLanding from '@/components/landings/PublicLanding';
-import { cloudEnabled, getPublicLanding } from '@/lib/server/db';
+import { cloudEnabled, getPublicLandingWithOrg } from '@/lib/server/db';
 import type { LandingPageConfig } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,11 @@ export const dynamic = 'force-dynamic';
 async function load(slug: string): Promise<LandingPageConfig | null> {
   if (!cloudEnabled()) return null;
   try {
-    return await getPublicLanding(slug);
+    const found = await getPublicLandingWithOrg(slug);
+    // On a store's own domain, only that store's landings.
+    const domainOrg = headers().get('x-kx-domain-org');
+    if (found && domainOrg && found.orgId !== domainOrg) return null;
+    return found?.landing || null;
   } catch {
     return null;
   }

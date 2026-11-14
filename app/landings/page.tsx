@@ -8,6 +8,7 @@ import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { logiStore } from '@/lib/store';
 import { CLOUD_SYNC_EVENT, deleteLandingCloud } from '@/lib/cloud';
 import { LandingPageConfig } from '@/lib/types';
+import { landingLink, storeDomain } from '@/components/account/DomainsCard';
 import {
   Sparkles,
   Layers,
@@ -33,6 +34,9 @@ export default function LandingsPage() {
   };
 
   useEffect(() => {
+    storeDomain();
+  }, []);
+  useEffect(() => {
     refreshData();
     // Re-read when fresh data arrives from Supabase.
     window.addEventListener(CLOUD_SYNC_EVENT, refreshData);
@@ -41,8 +45,8 @@ export default function LandingsPage() {
   }, []);
 
   const handleCopyUrl = (landing: LandingPageConfig) => {
-    const fullUrl = window.location.origin + landing.publishedUrl;
-    navigator.clipboard.writeText(fullUrl);
+    const fullUrl = landing.slug ? landingLink(landing.slug, landing.publishedUrl) : window.location.origin + landing.publishedUrl;
+    navigator.clipboard.writeText(fullUrl).catch(() => {});
     setCopiedId(landing.id);
     setTimeout(() => setCopiedId(null), 2000);
   };

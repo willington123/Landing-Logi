@@ -32,7 +32,60 @@ const PUBLIC_PREFIXES = [
   '/pwa/',
 ];
 
-const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv', 'x-lp-path'];
+const SESSION_HEADERS = ['x-lp-org', 'x-lp-uid', 'x-lp-sv', 'x-lp-path', 'x-kx-domain-org'];
+
+// ---------- a store's own domain (ofertas.mitienda.com → its landings) ----------
+
+const MAIN_HOSTS = (() => {
+  const out = new Set(['konnexa.lat', 'www.konnexa.lat', 'localhost', '127.0.0.1']);
+  try {
+    const base = (process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || '').trim();
+    if (base) out.add(new URL(base).hostname.toLowerCase());
+  } catch {}
+  return out;
+})();
+let domainCache: { map: Record<string, { org: string; landing: string | null }>; until: number } | null = null;
+async function domainMap(): Promise<Record<string, { org: string; landing: string | null }>> {
+  if (domainCache && domainCache.until > Date.now()) return domainCache.map;
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+  const secret = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim();
+  let map: Record<string, { org: string; landing: string | null }> = {};
+  if (url && secret) {
+    try {
+      const r = await fetch(`${url}/rest/v1/platform_settings?select=data&id=eq.domains&limit=1`, {
+        headers: { apikey: secret, ...(secret.startsWith('sb_') ? {} : { Authorization: `Bearer ${secret}` }) },
+        cache: 'no-store',
+      });
+      const rows = r.ok ? ((await r.json()) as { data: typeof map }[]) : [];
+      map = rows[0]?.data || {};
+    } catch {
+      map = domainCache?.map || {};
+    }
+  }
+  domainCache = { map, until: Date.now() + 60_000 };
+  return map;
+}
+
+// On a store's domain only its landings open: / (the chosen landing), /<slug> and /p/<slug>. The order form,
+// the app's files and Meta's verification file pass; anything else goes to Konnexa's main site.
+async function customDomain(req: NextRequest, headers: Headers): Promise<NextResponse | null> {
+  const host = (req.headers.get('host') || req.nextUrl.hostname || '').toLowerCase().replace(/:\d+$/, '');
+  if (!host || MAIN_HOSTS.has(host) || host.endsWith('.vercel.app')) return null;
+  const entry = (await domainMap())[host];
+  if (!entry) return null;
+  const path = req.nextUrl.pathname;
+  if (path.startsWith('/_next/') || path.startsWith('/api/public/') || /\.[a-z0-9]{2,5}$/i.test(path)) return NextResponse.next({ request: { headers } });
+  const m = /^\/(?:p\/)?([a-z0-9-]{1,120})\/?$/i.exec(path);
+  const slug = path === '/' ? entry.landing : m ? m[1] : null;
+  if (path !== '/' && !m) {
+    const to = new URL(`https://konnexa.lat${path}${req.nextUrl.search}`);
+    return NextResponse.redirect(to);
+  }
+  const url = req.nextUrl.clone();
+  url.pathname = `/p/${slug || '__sin-landing__'}`;
+  headers.set('x-kx-domain-org', entry.org);
+  return NextResponse.rewrite(url, { request: { headers } });
+}
 
 function deny(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -74,6 +127,10 @@ export async function middleware(req: NextRequest) {
   const headers = new Headers(req.headers);
   SESSION_HEADERS.forEach((h) => headers.delete(h));
   const pass = () => NextResponse.next({ request: { headers } });
+  if (cloudConfigured()) {
+    const own = await customDomain(req, headers);
+    if (own) return own;
+  }
   const isPublic = req.nextUrl.pathname === '/' || PUBLIC_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p)); // '/' = sales page
 
   // Local demo without a database: optional single password.
