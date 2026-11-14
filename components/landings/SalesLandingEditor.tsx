@@ -246,8 +246,9 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
   const postPreview = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'lp-preview', config }, window.location.origin);
   }, [config]);
+  const [ownDomain, setOwnDomain] = useState<string | null>(null);
   useEffect(() => {
-    storeDomain();
+    storeDomain().then(setOwnDomain);
   }, []);
   useEffect(() => {
     const t = setTimeout(postPreview, 120);
@@ -403,7 +404,7 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
             {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
             <span className="hidden md:inline">{copied ? 'Copiado' : 'Copiar enlace'}</span>
           </button>
-          <a href={config.publishedUrl} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-slate-800">
+          <a href={ownDomain && config.slug ? `https://${ownDomain}/${config.slug}` : config.publishedUrl} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-slate-800">
             <ExternalLink className="w-4 h-4" />
             <span className="hidden md:inline">Ver landing</span>
           </a>
@@ -994,7 +995,7 @@ export default function SalesLandingEditor({ initial }: { initial: LandingPageCo
                 <Text label="Título para Google" value={config.seoTitle} onChange={(v) => update({ seoTitle: v })} />
                 <Text label="Descripción para Google" value={config.seoDescription} onChange={(v) => update({ seoDescription: v })} multiline />
                 <Field label="Enlace público">
-                  <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 break-all">{config.publishedUrl}</div>
+                  <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 break-all">{ownDomain && config.slug ? `https://${ownDomain}/${config.slug}` : config.publishedUrl}</div>
                 </Field>
               </Group>
               </>

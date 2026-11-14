@@ -33,8 +33,9 @@ export default function LandingsPage() {
     setLandings(logiStore.getLandings());
   };
 
+  const [ownDomain, setOwnDomain] = useState<string | null>(null);
   useEffect(() => {
-    storeDomain();
+    storeDomain().then(setOwnDomain);
   }, []);
   useEffect(() => {
     refreshData();
@@ -153,7 +154,7 @@ export default function LandingsPage() {
                           Editar
                         </Link>
                         <a
-                          href={landing.publishedUrl}
+                          href={ownDomain && landing.slug ? `https://${ownDomain}/${landing.slug}` : landing.publishedUrl}
                           target="_blank"
                           rel="noreferrer"
                           title="Ver landing"
