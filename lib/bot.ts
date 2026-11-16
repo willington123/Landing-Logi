@@ -100,6 +100,8 @@ export interface BotChatState {
   day?: string; // yyyy-mm-dd of the counter below
   replies?: number; // bot replies that day
   mediaSent?: Record<string, { photos?: string; audio?: string; images?: Record<string, string> }>; // product id → when its photos (each one by link) / voice note were sent here
+  infoHash?: string; // fingerprint of the store's instructions + products the last time the assistant answered here
+  infoChangedAt?: string; // when they changed after the assistant had already answered in this chat
 }
 
 // A paused chat goes back to the assistant: a person took it (or the assistant handed it over) and no person
