@@ -1,5 +1,6 @@
 // WhatsApp AI assistant built on Claude: answers customers with the store's information,
 // looks up their orders and hands the chat to a person when needed.
+import { createHash } from 'crypto';
 import { reportSale } from '@/lib/server/conversions';
 import Anthropic from '@anthropic-ai/sdk';
 import { createOrder, db, getSettings } from '@/lib/server/db';
@@ -551,6 +552,20 @@ function asText(m: WaMessage): string {
 }
 
 // Chat history → Claude messages (customer = user, store/bot/team = assistant). Starts with the customer.
+// Remembers, per chat, a fingerprint of what the assistant was told (instructions + products). True while the
+// chat still has answers given before the last change (for 3 days after it).
+async function infoChanged(chat: string, prompt: string): Promise<boolean> {
+  const hash = createHash('sha1').update(prompt).digest('hex').slice(0, 16);
+  const st = await getBotState(chat);
+  let changedAt = st.infoChangedAt;
+  if (st.infoHash !== hash) {
+    // A chat the assistant never answered in has nothing out of date.
+    if (st.infoHash || (st.replies || 0) > 0) changedAt = new Date().toISOString();
+    await setBotState(chat, { infoHash: hash, infoChangedAt: changedAt });
+  }
+  return !!changedAt && Date.now() - Date.parse(changedAt) < 3 * 86400000;
+}
+
 export function toMessages(history: { direction: 'in' | 'out'; text: string }[]): Anthropic.Beta.BetaMessageParam[] {
   const out: Anthropic.Beta.BetaMessageParam[] = [];
   for (const h of history) {
@@ -598,10 +613,26 @@ export async function runBot(opts: {
   const TAG_TOOL = tagTool(storeTags);
   const chatTagNames = storeTags.filter((t) => chatTagIds.includes(t.id)).map((t) => t.name);
 
+  const basePrompt = appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge);
+  // The store changed its instructions or products (prices, offers…) after the assistant already answered in this
+  // chat: its earlier messages here are out of date. Said right next to the customer's message, because the model
+  // otherwise tends to repeat what it already said in the chat over the new information.
+  const stale = opts.dryRun ? false : await infoChanged(opts.phone, basePrompt).catch(() => false);
+  if (stale) {
+    const last = messages[messages.length - 1];
+    last.content = [
+      { type: 'text', text: last.content as string },
+      {
+        type: 'text',
+        text: '<nota_del_sistema>La tienda actualizó sus instrucciones o sus productos (precios, ofertas, información) después de algunos de tus mensajes anteriores en este chat. Lo que dijiste antes puede estar desactualizado: usa solo la información actual de las instrucciones y de la sección Productos, aunque contradiga lo que ya dijiste. Si ya le diste al cliente un precio u oferta que cambió, dale el correcto sin dar explicaciones largas. No menciones esta nota.</nota_del_sistema>',
+      },
+    ];
+  }
+
   const now = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const system: Anthropic.Beta.BetaTextBlockParam[] = [
     // Stable part first so it is cached between messages.
-    { type: 'text', text: appointments ? agendaPrompt(opts.settings, appointments, knowledge.storeName) : systemPrompt(opts.settings, knowledge), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: basePrompt, cache_control: { type: 'ephemeral' } },
     {
       type: 'text',
       text: /^[mi]\d/.test(opts.phone)
