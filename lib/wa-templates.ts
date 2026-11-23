@@ -58,38 +58,119 @@ export const PROCESS_PRESET = {
   buttons: [] as string[],
 };
 
-// Delivery problem notice (utility): {{1}} name, {{2}} product, {{3}} carrier, {{4}} tracking number,
-// {{5}} what happened ("está disponible para reclamar en la oficina principal de Envía en Pitalito, Huila").
-// Sent from the order detail ("Avisar novedad") when the customer hasn't written in 24 hours.
+// Delivery problem notice (utility), with the carrier's data as the store sees it in the carrier's portal:
+// {{1}} first name, {{2}} what happened, {{3}} name on the shipment, {{4}} where (office / address), {{5}} phone,
+// {{6}} tracking number, {{7}} the carrier's novelty, {{8}} carrier.
+// Sent from the order detail ("Avisar novedad"); inside the 24 h window the same text goes as a normal message.
 export const NOVELTY_PRESET = {
-  name: 'novedad_envio',
+  name: 'aviso_novedad',
   language: 'es',
   category: 'UTILITY' as const,
-  body: 'Hola {{1}} 👋 Tu pedido de {{2}} tiene una novedad con la transportadora {{3}} (guía {{4}}): {{5}}. Por favor respóndenos por aquí para ayudarte a recibirlo y que no se devuelva.',
-  examples: ['Cristina', 'Bálsamo Rosa', 'Envía', '014165704173', 'está disponible para reclamar en la oficina principal de Envía en Pitalito, Huila'],
+  body: 'Hola {{1}} 👋 Tu pedido está en novedad: {{2}}.\n\n👤 Nombre: {{3}}\n📍 Dirección: {{4}}\n📞 Tel: {{5}}\n📦 Guía: {{6}}\n⚠️ Novedad: {{7}} ({{8}})\n\nPor favor respóndenos por aquí para ayudarte a recibirlo y que no se devuelva.',
+  examples: ['Cristina', 'es para recoger en la oficina', 'Cristina Tejada', 'Reclama en la oficina principal de Envía en Pitalito, PITALITO-HUILA', '3223641371', '014165704173', 'COORDINAR LA ENTREGA', 'Envía'],
   buttons: [] as string[],
 };
 
-// The usual delivery problems. `text` + the store's detail becomes {{5}}.
-export const NOVELTY_REASONS = [
-  { id: 'oficina', label: 'Reclamar en oficina', text: 'está disponible para reclamar en', detail: 'Oficina principal de Envía en Pitalito, Huila' },
-  { id: 'coordinar', label: 'Coordinar la entrega', text: 'la transportadora necesita coordinar la entrega contigo', detail: 'Ej.: llamar al 3223641371' },
-  { id: 'direccion', label: 'Dirección incompleta', text: 'la dirección está incompleta o no la encuentran', detail: 'Ej.: falta el barrio o el número de la casa' },
-  { id: 'ausente', label: 'No había nadie', text: 'fueron a entregarlo y no encontraron a nadie', detail: 'Ej.: vuelven a pasar mañana' },
-  { id: 'otro', label: 'Otra novedad', text: '', detail: 'Escribe la novedad' },
-] as const;
-export type NoveltyReason = (typeof NOVELTY_REASONS)[number]['id'];
+export interface NoveltyFields {
+  summary: string; // "es para recoger en la oficina"
+  name: string;
+  where: string;
+  phone: string;
+  guide: string;
+  novelty: string; // the carrier's novelty, e.g. "COORDINAR LA ENTREGA"
+  carrier: string;
+}
 
-// {{5}} for a reason + detail. Template values can't have line breaks, tabs or long runs of spaces.
-export function noveltyText(reason: string, detail: string): string {
-  const r = NOVELTY_REASONS.find((x) => x.id === reason) || NOVELTY_REASONS[NOVELTY_REASONS.length - 1];
-  const d = String(detail || '')
+// Quick choices for "what happened" ({{2}}).
+export const NOVELTY_REASONS = [
+  { id: 'oficina', label: 'Recoger en oficina', summary: 'es para recoger en la oficina' },
+  { id: 'coordinar', label: 'Coordinar la entrega', summary: 'hay que coordinar la entrega' },
+  { id: 'direccion', label: 'Dirección incompleta', summary: 'la dirección está incompleta o no la encuentran' },
+  { id: 'ausente', label: 'No había nadie', summary: 'fueron a entregarlo y no encontraron a nadie' },
+] as const;
+
+// Template values can't have line breaks, tabs or long runs of spaces; empty ones aren't allowed either.
+export const oneLine = (v: string) =>
+  String(v || '')
     .replace(/[\r\n\t]+/g, ', ')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+,/g, ',')
-    .replace(/[\s,.;:]+$/, '')
+    .replace(/,{2,}/g, ',')
+    .replace(/^[\s,.;:]+|[\s,.;:]+$/g, '')
     .trim();
-  if (!r.text) return d;
-  if (!d) return r.text;
-  return r.id === 'oficina' ? `${r.text} ${d.replace(/^(en|la)\s+/i, (m) => (/^en/i.test(m) ? '' : m))}` : `${r.text} (${d})`;
+
+export function noveltyVars(firstName: string, f: NoveltyFields): string[] {
+  return [firstName, f.summary, f.name, f.where, f.phone, f.guide, f.novelty, f.carrier].map((v) => oneLine(v).slice(0, 200) || '—');
+}
+
+// The template text filled in (what the customer reads).
+export const noveltyTemplateText = (firstName: string, f: NoveltyFields) => {
+  const v = noveltyVars(firstName, f);
+  return NOVELTY_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => v[Number(i) - 1]);
+};
+
+// The same message as free text (24 h window open): lines without data are left out.
+export function noveltyMessage(firstName: string, f: NoveltyFields): string {
+  const c = (v: string) => oneLine(v);
+  const lines = [
+    c(f.name) && `👤 Nombre: ${c(f.name)}`,
+    c(f.where) && `📍 Dirección: ${c(f.where)}`,
+    c(f.phone) && `📞 Tel: ${c(f.phone)}`,
+    c(f.guide) && `📦 Guía: ${c(f.guide)}`,
+    (c(f.novelty) || c(f.carrier)) && `⚠️ Novedad: ${[c(f.novelty), c(f.carrier) && (c(f.novelty) ? `(${c(f.carrier)})` : c(f.carrier))].filter(Boolean).join(' ')}`,
+  ].filter(Boolean);
+  return `Hola ${firstName} 👋 Tu pedido está en novedad${c(f.summary) ? `: ${c(f.summary)}` : ''}.\n\n${lines.join('\n')}${lines.length ? '\n\n' : ''}Por favor respóndenos por aquí para ayudarte a recibirlo y que no se devuelva.`;
+}
+
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+// What the carrier's portal shows, pasted as is:
+//   Cristina Tejada / Reclama en la oficina principal de envía en Pitali... , PITALITO-HUILA / Tel: 3223641371 /
+//   014165704173 / COORDINAR LA ENTREGA <tab> ENVIA
+// → each field. Lines it can't place are added to the address.
+export function readCarrierText(raw: string, carriers: readonly string[]): Partial<NoveltyFields> {
+  const out: Partial<NoveltyFields> = {};
+  const rest: string[] = [];
+  const lines = raw
+    .split(/[\r\n]+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    // "COORDINAR LA ENTREGA <tab> ENVIA": novelty and carrier on one line.
+    const cells = line.split(/\t+|\s{3,}/).map((x) => x.trim()).filter(Boolean);
+    const carrierCell = cells.find((x) => carriers.some((c) => fold(c) === fold(x)) || /^(envia|servientrega|interrapidisimo|inter rapidisimo|coordinadora|tcc|deprisa|99 ?minutos)$/.test(fold(x)));
+    if (carrierCell) {
+      out.carrier = carriers.find((c) => fold(c) === fold(carrierCell)) || carrierCell;
+      const nov = cells.filter((x) => x !== carrierCell).join(' ');
+      if (nov) out.novelty = nov;
+      continue;
+    }
+    if (/^(tel[eé]fono|tel|celular|cel|m[oó]vil)\b/i.test(line)) {
+      out.phone = line.replace(/^(tel[eé]fono|tel|celular|cel|m[oó]vil)\.?\s*:?\s*/i, '').trim();
+      continue;
+    }
+    if (/^[\d\s-]{8,}$/.test(line)) {
+      out.guide = line.replace(/\s+/g, '');
+      continue;
+    }
+    if (/reclam|oficina|recoger|direcci|calle|carrera|cra\b|cl\b|barrio|#/i.test(line)) {
+      rest.push(line);
+      continue;
+    }
+    if (!out.name && /^[a-záéíóúñü .'-]{3,60}$/i.test(line) && line.split(/\s+/).length <= 5) {
+      out.name = line;
+      continue;
+    }
+    if (!out.novelty && /^[A-ZÁÉÍÓÚÑ ]{6,}$/.test(line)) {
+      out.novelty = line;
+      continue;
+    }
+    rest.push(line);
+  }
+  if (rest.length) out.where = rest.join(', ');
+  if (/reclam|oficina|recoger/i.test(out.where || '')) out.summary = NOVELTY_REASONS[0].summary;
+  else if (/coordinar/i.test(out.novelty || '')) out.summary = NOVELTY_REASONS[1].summary;
+  else if (/direcci|nomenclatura/i.test(out.novelty || '')) out.summary = NOVELTY_REASONS[2].summary;
+  else if (/ausente|cerrado|nadie/i.test(out.novelty || '')) out.summary = NOVELTY_REASONS[3].summary;
+  return out;
 }

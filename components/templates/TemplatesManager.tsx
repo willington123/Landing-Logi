@@ -379,9 +379,9 @@ export default function TemplatesManager() {
             {!hasNoveltyPreset && (
               <div className="rounded-lg bg-white border border-amber-200 p-3 flex flex-wrap items-center gap-3">
                 <div className="flex-1 min-w-[220px]">
-                  <p className="text-[13px] font-semibold text-slate-900">Novedad de envío</p>
-                  <p className="text-[11px] text-slate-500">Avisa al cliente una novedad de la transportadora (reclamar en oficina, coordinar la entrega, dirección incompleta…). Se envía desde el pedido con «Avisar novedad» cuando el cliente no ha escrito en 24 horas.</p>
-                  <p className="mt-1 text-[11px] text-slate-600 italic">“{NOVELTY_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => NOVELTY_PRESET.examples[Number(i) - 1])}”</p>
+                  <p className="text-[13px] font-semibold text-slate-900">Aviso de novedad (envío)</p>
+                  <p className="text-[11px] text-slate-500">Avisa al cliente una novedad de la transportadora con todos sus datos: nombre, dirección u oficina, teléfono, guía y novedad. Se envía desde el pedido con «Avisar novedad» cuando el cliente no ha escrito en 24 horas.</p>
+                  <p className="mt-1 text-[11px] text-slate-600 italic whitespace-pre-wrap">“{NOVELTY_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => NOVELTY_PRESET.examples[Number(i) - 1])}”</p>
                 </div>
                 <button onClick={() => run('preset-novelty', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'novelty' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset-novelty' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
