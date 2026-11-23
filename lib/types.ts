@@ -294,6 +294,7 @@ export interface OrderItem {
   inDropi?: { at: string; by?: string | null; ref?: string | null } | null; // marked by hand: the store already uploaded it to Dropi (number optional)
   guideAt?: string; // when the tracking number was saved
   guidePhoto?: string | null; // photo of the shipping label (public URL)
+  novelty?: { reason: string; detail?: string; text: string; at: string; by?: string | null; sent?: boolean; error?: string | null } | null; // last delivery problem told to the customer ("Avisar novedad")
   guidePhotoPending?: boolean; // the photo couldn't go yet (24 h window closed): it goes when the customer writes
   _org?: string; // panel only: the order's store when Pedidos shows several (not saved)
   _store?: string;

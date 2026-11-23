@@ -9,6 +9,7 @@ import LandingWizardModal from '@/components/landings/LandingWizardModal';
 import { CallButton } from '@/components/voice/CallButton';
 import DropiOrderStatus from '@/components/orders/DropiOrderStatus';
 import ShippingBox, { ShipBadges } from '@/components/orders/ShippingBox';
+import NoveltyBox from '@/components/orders/NoveltyBox';
 import CopyForDropi from '@/components/orders/CopyForDropi';
 import DropiBulkModal from '@/components/orders/DropiBulkModal';
 import NewOrderModal from '@/components/orders/NewOrderModal';
@@ -627,6 +628,7 @@ export default function OrdersPage() {
               <CopyForDropi order={selectedOrder} defaultOpen={!selectedOrder.inDropi && !selectedOrder.dropi?.orderId} />
               <DropiOrderStatus order={selectedOrder} onSent={reloadAll} />
               <ShippingBox order={selectedOrder} onChanged={reloadAll} />
+              <NoveltyBox order={selectedOrder} onChanged={reloadAll} />
 
               {(selectedOrder.callNotes || selectedOrder.previousAddress) && (
                 <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">

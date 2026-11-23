@@ -57,3 +57,39 @@ export const PROCESS_PRESET = {
   examples: ['Laura', 'Faja moldeadora · 2 unidades', 'Medellín', '$129.900'],
   buttons: [] as string[],
 };
+
+// Delivery problem notice (utility): {{1}} name, {{2}} product, {{3}} carrier, {{4}} tracking number,
+// {{5}} what happened ("está disponible para reclamar en la oficina principal de Envía en Pitalito, Huila").
+// Sent from the order detail ("Avisar novedad") when the customer hasn't written in 24 hours.
+export const NOVELTY_PRESET = {
+  name: 'novedad_envio',
+  language: 'es',
+  category: 'UTILITY' as const,
+  body: 'Hola {{1}} 👋 Tu pedido de {{2}} tiene una novedad con la transportadora {{3}} (guía {{4}}): {{5}}. Por favor respóndenos por aquí para ayudarte a recibirlo y que no se devuelva.',
+  examples: ['Cristina', 'Bálsamo Rosa', 'Envía', '014165704173', 'está disponible para reclamar en la oficina principal de Envía en Pitalito, Huila'],
+  buttons: [] as string[],
+};
+
+// The usual delivery problems. `text` + the store's detail becomes {{5}}.
+export const NOVELTY_REASONS = [
+  { id: 'oficina', label: 'Reclamar en oficina', text: 'está disponible para reclamar en', detail: 'Oficina principal de Envía en Pitalito, Huila' },
+  { id: 'coordinar', label: 'Coordinar la entrega', text: 'la transportadora necesita coordinar la entrega contigo', detail: 'Ej.: llamar al 3223641371' },
+  { id: 'direccion', label: 'Dirección incompleta', text: 'la dirección está incompleta o no la encuentran', detail: 'Ej.: falta el barrio o el número de la casa' },
+  { id: 'ausente', label: 'No había nadie', text: 'fueron a entregarlo y no encontraron a nadie', detail: 'Ej.: vuelven a pasar mañana' },
+  { id: 'otro', label: 'Otra novedad', text: '', detail: 'Escribe la novedad' },
+] as const;
+export type NoveltyReason = (typeof NOVELTY_REASONS)[number]['id'];
+
+// {{5}} for a reason + detail. Template values can't have line breaks, tabs or long runs of spaces.
+export function noveltyText(reason: string, detail: string): string {
+  const r = NOVELTY_REASONS.find((x) => x.id === reason) || NOVELTY_REASONS[NOVELTY_REASONS.length - 1];
+  const d = String(detail || '')
+    .replace(/[\r\n\t]+/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+,/g, ',')
+    .replace(/[\s,.;:]+$/, '')
+    .trim();
+  if (!r.text) return d;
+  if (!d) return r.text;
+  return r.id === 'oficina' ? `${r.text} ${d.replace(/^(en|la)\s+/i, (m) => (/^en/i.test(m) ? '' : m))}` : `${r.text} (${d})`;
+}

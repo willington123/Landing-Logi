@@ -346,13 +346,18 @@ function Warn({ children }: { children: React.ReactNode }) {
 // Small marks in the orders list: already in Dropi / has a tracking number.
 export function ShipBadges({ order }: { order: OrderItem }) {
   const dropi = Boolean(order.inDropi || order.dropi?.orderId);
-  if (!dropi && !order.trackingNumber) return null;
+  if (!dropi && !order.trackingNumber && !order.novelty) return null;
   return (
     <>
       {dropi && <span title="Ya está en Dropi" className="text-[10px] font-semibold font-sans px-1.5 py-0.5 rounded bg-orange-50 text-orange-700">Dropi</span>}
       {order.trackingNumber && (
         <span title={`Guía ${order.trackingNumber}${order.carrier ? ` · ${order.carrier}` : ''}`} className="text-[10px] font-semibold font-sans px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">
           Guía
+        </span>
+      )}
+      {order.novelty && order.status === 'shipped' && (
+        <span title={`Novedad: ${order.novelty.text}`} className="text-[10px] font-semibold font-sans px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">
+          Novedad
         </span>
       )}
     </>
