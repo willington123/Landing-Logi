@@ -17,7 +17,9 @@ export interface ShopifySettings {
   secret: string; // Shopify's webhook signing key (Notificaciones → Webhooks)
   delayMinutes: number; // wait before writing (the customer may still be buying)
   shop?: string; // mitienda.myshopify.com (only to bring carts from before the webhooks)
-  adminToken?: string; // Admin API token of the store's custom app (read_orders)
+  adminToken?: string; // Admin API token of an old-style custom app made in the Shopify admin (shpat_…, read_orders)
+  clientId?: string; // or an app from Shopify's Dev Dashboard installed on the store: its Client ID…
+  clientSecret?: string; // …and secret, exchanged for a short-lived token (client credentials grant)
 }
 export const DEFAULT_SHOPIFY: ShopifySettings = { enabled: false, secret: '', delayMinutes: 60 };
 
@@ -287,12 +289,45 @@ export const shopDomain = (v: string) =>
     .replace(/\.myshopify\.com$/, '')
     .replace(/[^a-z0-9-]/g, '');
 
+export const hasShopifyAdmin = (s: ShopifySettings) => Boolean(s.shop && (s.adminToken || (s.clientId && s.clientSecret)));
+
+// The token for the Admin API: the old-style app's own token, or one asked with the Dev Dashboard app's
+// Client ID + secret (valid for about a day; kept in memory meanwhile).
+const tokenCache = new Map<string, { token: string; until: number }>();
+async function accessToken(s: ShopifySettings): Promise<string> {
+  if (s.adminToken) return s.adminToken;
+  if (!s.clientId || !s.clientSecret) throw new Error('Conecta primero la app de Shopify.');
+  const shop = shopDomain(s.shop || '');
+  const key = `${shop}:${s.clientId}`;
+  const hit = tokenCache.get(key);
+  if (hit && hit.until > Date.now()) return hit.token;
+  const res = await fetch(`https://${shop}.myshopify.com/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: s.clientId, client_secret: s.clientSecret }).toString(),
+    signal: AbortSignal.timeout(15000),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 404) throw new Error('No encontramos esa tienda: escribe el dominio .myshopify.com (lo ves en Shopify → Configuración → Dominios).');
+  if (!res.ok || !data?.access_token) {
+    const why = String(data?.error_description || data?.error || data?.errors || `HTTP ${res.status}`).slice(0, 200);
+    throw new Error(`Shopify no entregó el acceso con ese ID de cliente y secreto (${why}). Revisa que la app esté instalada en esta tienda y que los copiaste completos.`);
+  }
+  const ttl = Math.max(60, Number(data.expires_in) || 3600) * 1000;
+  tokenCache.set(key, { token: String(data.access_token), until: Date.now() + ttl - 5 * 60000 });
+  return String(data.access_token);
+}
+
 async function shopifyGet(s: ShopifySettings, path: string): Promise<{ data: any; next: string | null }> {
   const url = path.startsWith('https://') ? path : `https://${shopDomain(s.shop || '')}.myshopify.com/admin/api/${API}/${path}`;
-  const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': s.adminToken || '', Accept: 'application/json' }, signal: AbortSignal.timeout(15000), cache: 'no-store' });
+  const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': await accessToken(s), Accept: 'application/json' }, signal: AbortSignal.timeout(15000), cache: 'no-store' });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) throw new Error('Shopify no aceptó la clave de la app (revisa que la copiaste completa).');
-  if (res.status === 403) throw new Error('La app de Shopify no tiene el permiso read_orders: actívalo en la app y vuelve a instalarla.');
+  if (res.status === 401) {
+    tokenCache.clear();
+    throw new Error('Shopify no aceptó el acceso de la app (revisa que copiaste las claves completas).');
+  }
+  if (res.status === 403) throw new Error('La app de Shopify no tiene el permiso read_orders: agrégalo en la app, publica la versión y vuelve a instalarla.');
   if (res.status === 404) throw new Error('No encontramos esa tienda: escribe el dominio .myshopify.com (lo ves en Shopify → Configuración → Dominios).');
   if (!res.ok) throw new Error(`Shopify respondió HTTP ${res.status}${data?.errors ? `: ${JSON.stringify(data.errors).slice(0, 200)}` : ''}`);
   const link = res.headers.get('link') || '';
@@ -301,8 +336,9 @@ async function shopifyGet(s: ShopifySettings, path: string): Promise<{ data: any
 }
 
 // Checks the store's Shopify app (shop + token) before saving it.
-export async function testShopifyAdmin(shop: string, token: string): Promise<string> {
-  const s = { ...DEFAULT_SHOPIFY, shop, adminToken: token };
+export async function testShopifyAdmin(creds: Pick<ShopifySettings, 'shop' | 'adminToken' | 'clientId' | 'clientSecret'>): Promise<string> {
+  const s = { ...DEFAULT_SHOPIFY, ...creds };
+  const shop = creds.shop || '';
   const { data } = await shopifyGet(s, 'checkouts.json?limit=1');
   if (!Array.isArray(data?.checkouts)) throw new Error('Shopify no devolvió los pedidos abandonados.');
   return `${shopDomain(shop)}.myshopify.com`;
@@ -311,7 +347,7 @@ export async function testShopifyAdmin(shop: string, token: string): Promise<str
 // Brings the abandoned checkouts of the last `days` days. They stay as "Anterior" until the store sends them.
 export async function importOldCarts(days: number): Promise<{ found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number }> {
   const s = await getShopifySettings();
-  if (!s.shop || !s.adminToken) throw new Error('Conecta primero la app de Shopify (dominio y clave).');
+  if (!hasShopifyAdmin(s)) throw new Error('Conecta primero la app de Shopify (dominio y claves).');
   const since = new Date(Date.now() - Math.min(Math.max(days, 1), 60) * 86400000).toISOString();
   const checkouts: any[] = [];
   let next: string | null = `checkouts.json?limit=250&created_at_min=${encodeURIComponent(since)}`;
