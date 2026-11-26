@@ -129,7 +129,8 @@ export default function ShopifyCarts() {
             <span className="flex-1">{info.webhookUrl}</span>
             {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Copy className="w-4 h-4 text-slate-400 shrink-0" />}
           </button>
-          Crea tres, todos con la misma URL: <b>Creación de pago</b> (Checkout creation), <b>Actualización de pago</b> (Checkout update) y <b>Creación de pedido</b> (Order creation).
+          Crea estos, todos con la misma URL: <b>Creación de pago</b> (Checkout creation), <b>Actualización de pago</b> (Checkout update), <b>Creación de pedido</b> (Order creation)
+          y, si usas un formulario contraentrega como <b>Releasit</b>, <b>Creación de pedido preliminar</b> (Draft order creation): ahí guardan los formularios que el cliente no terminó.
         </li>
         <li>
           Debajo de la lista de webhooks Shopify dice «Tus webhooks se firmarán con …». Copia esa clave y pégala aquí:
