@@ -9,7 +9,7 @@ import InstallApp from '@/components/layout/InstallApp';
 import StoreAvatar, { STORE_LOGO_EVENT } from '@/components/layout/StoreAvatar';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, ChevronDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2, Wallet } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Layers, ShoppingBag, PhoneCall, MessageSquare, Workflow, BarChart3, Plug, Settings, X, LogOut, CreditCard, ShieldCheck, FileText, ChevronsUpDown, ChevronDown, Check, Megaphone, Plus, Store, CalendarDays, Globe, Menu, Package, Users, Building2, Wallet, Send } from 'lucide-react';
 
 interface AccountInfo {
   user: { id: string; email: string; name: string | null } | null;
@@ -47,6 +47,7 @@ const NAV_GROUPS = [
       { href: '/creativos', label: 'Creativos', icon: Megaphone },
       { href: '/rentabilidad', label: 'Rentabilidad', icon: Wallet, managers: true },
       { href: '/automations', label: 'Automatizaciones', icon: Workflow },
+      { href: '/envios', label: 'Envíos masivos', icon: Send },
       { href: '/analytics', label: 'Analíticas', icon: BarChart3 },
     ],
   },
