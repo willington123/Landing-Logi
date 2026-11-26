@@ -2,9 +2,9 @@
 
 // Envíos masivos: choose an approved template, paste the list of customers, say what goes in each variable, and
 // send one by one or all the pending ones in a row (one at a time, with a short pause, so it can be stopped).
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Loader2, Pause, Play, Plus, Send, Trash2, Users, XCircle } from 'lucide-react';
-import { fillBody, parseList, rowVars, type Broadcast, type TemplateOption, type VarSource } from '@/lib/broadcast';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle2, Loader2, Pause, Play, Plus, Send, Trash2, Upload, Users, XCircle } from 'lucide-react';
+import { fillBody, guessVars, importCsv, parseList, rowVars, type Broadcast, type BroadcastRow, type TemplateOption, type VarSource } from '@/lib/broadcast';
 
 interface Summary {
   id: string;
@@ -133,23 +133,54 @@ function NewBroadcast({
   const [name, setName] = useState('');
   const [tKey, setTKey] = useState('');
   const [text, setText] = useState('');
+  const [showPaste, setShowPaste] = useState(false);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [rows, setRows] = useState<(BroadcastRow & { off?: boolean })[]>([]);
+  const [summary, setSummary] = useState<string | null>(null);
   const [vars, setVars] = useState<VarSource[]>([]);
+  const [touched, setTouched] = useState(false);
   const [image, setImage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const t = templates.find((x) => `${x.name}|${x.lang}` === tKey) || null;
-  const parsed = useMemo(() => parseList(text), [text]);
-  const [touched, setTouched] = useState(false);
-  const colsKey = parsed.columns.join('|');
+  const colsKey = columns.join('|');
   useEffect(() => {
-    // {{1}} → the customer's name by default; the others → the next columns, or a fixed text. Recalculated when
-    // the template or the list's columns change, until the store picks something by hand.
-    if (t && !touched)
-      setVars(Array.from({ length: t.vars }, (_, i) => (i === 0 ? { kind: 'name' } : i - 1 < parsed.columns.length ? { kind: 'col', col: i - 1 } : { kind: 'text', text: '' })));
+    // Guessed from the template's words and the list's columns, until the store changes something by hand.
+    if (t && !touched) setVars(guessVars(t.body, t.vars, columns));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tKey, colsKey, touched]);
-  const preview = t && parsed.rows[0] ? fillBody(t.body, rowVars({ vars }, parsed.rows[0])) : t ? t.body : '';
+
+  const applyList = (r: { columns: string[]; rows: BroadcastRow[] }, note: string) => {
+    setColumns(r.columns);
+    setRows(r.rows);
+    setSummary(note);
+    setTouched(false);
+  };
+  const onFile = async (f: File | undefined) => {
+    if (!f) return;
+    const content = await f.text();
+    const r = importCsv(content);
+    const gone = r.removed;
+    applyList(
+      r,
+      `${r.rows.length} ${r.rows.length === 1 ? 'cliente' : 'clientes'}${r.kind === 'shopify' ? ' del archivo de Shopify' : ''}` +
+        [gone.tests && `${gone.tests} de prueba quitados`, gone.duplicates && `${gone.duplicates} repetidos quitados`, gone.done && `${gone.done} ya comprados quitados`, gone.noPhone && `${gone.noPhone} sin celular`]
+          .filter(Boolean)
+          .map((x) => ` · ${x}`)
+          .join(''),
+    );
+    if (fileInput.current) fileInput.current.value = '';
+  };
+  const onPaste = (v: string) => {
+    setText(v);
+    const p = parseList(v);
+    applyList(p, `${p.rows.length} ${p.rows.length === 1 ? 'cliente' : 'clientes'}${p.invalid ? ` · ${p.invalid} sin celular válido` : ''}${p.duplicates ? ` · ${p.duplicates} repetidos quitados` : ''}`);
+  };
+  const editRow = (i: number, patch: Partial<BroadcastRow & { off?: boolean }>) => setRows((all) => all.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  const editCol = (i: number, c: number, v: string) => setRows((all) => all.map((r, k) => (k === i ? { ...r, cols: r.cols.map((x, j) => (j === c ? v : x)) } : r)));
+  const chosen = rows.filter((r) => !r.off);
 
   const create = async () => {
     setBusy(true);
@@ -157,13 +188,7 @@ function NewBroadcast({
     try {
       const d = await call<{ broadcast: Broadcast }>('/api/broadcasts', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          template: t ? { name: t.name, lang: t.lang } : null,
-          vars,
-          image,
-          list: text,
-        }),
+        body: JSON.stringify({ name, template: t ? { name: t.name, lang: t.lang } : null, vars, image, columns, rows: chosen.map(({ phone, name, cols }) => ({ phone, name, cols })) }),
       });
       onCreated(d.broadcast.id);
     } catch (e: any) {
@@ -173,12 +198,14 @@ function NewBroadcast({
     }
   };
 
+  const varLabel = (v: VarSource) => (v.kind === 'name' ? 'Nombre' : v.kind === 'col' ? columns[v.col] || `Columna ${v.col + 1}` : 'Texto fijo');
+
   return (
     <div className="space-y-4">
       <button type="button" onClick={onCancel} className="text-sm text-slate-600 inline-flex items-center gap-1 hover:text-slate-900">
         <ArrowLeft className="w-4 h-4" /> Envíos masivos
       </button>
-      <div className={`${card} space-y-5`}>
+      <div className={`${card} space-y-6`}>
         <h2 className="text-lg font-semibold text-slate-900">Nuevo envío</h2>
         <label className="block text-sm text-slate-700">
           Nombre del envío (solo para ti)
@@ -186,9 +213,9 @@ function NewBroadcast({
         </label>
 
         <div>
-          <label className="block text-sm text-slate-700">
+          <label className="block text-sm font-medium text-slate-800">
             1. Plantilla
-            <select value={tKey} onChange={(e) => (setTKey(e.target.value), setTouched(false))} className={input}>
+            <select aria-label="Plantilla" value={tKey} onChange={(e) => (setTKey(e.target.value), setTouched(false))} className={input}>
               <option value="">Elige una plantilla aprobada…</option>
               {templates.map((x) => (
                 <option key={`${x.name}|${x.lang}`} value={`${x.name}|${x.lang}`} disabled={!x.supported}>
@@ -201,36 +228,50 @@ function NewBroadcast({
           {templatesError && <p className="mt-1 text-[12.5px] text-red-600">{templatesError}</p>}
           {!templatesError && !templates.length && <p className="mt-1 text-[12.5px] text-slate-500">No tienes plantillas aprobadas. Créalas en Plantillas.</p>}
           {t?.category === 'MARKETING' && (
-            <p className="mt-1 text-[12px] text-amber-700">Es de marketing: Meta cobra cada mensaje y puede no entregarlo a quien recibe muchos mensajes de marketing.</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm text-slate-700">
-            2. Lista de clientes
-            <textarea
-              aria-label="Lista de clientes"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={7}
-              placeholder={'Pega aquí desde Excel o Google Sheets, o escribe una por línea:\n3001234567, Laura Gómez, Bálsamo Rosa\n3109876543, Pedro Ruiz, Faja moldeadora'}
-              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            />
-          </label>
-          {text.trim() && (
-            <p className="mt-1 text-[12.5px] text-slate-600">
-              <Users className="w-3.5 h-3.5 inline mr-1" />
-              <b>{parsed.rows.length}</b> {parsed.rows.length === 1 ? 'contacto' : 'contactos'}
-              {parsed.invalid ? ` · ${parsed.invalid} sin celular válido` : ''}
-              {parsed.duplicates ? ` · ${parsed.duplicates} repetidos (se envía una sola vez)` : ''}
-              {parsed.columns.length ? ` · columnas extra: ${parsed.columns.join(', ')}` : ''}
+            <p className="mt-1 text-[12px] text-amber-700">
+              Es de marketing: Meta cobra cada mensaje y no la entrega a quien ya recibió muchos mensajes de marketing. Para clientes que dejaron sus datos, una de <b>Utilidad</b> (como la de
+              confirmación de pedido) llega mejor.
             </p>
           )}
         </div>
 
-        {t && t.vars > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-800">2. Clientes</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => fileInput.current?.click()} className="h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-1.5">
+              <Upload className="w-4 h-4" /> Subir archivo (.csv)
+            </button>
+            <button type="button" onClick={() => setShowPaste((v) => !v)} className="h-10 px-3 rounded-xl border border-slate-200 text-sm text-slate-700">
+              o pegar una lista
+            </button>
+            <input ref={fileInput} type="file" accept=".csv,text/csv" aria-label="Archivo de clientes" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+          </div>
+          <p className="text-[12px] text-slate-500">
+            Sirve el archivo que descargas de Shopify (Pedidos → Pedidos preliminares o Pedidos abandonados → Exportar): cada cliente queda con su producto, unidades, total y ciudad. También
+            un Excel guardado como CSV con celular, nombre y otras columnas.
+          </p>
+          {showPaste && (
+            <textarea
+              aria-label="Lista de clientes"
+              value={text}
+              onChange={(e) => onPaste(e.target.value)}
+              rows={6}
+              placeholder={'celular;nombre;producto;total;ciudad\n3001234567;Laura Gómez;Bálsamo Rosa (1 unidad);$79.900;Cali'}
+              className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+          )}
+          {summary && (
+            <p className="text-[12.5px] text-slate-700">
+              <Users className="w-3.5 h-3.5 inline mr-1" />
+              {summary}
+            </p>
+          )}
+        </div>
+
+        {t && t.vars > 0 && columns.length + rows.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm text-slate-700">3. ¿Qué va en cada dato de la plantilla?</p>
+            <p className="text-sm font-medium text-slate-800">3. Qué va en cada dato</p>
+            <p className="text-[12px] text-slate-500">Konnexa lo eligió según la plantilla. Cámbialo solo si no corresponde.</p>
             {vars.map((v, i) => (
               <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="w-14 text-[13px] font-mono text-sky-700">{`{{${i + 1}}}`}</span>
@@ -240,21 +281,17 @@ function NewBroadcast({
                   onChange={(e) => {
                     const val = e.target.value;
                     setTouched(true);
-                    setVars((all) =>
-                      all.map((x, k) =>
-                        k !== i ? x : val === 'name' ? { kind: 'name' } : val === 'text' ? { kind: 'text', text: '' } : { kind: 'col', col: Number(val.split(':')[1]) },
-                      ),
-                    );
+                    setVars((all) => all.map((x, k) => (k !== i ? x : val === 'name' ? { kind: 'name' } : val === 'text' ? { kind: 'text', text: '' } : { kind: 'col', col: Number(val.split(':')[1]) })));
                   }}
                   className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px]"
                 >
                   <option value="name">Nombre del cliente</option>
-                  {parsed.columns.map((c, k) => (
+                  {columns.map((c, k) => (
                     <option key={k} value={`col:${k}`}>
                       {c}
                     </option>
                   ))}
-                  <option value="text">Texto fijo…</option>
+                  <option value="text">Texto fijo (igual para todos)…</option>
                 </select>
                 {v.kind === 'text' && (
                   <input
@@ -276,13 +313,48 @@ function NewBroadcast({
           </label>
         )}
 
-        {t && (
-          <div>
-            <p className="text-sm text-slate-700">Así le llega {parsed.rows[0] ? `a ${parsed.rows[0].name || `+${parsed.rows[0].phone}`}` : 'al cliente'}:</p>
-            <div className="mt-1 rounded-xl bg-[#efeae2] p-3">
-              <p className="max-w-md rounded-lg bg-white px-3 py-2 text-[13px] text-slate-800 whitespace-pre-wrap shadow-sm">{preview}</p>
-              {t.buttons.length > 0 && <p className="mt-1 text-[12px] text-sky-700">{t.buttons.join(' · ')}</p>}
+        {rows.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <p className="text-sm font-medium text-slate-800">{t ? '4.' : '3.'} Revisa cada cliente</p>
+              <span className="text-[12px] text-slate-500">
+                Corrige lo que haga falta o quita el chulito a quien no quieras escribirle. {chosen.length} de {rows.length} seleccionados.
+              </span>
             </div>
+            <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
+              {rows.map((r, i) => (
+                <div key={i} className={`rounded-xl border p-3 space-y-2 ${r.off ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input type="checkbox" aria-label={`Incluir ${r.name || r.phone}`} checked={!r.off} onChange={(e) => editRow(i, { off: !e.target.checked })} className="w-4 h-4" />
+                    <input
+                      aria-label={`Nombre ${i + 1}`}
+                      value={r.name}
+                      onChange={(e) => editRow(i, { name: e.target.value })}
+                      placeholder="Nombre"
+                      className="flex-1 min-w-[140px] h-8 rounded-lg border border-slate-200 px-2 text-[13px] font-medium"
+                    />
+                    <span className="text-[12.5px] font-mono text-slate-500">+{r.phone}</span>
+                  </div>
+                  {columns.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                      {columns.map((c, j) => (
+                        <label key={j} className="block text-[11px] text-slate-500">
+                          {c}
+                          <input
+                            aria-label={`${c} ${i + 1}`}
+                            value={r.cols[j] || ''}
+                            onChange={(e) => editCol(i, j, e.target.value)}
+                            className="mt-0.5 block w-full h-8 rounded-lg border border-slate-200 px-2 text-[12.5px] text-slate-800"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {t && <p className="rounded-lg bg-[#efeae2] px-2.5 py-1.5 text-[12px] text-slate-700 whitespace-pre-wrap">{fillBody(t.body, rowVars({ vars }, r))}</p>}
+                </div>
+              ))}
+            </div>
+            {t && vars.length > 0 && <p className="text-[11px] text-slate-400">Datos de la plantilla: {vars.map((v, i) => `{{${i + 1}}} ${varLabel(v)}`).join(' · ')}</p>}
           </div>
         )}
 
@@ -291,16 +363,16 @@ function NewBroadcast({
           <button
             type="button"
             onClick={create}
-            disabled={busy || !t || !parsed.rows.length}
+            disabled={busy || !t || !chosen.length}
             className="h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
           >
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Crear envío ({parsed.rows.length})
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Crear envío ({chosen.length})
           </button>
           <button type="button" onClick={onCancel} className="h-10 px-3 text-sm text-slate-600">
             Cancelar
           </button>
         </div>
-        <p className="text-[12px] text-slate-500">Crear el envío no manda nada todavía: en el siguiente paso eliges a quién enviar.</p>
+        <p className="text-[12px] text-slate-500">Crear el envío no manda nada todavía: en el siguiente paso envías uno por uno o todos.</p>
       </div>
     </div>
   );

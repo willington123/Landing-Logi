@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { currentOrgId } from '@/lib/server/tenant';
 import { requireManager } from '@/lib/server/integrations-api';
 import { createBroadcast, listBroadcasts, templateOptions } from '@/lib/server/broadcasts';
-import { parseList, type VarSource } from '@/lib/broadcast';
+import { MAX_ROWS, cleanCell, parseList, type BroadcastRow, type VarSource } from '@/lib/broadcast';
+import { normalizePhone } from '@/lib/phone';
 import { getUser } from '@/lib/server/accounts';
 import { sessionUserId } from '@/lib/server/tenant';
 import { fail, failFrom, ok } from '@/lib/server/http';
@@ -38,7 +39,7 @@ export async function GET() {
   }
 }
 
-// New send. Body: { name, template: { name, lang }, vars: VarSource[], image?, list (pasted text) }
+// New send. Body: { name, template: { name, lang }, vars: VarSource[], image?, columns + rows (reviewed in the panel) or list (pasted text) }
 export async function POST(req: NextRequest) {
   try {
     await requireManager();
@@ -54,8 +55,30 @@ export async function POST(req: NextRequest) {
     if (vars.some((v) => v.kind === 'text' && !v.text.trim())) return fail('Escribe el texto fijo de cada dato variable.');
     const image = String(b.image || '').trim();
     if (t.imageHeader && !/^https:\/\/\S+\.(jpe?g|png)(\?\S*)?$/i.test(image)) return fail('Esta plantilla lleva una foto arriba: pega el enlace de la imagen (https, .jpg o .png).');
-    const parsed = parseList(String(b.list || ''));
-    if (!parsed.rows.length) return fail('No encontramos números de celular en la lista.');
+    // The rows the store reviewed in the panel (from a file or a pasted list), or a pasted list as text.
+    let parsed: { columns: string[]; rows: BroadcastRow[]; invalid: number; duplicates: number };
+    if (Array.isArray(b.rows)) {
+      const columns = (Array.isArray(b.columns) ? b.columns : []).slice(0, 12).map((c: unknown) => cleanCell(c).slice(0, 40));
+      const seen = new Set<string>();
+      const rows: BroadcastRow[] = [];
+      let invalid = 0;
+      let duplicates = 0;
+      for (const r of b.rows.slice(0, MAX_ROWS)) {
+        const phone = normalizePhone(String(r?.phone || ''));
+        if (phone.length < 10 || phone.length > 15) {
+          invalid++;
+          continue;
+        }
+        if (seen.has(phone)) {
+          duplicates++;
+          continue;
+        }
+        seen.add(phone);
+        rows.push({ phone, name: cleanCell(r?.name).slice(0, 80), cols: columns.map((_: string, j: number) => cleanCell(Array.isArray(r?.cols) ? r.cols[j] : '')), status: 'pending' });
+      }
+      parsed = { columns, rows, invalid, duplicates };
+    } else parsed = parseList(String(b.list || ''));
+    if (!parsed.rows.length) return fail('No hay clientes con celular en la lista.');
     const uid = sessionUserId();
     const me = uid ? await getUser(uid).catch(() => null) : null;
     const created = await createBroadcast({ name: String(b.name || ''), template: t, vars, image: t.imageHeader ? image : undefined, columns: parsed.columns, rows: parsed.rows }, me?.name || me?.email || null);
