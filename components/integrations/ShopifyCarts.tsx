@@ -61,7 +61,8 @@ export default function ShopifyCarts() {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shop, setShop] = useState('');
-  const [adminToken, setAdminToken] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [days, setDays] = useState(7);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
@@ -109,8 +110,9 @@ export default function ShopifyCarts() {
     setBusy('admin');
     setError(null);
     try {
-      await call('/api/shopify', { method: 'PUT', body: JSON.stringify({ shop, adminToken }) });
-      setAdminToken('');
+      await call('/api/shopify', { method: 'PUT', body: JSON.stringify({ shop, clientId, clientSecret }) });
+      setClientId('');
+      setClientSecret('');
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -249,22 +251,25 @@ export default function ShopifyCarts() {
           <>
             <ol className="text-[12.5px] text-slate-700 space-y-1 list-decimal pl-5">
               <li>
-                En Shopify: <b>Configuración → Apps y canales de venta → Desarrollar apps → Crear una app</b> (llámala Konnexa).
+                En Shopify: <b>Configuración → Apps → Desarrollar apps</b> (se abre <b>Shopify Dev Dashboard</b>) → <b>Crear app</b>. Ponle de nombre Konnexa y como URL de la app{' '}
+                <span className="font-mono">https://konnexa.lat</span>; quita «Incrustar app en el panel de control».
               </li>
               <li>
-                En <b>Configuración de la API de Admin</b>, marca el permiso <b>read_orders</b> (Pedidos: leer) y guarda.
+                En <b>Alcances</b> escribe <span className="font-mono">read_orders</span> y crea / publica la versión.
               </li>
               <li>
-                Dale <b>Instalar app</b> y luego <b>Revelar token una vez</b>: empieza por <span className="font-mono">shpat_</span>. Cópialo y pégalo aquí con el dominio de tu tienda.
+                <b>Instala la app en tu tienda</b> y abre su <b>Configuración</b>: copia el <b>ID de cliente</b> y el <b>secreto</b> y pégalos aquí con el dominio de tu tienda.
               </li>
             </ol>
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
-              <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" autoCapitalize="none" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
-              <input type="password" value={adminToken} onChange={(e) => setAdminToken(e.target.value)} placeholder="shpat_…" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
-              <button type="button" disabled={!shop.trim() || !adminToken.trim() || busy !== null} onClick={connectAdmin} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" autoCapitalize="none" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] sm:col-span-2" />
+              <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="ID de cliente (Client ID)" autoCapitalize="none" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
+              <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Secreto (Client secret)" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
+              <button type="button" disabled={!shop.trim() || !clientSecret.trim() || busy !== null} onClick={connectAdmin} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1.5 sm:col-span-2">
                 {busy === 'admin' && <Loader2 className="w-4 h-4 animate-spin" />} Conectar
               </button>
             </div>
+            <p className="text-[11px] text-slate-500">¿Tu app es de las antiguas y te dio un token que empieza por shpat_? Pégalo en el campo del secreto y deja el ID vacío.</p>
           </>
         ) : (
           <div className="flex flex-wrap items-center gap-2">

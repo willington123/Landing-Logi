@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { currentOrgId } from '@/lib/server/tenant';
 import { requireManager } from '@/lib/server/integrations-api';
 import { publicBaseUrl } from '@/lib/server/vapi';
-import { DEFAULT_SHOPIFY, getCarts, getShopifySettings, importOldCarts, saveShopifySettings, sendCarts, shopDomain, testShopifyAdmin } from '@/lib/server/shopify-carts';
+import { DEFAULT_SHOPIFY, hasShopifyAdmin, getCarts, getShopifySettings, importOldCarts, saveShopifySettings, sendCarts, shopDomain, testShopifyAdmin } from '@/lib/server/shopify-carts';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       .slice(0, 300)
       .map(({ token, name, phone, items, total, currency, city, status, note, createdAt, updatedAt, sentAt, orderNumber }) => ({ token, name, phone, items, total, currency, city, status, note, createdAt, updatedAt, sentAt, orderNumber }));
     return ok({
-      settings: { enabled: s.enabled, delayMinutes: s.delayMinutes, hasSecret: Boolean(s.secret), shop: s.shop ? `${shopDomain(s.shop)}.myshopify.com` : null, hasAdmin: Boolean(s.shop && s.adminToken) },
+      settings: { enabled: s.enabled, delayMinutes: s.delayMinutes, hasSecret: Boolean(s.secret), shop: s.shop ? `${shopDomain(s.shop)}.myshopify.com` : null, hasAdmin: hasShopifyAdmin(s) },
       webhookUrl: `${publicBaseUrl(req.nextUrl.origin)}/api/shopify/webhook/${org}`,
       carts: list,
     });
@@ -27,27 +27,35 @@ export async function GET(req: NextRequest) {
 }
 
 // Body: { enabled?, delayMinutes?, secret? } (an empty secret keeps the saved one),
-// or { shop, adminToken } to connect the Shopify app (checked first), or { disconnectAdmin: true }.
+// or { shop, clientId, clientSecret } (Dev Dashboard app) / { shop, adminToken } (old custom app) to connect the
+// Shopify app (checked first), or { disconnectAdmin: true }.
 export async function PUT(req: NextRequest) {
   try {
     await requireManager();
     const b = await req.json().catch(() => ({}));
     const s = await getShopifySettings();
     if (b.disconnectAdmin) {
-      await saveShopifySettings({ ...s, shop: undefined, adminToken: undefined });
+      await saveShopifySettings({ ...s, shop: undefined, adminToken: undefined, clientId: undefined, clientSecret: undefined });
       return ok({});
     }
-    if (typeof b.adminToken === 'string' || typeof b.shop === 'string') {
+    if (typeof b.adminToken === 'string' || typeof b.clientId === 'string' || typeof b.shop === 'string') {
       const shop = shopDomain(b.shop || s.shop || '');
-      const token = String(b.adminToken || '').trim() || s.adminToken || '';
       if (!shop) return fail('Escribe el dominio de tu tienda (ej. mitienda.myshopify.com).');
-      if (!/^shp[a-z]{2}_[A-Za-z0-9]{20,}$/.test(token)) return fail('La clave de la app de Shopify empieza por shpat_ (cópiala completa).');
+      const token = String(b.adminToken || '').trim();
+      const clientId = String(b.clientId || '').trim();
+      const clientSecret = String(b.clientSecret || '').trim();
+      // A token from an old-style app (shpat_…), or the Dev Dashboard app's Client ID + secret.
+      const creds = /^shpat_/.test(token || clientSecret)
+        ? { shop, adminToken: token || clientSecret, clientId: undefined, clientSecret: undefined }
+        : { shop, adminToken: undefined, clientId, clientSecret };
+      if (!creds.adminToken && (!/^[A-Za-z0-9]{16,64}$/.test(clientId) || clientSecret.length < 16))
+        return fail('Pega el ID de cliente y el secreto de la app (Shopify Dev Dashboard → tu app → Configuración).');
       try {
-        await testShopifyAdmin(shop, token);
+        await testShopifyAdmin(creds);
       } catch (e: any) {
         return fail(e.message);
       }
-      await saveShopifySettings({ ...s, shop, adminToken: token });
+      await saveShopifySettings({ ...s, ...creds });
       return ok({});
     }
     const secret = typeof b.secret === 'string' && b.secret.trim() ? b.secret.trim().slice(0, 200) : s.secret;
