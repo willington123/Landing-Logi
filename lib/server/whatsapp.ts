@@ -513,7 +513,7 @@ export interface NumberHealth {
   status: string | null; // CONNECTED, FLAGGED, RESTRICTED…
   // Meta's own answer to "can this number send?" (health_status): AVAILABLE | LIMITED | BLOCKED, with its reasons.
   canSend: string | null;
-  sendProblems: { where: string; code: number | null; text: string; solution: string | null }[];
+  sendProblems: { where: string; code: number | null; text: string; solution: string | null; kind?: 'payment' }[];
   // Permissions of the connection's token (null = Meta didn't say, e.g. some business tokens).
   permissions: string[] | null;
 }
@@ -536,14 +536,29 @@ export async function numberHealth(): Promise<{ ok: true; health: NumberHealth }
     const hs = await get('health_status').catch(() => ({}) as Record<string, any>);
     const entities: any[] = Array.isArray(hs.health_status?.entities) ? hs.health_status.entities : [];
     const WHERE: Record<string, string> = { PHONE_NUMBER: 'Número', WABA: 'Cuenta de WhatsApp', BUSINESS: 'Portafolio de Meta', APP: 'App de Meta', MESSAGE_TEMPLATE: 'Plantilla' };
-    const sendProblems = entities.flatMap((e) =>
-      (Array.isArray(e.errors) ? e.errors : []).map((x: any) => ({
-        where: WHERE[e.entity_type] || String(e.entity_type || ''),
-        code: Number(x.error_code) || null,
-        text: String(x.error_description || ''),
-        solution: x.possible_solution ? String(x.possible_solution) : null,
-      })),
-    );
+    const sendProblems = entities
+      .flatMap((e) =>
+        (Array.isArray(e.errors) ? e.errors : []).map((x: any) => ({
+          where: WHERE[e.entity_type] || String(e.entity_type || ''),
+          code: Number(x.error_code) || null,
+          text: String(x.error_description || ''),
+          solution: x.possible_solution ? String(x.possible_solution) : null,
+        })),
+      )
+      // WhatsApp *calling* (voice calls over SIP) isn't used by Konnexa: those notices don't affect messages.
+      .filter((p) => !(/\b(SIP|calling)\b/i.test(p.text) || (p.code && p.code >= 138000 && p.code < 139000)))
+      .map((p) =>
+        // Payment method missing or failing: replies still go out, messages the store starts (templates) don't.
+        p.code === 141006 || /payment method/i.test(p.text)
+          ? {
+              ...p,
+              kind: 'payment' as const,
+              text: 'Hay un problema con el método de pago de la cuenta de WhatsApp. Puedes responder a los clientes que te escriben, pero no escribir primero con plantillas (confirmaciones, guías, carritos).',
+              solution:
+                'En business.facebook.com → WhatsApp Manager → tu cuenta de WhatsApp → Configuración de la cuenta → Método de pago (o Facturación y pagos), agrega una tarjeta que acepte compras internacionales en línea.',
+            }
+          : p,
+      );
     // System-user tokens list their permissions; business integration tokens may not answer.
     const perms = await fetch(`${GRAPH}/me/permissions`, { headers: { Authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(8000), cache: 'no-store' })
       .then(async (r) => (r.ok ? ((await r.json()).data as any[]) : null))

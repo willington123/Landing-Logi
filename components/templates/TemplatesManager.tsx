@@ -32,7 +32,7 @@ interface Limits {
   status?: string | null;
   used24h?: number | null;
   canSend?: string | null;
-  sendProblems?: { where: string; code: number | null; text: string; solution: string | null }[];
+  sendProblems?: { where: string; code: number | null; text: string; solution: string | null; kind?: 'payment' }[];
   permissions?: string[] | null;
 }
 
@@ -61,7 +61,12 @@ function SendCheck({ l }: { l: Limits }) {
   return (
     <div className="text-xs text-red-800 bg-red-50 rounded-lg p-3 space-y-2">
       <p className="font-semibold flex gap-1.5">
-        <AlertTriangle className="w-4 h-4 shrink-0" /> {l.canSend === 'LIMITED' ? 'Meta está limitando los envíos de este número.' : 'Este número no puede enviar mensajes ahora (sí puede recibirlos).'}
+        <AlertTriangle className="w-4 h-4 shrink-0" />{' '}
+        {!noSendPerm && (l.sendProblems || []).length > 0 && (l.sendProblems || []).every((p) => p.kind === 'payment')
+          ? 'Este número puede responder a los clientes, pero no escribirles primero (plantillas) hasta que arregles el pago.'
+          : l.canSend === 'LIMITED'
+            ? 'Meta está limitando los envíos de este número.'
+            : 'Este número no puede enviar mensajes ahora (sí puede recibirlos).'}
       </p>
       {noSendPerm && (
         <p>
