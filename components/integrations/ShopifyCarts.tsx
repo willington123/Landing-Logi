@@ -13,14 +13,15 @@ interface Cart {
   total: number;
   currency: string;
   city: string;
-  status: 'waiting' | 'sent' | 'recovered' | 'declined' | 'purchased' | 'skipped' | 'failed';
+  status: 'waiting' | 'old' | 'sent' | 'recovered' | 'declined' | 'purchased' | 'skipped' | 'failed';
   note?: string;
+  createdAt?: string;
   updatedAt: string;
   sentAt?: string;
   orderNumber?: string;
 }
 interface Info {
-  settings: { enabled: boolean; delayMinutes: number; hasSecret: boolean };
+  settings: { enabled: boolean; delayMinutes: number; hasSecret: boolean; shop: string | null; hasAdmin: boolean };
   webhookUrl: string;
   carts: Cart[];
 }
@@ -34,6 +35,7 @@ async function call<T = any>(url: string, init?: RequestInit): Promise<T> {
 
 const STATUS: Record<Cart['status'], { label: string; cls: string }> = {
   waiting: { label: 'Esperando', cls: 'bg-slate-100 text-slate-700' },
+  old: { label: 'Anterior', cls: 'bg-violet-50 text-violet-700' },
   sent: { label: 'Mensaje enviado', cls: 'bg-sky-50 text-sky-700' },
   recovered: { label: 'Recuperado', cls: 'bg-emerald-50 text-emerald-700' },
   purchased: { label: 'Compró en Shopify', cls: 'bg-emerald-50 text-emerald-700' },
@@ -58,6 +60,11 @@ export default function ShopifyCarts() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shop, setShop] = useState('');
+  const [adminToken, setAdminToken] = useState('');
+  const [days, setDays] = useState(7);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -98,10 +105,66 @@ export default function ShopifyCarts() {
     }
   };
 
+  const connectAdmin = async () => {
+    setBusy('admin');
+    setError(null);
+    try {
+      await call('/api/shopify', { method: 'PUT', body: JSON.stringify({ shop, adminToken }) });
+      setAdminToken('');
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const importOld = async () => {
+    setBusy('import');
+    setError(null);
+    setNotice(null);
+    try {
+      const d = await call<{ imported: { found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number } }>('/api/shopify', { method: 'POST', body: JSON.stringify({ importDays: days }) });
+      const r = d.imported;
+      setNotice(
+        `Shopify tenía ${r.found} carritos abandonados. ${r.added} ${r.added === 1 ? 'quedó listo' : 'quedaron listos'} para enviar.` +
+          [r.bought && `${r.bought} ya compraron`, r.hasOrder && `${r.hasOrder} ya tienen pedido en Konnexa`, r.noPhone && `${r.noPhone} sin celular`, r.already && `${r.already} ya estaban`].filter(Boolean).map((x) => ` ${x}.`).join(''),
+      );
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const sendPicked = async () => {
+    const tokens = Array.from(picked);
+    if (!tokens.length || !confirm(`¿Enviar la plantilla «Recuperar carrito» a ${tokens.length} ${tokens.length === 1 ? 'cliente' : 'clientes'}? Meta cobra cada mensaje como marketing.`)) return;
+    setBusy('batch');
+    setError(null);
+    setNotice(null);
+    try {
+      const d = await call<{ sent: number; failed: number; error?: string }>('/api/shopify', { method: 'POST', body: JSON.stringify({ tokens }) });
+      setNotice(`${d.sent} ${d.sent === 1 ? 'mensaje enviado' : 'mensajes enviados'}.${d.failed ? ` ${d.failed} no salieron: ${d.error || 'error de WhatsApp'}` : ''}`);
+      setPicked(new Set());
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!info) return <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">{error ? <p className="text-sm text-red-600">{error}</p> : <Loader2 className="w-4 h-4 animate-spin text-slate-300" />}</div>;
   const s = info.settings;
   const recovered = info.carts.filter((c) => c.status === 'recovered').length;
   const sent = info.carts.filter((c) => ['sent', 'recovered', 'declined'].includes(c.status)).length;
+  const old = info.carts.filter((c) => c.status === 'old');
+  const allPicked = old.length > 0 && old.every((c) => picked.has(c.token));
+  const togglePick = (t: string) => setPicked((p) => {
+    const n = new Set(p);
+    n.has(t) ? n.delete(t) : n.add(t);
+    return n;
+  });
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
@@ -174,6 +237,71 @@ export default function ShopifyCarts() {
       <p className="text-[12px] text-slate-500">
         No se escribe a quien ya compró en Shopify, a quien ya tiene un pedido en Konnexa, ni a carritos de más de 48 horas. Cada carrito recibe un solo mensaje.
       </p>
+      <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+        <div>
+          <p className="text-[14px] font-semibold text-slate-900">Carritos de antes</p>
+          <p className="text-[12.5px] text-slate-600">
+            Los webhooks solo traen los carritos nuevos. Para los que ya estaban en Shopify (Pedidos → Pedidos abandonados), conecta una app de Shopify y tráelos. Konnexa quita a quien ya
+            compró, a quien ya tiene pedido aquí y a los que no tienen celular; luego tú eliges a quién escribir.
+          </p>
+        </div>
+        {!info.settings.hasAdmin ? (
+          <>
+            <ol className="text-[12.5px] text-slate-700 space-y-1 list-decimal pl-5">
+              <li>
+                En Shopify: <b>Configuración → Apps y canales de venta → Desarrollar apps → Crear una app</b> (llámala Konnexa).
+              </li>
+              <li>
+                En <b>Configuración de la API de Admin</b>, marca el permiso <b>read_orders</b> (Pedidos: leer) y guarda.
+              </li>
+              <li>
+                Dale <b>Instalar app</b> y luego <b>Revelar token una vez</b>: empieza por <span className="font-mono">shpat_</span>. Cópialo y pégalo aquí con el dominio de tu tienda.
+              </li>
+            </ol>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+              <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" autoCapitalize="none" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
+              <input type="password" value={adminToken} onChange={(e) => setAdminToken(e.target.value)} placeholder="shpat_…" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px]" />
+              <button type="button" disabled={!shop.trim() || !adminToken.trim() || busy !== null} onClick={connectAdmin} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
+                {busy === 'admin' && <Loader2 className="w-4 h-4 animate-spin" />} Conectar
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-slate-600">
+              Conectado a <b>{info.settings.shop}</b> ·
+            </span>
+            <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px]">
+              {[3, 7, 15, 30].map((d) => (
+                <option key={d} value={d}>
+                  Últimos {d} días
+                </option>
+              ))}
+            </select>
+            <button type="button" disabled={busy !== null} onClick={importOld} className="h-9 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-40">
+              {busy === 'import' && <Loader2 className="w-4 h-4 animate-spin" />} Traer carritos
+            </button>
+            <button type="button" disabled={busy !== null} onClick={() => call('/api/shopify', { method: 'PUT', body: JSON.stringify({ disconnectAdmin: true }) }).then(load)} className="h-9 px-2 text-[12px] text-slate-500 hover:text-red-600">
+              Desconectar
+            </button>
+          </div>
+        )}
+        {old.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-[13px] text-slate-700">
+                <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(old.map((c) => c.token)))} className="w-4 h-4" />
+                {old.length} {old.length === 1 ? 'carrito anterior' : 'carritos anteriores'} · seleccionar todos
+              </label>
+              <button type="button" disabled={!picked.size || busy !== null} onClick={sendPicked} className="ml-auto h-9 px-3 rounded-lg bg-[#5E8E3E] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-40">
+                {busy === 'batch' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Enviar a {picked.size || ''} {picked.size === 1 ? 'seleccionado' : 'seleccionados'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">Máximo 50 por envío. Empieza por los más recientes: son los que más se recuperan.</p>
+          </div>
+        )}
+      </div>
+      {notice && <p className="text-sm text-emerald-700">{notice}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="space-y-2">
@@ -191,6 +319,7 @@ export default function ShopifyCarts() {
           <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             {info.carts.map((c) => (
               <div key={c.token} className="p-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                {c.status === 'old' && <input type="checkbox" aria-label={`Elegir ${c.name || c.phone}`} checked={picked.has(c.token)} onChange={() => togglePick(c.token)} className="w-4 h-4" />}
                 <div className="flex-1 min-w-[200px]">
                   <p className="font-medium text-slate-900">
                     {c.name || 'Sin nombre'} <span className="text-slate-400 font-normal">· +{c.phone}</span>
@@ -200,13 +329,13 @@ export default function ShopifyCarts() {
                     {c.city ? ` · ${c.city}` : ''}
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    {when(c.updatedAt)}
+                    {c.status === 'old' ? `Abandonado el ${when(c.createdAt || c.updatedAt)}` : when(c.updatedAt)}
                     {c.note ? ` · ${c.note}` : ''}
                     {c.orderNumber ? ` · Pedido ${c.orderNumber}` : ''}
                   </p>
                 </div>
                 <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${STATUS[c.status].cls}`}>{STATUS[c.status].label}</span>
-                {(c.status === 'waiting' || c.status === 'failed') && (
+                {(c.status === 'waiting' || c.status === 'failed' || c.status === 'old') && (
                   <button type="button" disabled={busy !== null} onClick={() => sendNow(c.token)} className="h-8 px-2.5 rounded-lg border border-slate-200 text-[12px] font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1">
                     {busy === c.token ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Enviar ahora
                   </button>
