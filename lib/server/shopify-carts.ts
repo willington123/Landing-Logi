@@ -16,10 +16,13 @@ export interface ShopifySettings {
   enabled: boolean;
   secret: string; // Shopify's webhook signing key (Notificaciones → Webhooks)
   delayMinutes: number; // wait before writing (the customer may still be buying)
+  shop?: string; // mitienda.myshopify.com (only to bring carts from before the webhooks)
+  adminToken?: string; // Admin API token of the store's custom app (read_orders)
 }
 export const DEFAULT_SHOPIFY: ShopifySettings = { enabled: false, secret: '', delayMinutes: 60 };
 
-export type CartStatus = 'waiting' | 'sent' | 'recovered' | 'declined' | 'purchased' | 'skipped' | 'failed';
+// old: brought from Shopify (from before the webhooks); only sent when the store picks it.
+export type CartStatus = 'waiting' | 'old' | 'sent' | 'recovered' | 'declined' | 'purchased' | 'skipped' | 'failed';
 export interface ShopifyCart {
   token: string;
   name: string;
@@ -44,7 +47,7 @@ export interface ShopifyCart {
 const SETTINGS = 'shopify';
 const CARTS = 'shopify_carts';
 const KEEP_DAYS = 10;
-const MAX_CARTS = 400;
+const MAX_CARTS = 800;
 const MAX_AGE_TO_WRITE_H = 48; // older carts aren't written to (too late, and outside what the customer expects)
 
 async function read<T>(id: string): Promise<T | null> {
@@ -103,6 +106,38 @@ function phoneOf(c: any): string {
   return d.length >= 10 ? d : '';
 }
 
+
+// A Shopify checkout (webhook or Admin API) as a cart, or null without a phone or products.
+function cartFromCheckout(body: any, prev: ShopifyCart | undefined, now: string, status: CartStatus = 'waiting'): ShopifyCart | null {
+  const token = clean(body?.token || body?.cart_token || body?.id, 80);
+  const phone = phoneOf(body);
+  if (!token || !phone) return null;
+  const ship = body?.shipping_address || body?.billing_address || {};
+  const name = clean([ship.first_name || body?.customer?.first_name, ship.last_name || body?.customer?.last_name].filter(Boolean).join(' '), 120)
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+  const items = (Array.isArray(body?.line_items) ? body.line_items : [])
+    .slice(0, 10)
+    .map((li: any) => ({ title: clean([li.title, li.variant_title].filter(Boolean).join(' - '), 120), qty: Math.max(1, Number(li.quantity) || 1), price: money(li.price) }))
+    .filter((li: { title: string }) => li.title);
+  if (!items.length) return null;
+  return {
+    ...(prev || { createdAt: clean(body?.created_at, 40) || now, status }),
+    token,
+    name,
+    phone,
+    email: clean(body?.email, 120) || undefined,
+    items,
+    total: money(body?.total_price) || items.reduce((s: number, i: { qty: number; price: number }) => s + i.qty * i.price, 0),
+    currency: clean(body?.presentment_currency || body?.currency, 5) || 'COP',
+    address: clean([ship.address1, ship.address2].filter(Boolean).join(', ')),
+    city: clean(ship.city, 80),
+    department: clean(ship.province, 80),
+    url: clean(body?.abandoned_checkout_url, 500) || undefined,
+    updatedAt: now,
+  };
+}
+
 // checkouts/create and checkouts/update: keep the cart (or mark it paid); orders/create: the customer bought.
 export async function handleShopifyEvent(topic: string, body: any) {
   const all = await getCarts();
@@ -111,7 +146,7 @@ export async function handleShopifyEvent(topic: string, body: any) {
     const token = body?.checkout_token || body?.cart_token;
     const phone = phoneOf(body);
     for (const c of Object.values(all)) {
-      if ((token && c.token === token) || (phone && c.phone === phone && ['waiting', 'sent'].includes(c.status))) {
+      if ((token && c.token === token) || (phone && c.phone === phone && ['waiting', 'old', 'sent'].includes(c.status))) {
         all[c.token] = { ...c, status: c.status === 'sent' ? 'recovered' : 'purchased', note: 'Compró en Shopify.', updatedAt: now };
       }
     }
@@ -127,32 +162,9 @@ export async function handleShopifyEvent(topic: string, body: any) {
     await saveCarts(all);
     return { kept: false };
   }
-  const phone = phoneOf(body);
-  if (!phone) return { kept: false }; // nobody to write to
-  const ship = body?.shipping_address || body?.billing_address || {};
-  const name = clean([ship.first_name || body?.customer?.first_name, ship.last_name || body?.customer?.last_name].filter(Boolean).join(' '), 120)
-    .toLowerCase()
-    .replace(/(^|\s)\S/g, (m) => m.toUpperCase());
-  const items = (Array.isArray(body?.line_items) ? body.line_items : [])
-    .slice(0, 10)
-    .map((li: any) => ({ title: clean([li.title, li.variant_title].filter(Boolean).join(' - '), 120), qty: Math.max(1, Number(li.quantity) || 1), price: money(li.price) }))
-    .filter((li: { title: string }) => li.title);
-  if (!items.length) return { kept: false };
-  all[token] = {
-    ...(prev || { createdAt: clean(body?.created_at, 40) || now, status: 'waiting' as CartStatus }),
-    token,
-    name,
-    phone,
-    email: clean(body?.email, 120) || undefined,
-    items,
-    total: money(body?.total_price) || items.reduce((s: number, i: { qty: number; price: number }) => s + i.qty * i.price, 0),
-    currency: clean(body?.presentment_currency || body?.currency, 5) || 'COP',
-    address: clean([ship.address1, ship.address2].filter(Boolean).join(', ')),
-    city: clean(ship.city, 80),
-    department: clean(ship.province, 80),
-    url: clean(body?.abandoned_checkout_url, 500) || undefined,
-    updatedAt: now,
-  };
+  const cart = cartFromCheckout(body, prev, now);
+  if (!cart) return { kept: false }; // no phone or no products: nobody / nothing to write about
+  all[token] = cart;
   await saveCarts(all);
   return { kept: true };
 }
@@ -261,6 +273,128 @@ export async function cartButton(phone: string, action: 'confirm' | 'cancel', to
   return complete
     ? `¡Listo ${firstName(c.name)}! Tu pedido quedó confirmado ✅ Lo enviamos a ${c.city} y pagas al recibir. Te avisamos cuando salga con el número de guía.`
     : `¡Perfecto ${firstName(c.name)}! Para enviarte tu pedido necesitamos la dirección completa (calle y número, barrio), ciudad y departamento. Escríbela aquí 🙏`;
+}
+
+// ---------- carts from before the webhooks (Admin API) ----------
+
+const API = '2024-10';
+export const shopDomain = (v: string) =>
+  String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.myshopify\.com$/, '')
+    .replace(/[^a-z0-9-]/g, '');
+
+async function shopifyGet(s: ShopifySettings, path: string): Promise<{ data: any; next: string | null }> {
+  const url = path.startsWith('https://') ? path : `https://${shopDomain(s.shop || '')}.myshopify.com/admin/api/${API}/${path}`;
+  const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': s.adminToken || '', Accept: 'application/json' }, signal: AbortSignal.timeout(15000), cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new Error('Shopify no aceptó la clave de la app (revisa que la copiaste completa).');
+  if (res.status === 403) throw new Error('La app de Shopify no tiene el permiso read_orders: actívalo en la app y vuelve a instalarla.');
+  if (res.status === 404) throw new Error('No encontramos esa tienda: escribe el dominio .myshopify.com (lo ves en Shopify → Configuración → Dominios).');
+  if (!res.ok) throw new Error(`Shopify respondió HTTP ${res.status}${data?.errors ? `: ${JSON.stringify(data.errors).slice(0, 200)}` : ''}`);
+  const link = res.headers.get('link') || '';
+  const next = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1] || null;
+  return { data, next };
+}
+
+// Checks the store's Shopify app (shop + token) before saving it.
+export async function testShopifyAdmin(shop: string, token: string): Promise<string> {
+  const s = { ...DEFAULT_SHOPIFY, shop, adminToken: token };
+  const { data } = await shopifyGet(s, 'checkouts.json?limit=1');
+  if (!Array.isArray(data?.checkouts)) throw new Error('Shopify no devolvió los pedidos abandonados.');
+  return `${shopDomain(shop)}.myshopify.com`;
+}
+
+// Brings the abandoned checkouts of the last `days` days. They stay as "Anterior" until the store sends them.
+export async function importOldCarts(days: number): Promise<{ found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number }> {
+  const s = await getShopifySettings();
+  if (!s.shop || !s.adminToken) throw new Error('Conecta primero la app de Shopify (dominio y clave).');
+  const since = new Date(Date.now() - Math.min(Math.max(days, 1), 60) * 86400000).toISOString();
+  const checkouts: any[] = [];
+  let next: string | null = `checkouts.json?limit=250&created_at_min=${encodeURIComponent(since)}`;
+  for (let page = 0; next && page < 8; page++) {
+    const r: { data: any; next: string | null } = await shopifyGet(s, next);
+    checkouts.push(...(r.data?.checkouts || []));
+    next = r.next;
+  }
+  // Who bought in Shopify since then (by checkout or by phone).
+  const boughtTokens = new Set<string>();
+  const boughtPhones = new Set<string>();
+  next = `orders.json?status=any&limit=250&fields=checkout_token,cart_token,phone,shipping_address,billing_address,customer&created_at_min=${encodeURIComponent(since)}`;
+  for (let page = 0; next && page < 8; page++) {
+    const r: { data: any; next: string | null } = await shopifyGet(s, next);
+    for (const o of r.data?.orders || []) {
+      if (o.checkout_token) boughtTokens.add(String(o.checkout_token));
+      if (o.cart_token) boughtTokens.add(String(o.cart_token));
+      const p = phoneOf(o);
+      if (p) boughtPhones.add(p);
+    }
+    next = r.next;
+  }
+  const all = await getCarts();
+  const now = new Date().toISOString();
+  const out = { found: checkouts.length, added: 0, noPhone: 0, bought: 0, hasOrder: 0, already: 0 };
+  const seenPhones = new Set(Object.values(all).map((c) => c.phone));
+  // Newest first: one cart per customer (the latest one).
+  checkouts.sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
+  for (const ch of checkouts) {
+    const token = clean(ch?.token || ch?.cart_token || ch?.id, 80);
+    if (!token) continue;
+    if (all[token] || seenPhones.has(phoneOf(ch))) {
+      out.already++;
+      continue;
+    }
+    if (ch.completed_at || boughtTokens.has(token)) {
+      out.bought++;
+      continue;
+    }
+    const cart = cartFromCheckout(ch, undefined, now, 'old');
+    if (!cart) {
+      out.noPhone++;
+      continue;
+    }
+    if (boughtPhones.has(cart.phone)) {
+      out.bought++;
+      continue;
+    }
+    if (await orderedLately(cart.phone, Date.parse(cart.createdAt) - 3600000).catch(() => false)) {
+      out.hasOrder++;
+      continue;
+    }
+    all[token] = cart;
+    seenPhones.add(cart.phone);
+    out.added++;
+  }
+  await saveCarts(all);
+  return out;
+}
+
+// "Enviar a los seleccionados": the template to each chosen cart, one by one (at most 50 per click).
+export async function sendCarts(tokens: string[]): Promise<{ sent: number; failed: number; error?: string }> {
+  const all = await getCarts();
+  const out: { sent: number; failed: number; error?: string } = { sent: 0, failed: 0 };
+  for (const t of Array.from(new Set(tokens)).slice(0, 50)) {
+    const c = all[t];
+    if (!c || !['old', 'waiting', 'failed'].includes(c.status)) continue;
+    const r = await sendCart(c);
+    if (r.ok) {
+      out.sent++;
+      all[t] = { ...c, status: 'sent', sentAt: new Date().toISOString(), note: undefined };
+    } else {
+      out.failed++;
+      out.error = r.error;
+      // The template isn't ready or WhatsApp isn't connected: stop and leave the carts as they were.
+      if (/plantilla|WhatsApp no está conectado/.test(r.error || '')) break;
+      all[t] = { ...c, status: 'failed', note: r.error };
+    }
+  }
+  const fresh = await getCarts();
+  for (const t of tokens) if (fresh[t] && all[t]) fresh[t] = { ...fresh[t], status: all[t].status, sentAt: all[t].sentAt, note: all[t].note };
+  await saveCarts(fresh);
+  return out;
 }
 
 export const markCartSent = (token: string) => patchCart(token, { status: 'sent', sentAt: new Date().toISOString(), note: undefined });
