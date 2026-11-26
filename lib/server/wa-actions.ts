@@ -130,6 +130,20 @@ export async function handleInbound(m: InboundMessage) {
     return;
   }
 
+  // "Confirmar pedido" / "No, gracias" on a Shopify abandoned cart.
+  if (m.cart) {
+    const carts = await import('@/lib/server/shopify-carts');
+    const text = await carts.cartButton(m.from, m.cart.action, m.cart.token);
+    await carts.replyText(m.from, text);
+    // Missing address: a person completes it (the assistant can't change a Shopify order).
+    if (m.cart.action === 'confirm' && /necesitamos la direcci/.test(text)) {
+      const { setBotState } = await import('@/lib/server/bot');
+      await setBotState(m.from, { paused: true, pausedAt: new Date().toISOString(), reason: 'handoff', note: 'Carrito de Shopify confirmado: falta la dirección completa.' }).catch(() => {});
+      await (await import('@/lib/server/push')).pushToStore({ kind: 'handoff', chatId: m.from, title: `🛒 ${m.profileName || 'Un cliente'} confirmó su carrito`, body: 'Falta la dirección completa: complétala en el pedido.' }).catch(() => {});
+    }
+    return;
+  }
+
   // The message names an order (e.g. the landing's pre-filled "Quiero confirmar mi pedido LP-12345"):
   // show that order next to the chat even if no action follows.
   if (m.orderNumber) {

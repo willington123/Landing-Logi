@@ -268,7 +268,7 @@ export interface OrderItem {
   notes?: string;
   paymentMethod: PaymentMethodType;
   status: OrderStatus;
-  source?: 'landing' | 'whatsapp_bot' | 'manual'; // where the order was taken (landing form by default; manual = typed by the team)
+  source?: 'landing' | 'whatsapp_bot' | 'manual' | 'shopify_cart'; // where the order was taken (landing form by default; manual = typed by the team)
   createdBy?: string | null; // who typed a manual order
   utmSource?: string;
   utmCampaign?: string;

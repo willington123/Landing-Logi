@@ -101,6 +101,8 @@ async function runScheduledForOrg(origin: string | undefined, source: RunSource,
   ]);
   // The store's own flows: waits that ended and chats that went quiet.
   await processFlows(new Date(), deadline).catch((e) => console.error('Flujos:', e));
+  // Shopify abandoned carts whose wait ended.
+  await (await import('@/lib/server/shopify-carts')).processCarts(new Date()).catch((e) => console.error('Carritos Shopify:', e));
   // Keep what happened so the panel can explain it.
   const now = new Date().toISOString();
   const patch: Partial<SchedulerInfo> = {};

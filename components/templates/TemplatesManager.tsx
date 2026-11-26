@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Check, CheckCircle2, Gauge, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from 'lucide-react';
-import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET, NOVELTY_PRESET } from '@/lib/wa-templates';
+import { APPOINTMENT_PRESET, COME_BACK_PRESET, CONFIRM_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET, NOVELTY_PRESET, CART_PRESET } from '@/lib/wa-templates';
 
 async function call(url: string, method = 'GET', body?: unknown) {
   const res = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -285,6 +285,7 @@ export default function TemplatesManager() {
   const hasGuidePhotoPreset = list?.some((t) => t.name === GUIDE_PHOTO_PRESET.name);
   const hasProcessPreset = list?.some((t) => t.name === PROCESS_PRESET.name);
   const hasNoveltyPreset = list?.some((t) => t.name === NOVELTY_PRESET.name);
+  const hasCartPreset = list?.some((t) => t.name === CART_PRESET.name);
   const varsIn = (f.body.match(/\{\{\d+\}\}/g) || []).length;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -373,6 +374,18 @@ export default function TemplatesManager() {
                 </div>
                 <button onClick={() => run('preset-guide', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'guide' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
                   {busy === 'preset-guide' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
+                </button>
+              </div>
+            )}
+            {!hasCartPreset && (
+              <div className="rounded-lg bg-white border border-violet-200 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="text-[13px] font-semibold text-slate-900">Recuperar carrito (Shopify)</p>
+                  <p className="text-[11px] text-slate-500">Para los carritos abandonados de Shopify, con los botones Confirmar pedido / No, gracias. Es de marketing (así la clasifica Meta).</p>
+                  <p className="mt-1 text-[11px] text-slate-600 italic">“{CART_PRESET.body.replace(/\{\{(\d)\}\}/g, (_, i) => CART_PRESET.examples[Number(i) - 1])}”</p>
+                </div>
+                <button onClick={() => run('preset-cart', () => call('/api/integrations/whatsapp/templates', 'POST', { preset: 'cart' }).then(() => setCreating(false)))} disabled={busy !== null} className={primary}>
+                  {busy === 'preset-cart' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Crearla
                 </button>
               </div>
             )}

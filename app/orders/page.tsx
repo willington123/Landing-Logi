@@ -624,6 +624,11 @@ export default function OrdersPage() {
                 </p>
               )}
 
+              {selectedOrder.source === 'shopify_cart' && (
+                <p className="text-xs font-medium text-[#3F6B28] bg-[#5E8E3E]/10 border border-[#5E8E3E]/20 rounded-lg px-3 py-2">
+                  🛒 Carrito abandonado de Shopify: el cliente lo confirmó por WhatsApp.{selectedOrder.status === 'needs_review' ? ' Falta completar la dirección.' : ''}
+                </p>
+              )}
               <WhatsAppOrderStatus order={selectedOrder} onSent={reloadAll} />
               <CopyForDropi order={selectedOrder} defaultOpen={!selectedOrder.inDropi && !selectedOrder.dropi?.orderId} />
               <DropiOrderStatus order={selectedOrder} onSent={reloadAll} />
