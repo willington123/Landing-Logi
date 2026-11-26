@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { currentOrgId } from '@/lib/server/tenant';
 import { requireManager } from '@/lib/server/integrations-api';
 import { publicBaseUrl } from '@/lib/server/vapi';
-import { DEFAULT_SHOPIFY, getCarts, getShopifySettings, saveShopifySettings, sendCarts } from '@/lib/server/shopify-carts';
+import { CART_DELAYS, DEFAULT_SHOPIFY, getCarts, getShopifySettings, saveShopifySettings, sendCarts } from '@/lib/server/shopify-carts';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest) {
     const enabled = typeof b.enabled === 'boolean' ? b.enabled : s.enabled;
     if (enabled && !secret) return fail('Pega la clave de firma de los webhooks de Shopify para activarlo.');
     const delay = Number(b.delayMinutes ?? s.delayMinutes);
-    await saveShopifySettings({ ...DEFAULT_SHOPIFY, ...s, secret, enabled, delayMinutes: [15, 30, 60, 120, 240, 720].includes(delay) ? delay : s.delayMinutes });
+    await saveShopifySettings({ ...DEFAULT_SHOPIFY, ...s, secret, enabled, delayMinutes: CART_DELAYS.includes(delay) ? delay : s.delayMinutes });
     return ok({});
   } catch (e) {
     return failFrom(e);

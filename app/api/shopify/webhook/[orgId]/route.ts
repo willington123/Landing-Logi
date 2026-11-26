@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runWithOrg } from '@/lib/server/tenant';
 import { rawDb } from '@/lib/server/supabase';
-import { getShopifySettings, handleShopifyEvent, validShopifySignature } from '@/lib/server/shopify-carts';
+import { waitUntil } from '@vercel/functions';
+import { getShopifySettings, handleShopifyEvent, processCarts, validShopifySignature } from '@/lib/server/shopify-carts';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // short waits (2–4 min) are timed from here
 
 // Shopify → Konnexa: checkouts (abandoned carts) and orders of one store. Signed with the store's webhook key.
 export async function POST(req: NextRequest, { params }: { params: { orgId: string } }) {
@@ -22,7 +24,17 @@ export async function POST(req: NextRequest, { params }: { params: { orgId: stri
       return NextResponse.json({ ok: false }, { status: 400 });
     }
     const topic = req.headers.get('x-shopify-topic') || '';
-    await handleShopifyEvent(topic, body).catch((e) => console.error('Shopify webhook', topic, e));
+    const r = await handleShopifyEvent(topic, body).catch((e) => {
+      console.error('Shopify webhook', topic, e);
+      return { kept: false };
+    });
+    // The scheduled task runs every few minutes; for a short wait, the message goes right when it ends.
+    if (r.kept && s.enabled && s.delayMinutes <= 4)
+      waitUntil(
+        new Promise((done) => setTimeout(done, s.delayMinutes * 60000 + 5000)).then(() =>
+          runWithOrg(org, () => processCarts(new Date(), org)).catch((e) => console.error('Carritos Shopify (espera corta)', e)),
+        ),
+      );
     return NextResponse.json({ ok: true });
   });
 }

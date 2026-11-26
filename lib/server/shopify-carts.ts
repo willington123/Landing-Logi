@@ -10,6 +10,7 @@ import { recordOutbound, linkConversationOrder, samePhone } from '@/lib/server/w
 import { listTemplates, sendText, whatsappEnabled, sendCartTemplate } from '@/lib/server/whatsapp';
 import { CART_PRESET } from '@/lib/wa-templates';
 import { normalizePhone } from '@/lib/phone';
+import { requestOrgSync } from '@/lib/server/tenant';
 import { localPhoneDigits } from '@/lib/order-form';
 import type { OrderItem } from '@/lib/types';
 
@@ -18,7 +19,9 @@ export interface ShopifySettings {
   secret: string; // Shopify's webhook signing key (Notificaciones → Webhooks)
   delayMinutes: number; // wait before writing (the customer may still be buying)
 }
-export const DEFAULT_SHOPIFY: ShopifySettings = { enabled: false, secret: '', delayMinutes: 60 };
+export const DEFAULT_SHOPIFY: ShopifySettings = { enabled: false, secret: '', delayMinutes: 2 };
+// Minutes to wait before writing.
+export const CART_DELAYS = [2, 5, 10, 15, 30, 60, 120, 240, 720];
 
 export type CartStatus = 'waiting' | 'sent' | 'recovered' | 'declined' | 'purchased' | 'skipped' | 'failed';
 export interface ShopifyCart {
@@ -61,7 +64,7 @@ async function write(id: string, data: unknown) {
 export async function getShopifySettings(): Promise<ShopifySettings> {
   const s = (await read<Partial<ShopifySettings>>(SETTINGS)) || {};
   const delay = Number(s.delayMinutes);
-  return { ...DEFAULT_SHOPIFY, ...s, delayMinutes: [15, 30, 60, 120, 240, 720].includes(delay) ? delay : DEFAULT_SHOPIFY.delayMinutes };
+  return { ...DEFAULT_SHOPIFY, ...s, delayMinutes: CART_DELAYS.includes(delay) ? delay : DEFAULT_SHOPIFY.delayMinutes };
 }
 export const saveShopifySettings = (s: ShopifySettings) => write(SETTINGS, s);
 
@@ -248,7 +251,22 @@ export async function sendCart(c: ShopifyCart): Promise<{ ok: boolean; error?: s
 }
 
 // Scheduled: carts that waited the store's delay and weren't paid.
-export async function processCarts(now = new Date()) {
+// One run at a time per store in this server (a webhook's timer and the scheduled task can meet).
+const running = new Map<string, Promise<unknown>>();
+export async function processCarts(now = new Date(), orgId?: string): Promise<{ sent: number; skipped: number; failed: number } | null> {
+  const org = orgId || requestOrgSync() || 'default';
+  const prev = running.get(org);
+  if (prev) await prev.catch(() => null);
+  const run = processCartsNow(now);
+  running.set(org, run);
+  try {
+    return await run;
+  } finally {
+    if (running.get(org) === run) running.delete(org);
+  }
+}
+
+async function processCartsNow(now = new Date()) {
   if (!cloudEnabled()) return null;
   const s = await getShopifySettings();
   if (!s.enabled) return null;
