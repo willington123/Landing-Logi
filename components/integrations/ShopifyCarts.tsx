@@ -125,11 +125,14 @@ export default function ShopifyCarts() {
     setError(null);
     setNotice(null);
     try {
-      const d = await call<{ imported: { found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number } }>('/api/shopify', { method: 'POST', body: JSON.stringify({ importDays: days }) });
+      const d = await call<{ imported: { found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number; hidden?: boolean } }>('/api/shopify', { method: 'POST', body: JSON.stringify({ importDays: days }) });
       const r = d.imported;
+      const protectedHint =
+        ' Si en Shopify sí ves pedidos abandonados (o salen «sin celular»), falta permitir los datos de los clientes: Shopify Dev Dashboard → tu app → Configuración → Solicitudes de acceso → Datos protegidos del cliente → Administrar → marca Datos del cliente, Nombre, Correo, Teléfono y Dirección → Guardar. Luego trae de nuevo.';
       setNotice(
-        `Shopify tenía ${r.found} carritos abandonados. ${r.added} ${r.added === 1 ? 'quedó listo' : 'quedaron listos'} para enviar.` +
-          [r.bought && `${r.bought} ya compraron`, r.hasOrder && `${r.hasOrder} ya tienen pedido en Konnexa`, r.noPhone && `${r.noPhone} sin celular`, r.already && `${r.already} ya estaban`].filter(Boolean).map((x) => ` ${x}.`).join(''),
+        `Shopify entregó ${r.found} carritos abandonados. ${r.added} ${r.added === 1 ? 'quedó listo' : 'quedaron listos'} para enviar.` +
+          [r.bought && `${r.bought} ya compraron`, r.hasOrder && `${r.hasOrder} ya tienen pedido en Konnexa`, r.noPhone && `${r.noPhone} sin celular`, r.already && `${r.already} ya estaban`].filter(Boolean).map((x) => ` ${x}.`).join('') +
+          (r.found === 0 || r.hidden || (r.noPhone > 0 && r.noPhone >= r.found / 2) ? protectedHint : ''),
       );
       await load();
     } catch (e: any) {

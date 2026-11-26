@@ -279,7 +279,7 @@ export async function cartButton(phone: string, action: 'confirm' | 'cancel', to
 
 // ---------- carts from before the webhooks (Admin API) ----------
 
-const API = '2024-10';
+const API = '2026-07'; // GraphQL Admin API (REST is legacy and doesn't list abandoned checkouts to new apps)
 export const shopDomain = (v: string) =>
   String(v || '')
     .trim()
@@ -319,67 +319,124 @@ async function accessToken(s: ShopifySettings): Promise<string> {
   return String(data.access_token);
 }
 
-async function shopifyGet(s: ShopifySettings, path: string): Promise<{ data: any; next: string | null }> {
-  const url = path.startsWith('https://') ? path : `https://${shopDomain(s.shop || '')}.myshopify.com/admin/api/${API}/${path}`;
-  const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': await accessToken(s), Accept: 'application/json' }, signal: AbortSignal.timeout(15000), cache: 'no-store' });
-  const data = await res.json().catch(() => ({}));
+// Shopify's errors when the app can't read customer data (name, phone, address): "protected customer data".
+const PROTECTED_HELP =
+  'Shopify no deja que la app lea los datos de los clientes. En Shopify Dev Dashboard → tu app → Configuración → Solicitudes de acceso → Datos protegidos del cliente → Administrar: marca «Datos del cliente» y los campos Nombre, Correo, Teléfono y Dirección, escribe el motivo (recuperar carritos abandonados por WhatsApp) y guarda. Luego vuelve a «Traer carritos».';
+
+async function shopifyGraphQL(s: ShopifySettings, query: string, variables: Record<string, unknown> = {}): Promise<{ data: any; errors: any[] }> {
+  const url = `https://${shopDomain(s.shop || '')}.myshopify.com/admin/api/${API}/graphql.json`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': await accessToken(s), 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(20000),
+    cache: 'no-store',
+  });
+  const body = await res.json().catch(() => ({}));
   if (res.status === 401) {
     tokenCache.clear();
     throw new Error('Shopify no aceptó el acceso de la app (revisa que copiaste las claves completas).');
   }
   if (res.status === 403) throw new Error('La app de Shopify no tiene el permiso read_orders: agrégalo en la app, publica la versión y vuelve a instalarla.');
   if (res.status === 404) throw new Error('No encontramos esa tienda: escribe el dominio .myshopify.com (lo ves en Shopify → Configuración → Dominios).');
-  if (!res.ok) throw new Error(`Shopify respondió HTTP ${res.status}${data?.errors ? `: ${JSON.stringify(data.errors).slice(0, 200)}` : ''}`);
-  const link = res.headers.get('link') || '';
-  const next = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1] || null;
-  return { data, next };
+  if (!res.ok) throw new Error(`Shopify respondió HTTP ${res.status}${body?.errors ? `: ${JSON.stringify(body.errors).slice(0, 200)}` : ''}`);
+  return { data: body?.data ?? null, errors: Array.isArray(body?.errors) ? body.errors : body?.errors ? [body.errors] : [] };
 }
+const deniedText = (errors: any[]) => errors.map((e) => `${e?.message || ''} ${e?.extensions?.code || ''}`).join(' ');
+const isDenied = (errors: any[]) => /ACCESS_DENIED|protected customer|not approved|access denied/i.test(deniedText(errors));
 
 // Checks the store's Shopify app (shop + token) before saving it.
 export async function testShopifyAdmin(creds: Pick<ShopifySettings, 'shop' | 'adminToken' | 'clientId' | 'clientSecret'>): Promise<string> {
   const s = { ...DEFAULT_SHOPIFY, ...creds };
-  const shop = creds.shop || '';
-  const { data } = await shopifyGet(s, 'checkouts.json?limit=1');
-  if (!Array.isArray(data?.checkouts)) throw new Error('Shopify no devolvió los pedidos abandonados.');
-  return `${shopDomain(shop)}.myshopify.com`;
+  const r = await shopifyGraphQL(s, '{ shop { name } }');
+  if (!r.data?.shop) throw new Error(`Shopify no respondió como esperábamos${r.errors.length ? `: ${deniedText(r.errors).slice(0, 200)}` : ''}.`);
+  return `${shopDomain(creds.shop || '')}.myshopify.com`;
+}
+
+const CHECKOUTS_Q = `query Carts($q: String!, $after: String) {
+  abandonedCheckouts(first: 100, after: $after, query: $q, sortKey: CREATED_AT, reverse: true) {
+    nodes {
+      id createdAt completedAt
+      customer { firstName lastName defaultPhoneNumber { phoneNumber } defaultEmailAddress { emailAddress } }
+      shippingAddress { firstName lastName phone address1 address2 city province country }
+      billingAddress { phone }
+      totalPriceSet { shopMoney { amount currencyCode } }
+      lineItems(first: 10) { nodes { title variantTitle quantity originalUnitPriceSet { shopMoney { amount } } } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+const ORDERS_Q = `query Bought($q: String!, $after: String) {
+  orders(first: 250, after: $after, query: $q) {
+    nodes { phone shippingAddress { phone } billingAddress { phone } customer { defaultPhoneNumber { phoneNumber } } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+// A GraphQL abandoned checkout in the webhook's shape (what cartFromCheckout reads).
+function restShape(n: any): any {
+  const ship = n?.shippingAddress || {};
+  return {
+    token: `ac-${String(n?.id || '').split('/').pop()}`,
+    created_at: n?.createdAt,
+    completed_at: n?.completedAt,
+    phone: n?.customer?.defaultPhoneNumber?.phoneNumber || ship.phone || n?.billingAddress?.phone || '',
+    email: n?.customer?.defaultEmailAddress?.emailAddress || '',
+    customer: { first_name: n?.customer?.firstName, last_name: n?.customer?.lastName },
+    shipping_address: { first_name: ship.firstName, last_name: ship.lastName, phone: ship.phone, address1: ship.address1, address2: ship.address2, city: ship.city, province: ship.province, country: ship.country },
+    total_price: n?.totalPriceSet?.shopMoney?.amount,
+    currency: n?.totalPriceSet?.shopMoney?.currencyCode,
+    line_items: (n?.lineItems?.nodes || []).map((li: any) => ({ title: li.title, variant_title: li.variantTitle, quantity: li.quantity, price: li.originalUnitPriceSet?.shopMoney?.amount })),
+  };
 }
 
 // Brings the abandoned checkouts of the last `days` days. They stay as "Anterior" until the store sends them.
-export async function importOldCarts(days: number): Promise<{ found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number }> {
+export async function importOldCarts(days: number): Promise<{ found: number; added: number; noPhone: number; bought: number; hasOrder: number; already: number; hidden?: boolean }> {
   const s = await getShopifySettings();
   if (!hasShopifyAdmin(s)) throw new Error('Conecta primero la app de Shopify (dominio y claves).');
-  const since = new Date(Date.now() - Math.min(Math.max(days, 1), 60) * 86400000).toISOString();
+  const sinceDay = new Date(Date.now() - Math.min(Math.max(days, 1), 60) * 86400000).toISOString().slice(0, 10);
   const checkouts: any[] = [];
-  let next: string | null = `checkouts.json?limit=250&created_at_min=${encodeURIComponent(since)}`;
-  for (let page = 0; next && page < 8; page++) {
-    const r: { data: any; next: string | null } = await shopifyGet(s, next);
-    checkouts.push(...(r.data?.checkouts || []));
-    next = r.next;
+  let hidden = false; // Shopify answered but left out customer fields (protected customer data)
+  let after: string | null = null;
+  for (let page = 0; page < 8; page++) {
+    const r: { data: any; errors: any[] } = await shopifyGraphQL(s, CHECKOUTS_Q, { q: `created_at:>=${sinceDay}`, after });
+    const conn = r.data?.abandonedCheckouts;
+    if (!conn) {
+      if (isDenied(r.errors)) throw new Error(PROTECTED_HELP);
+      throw new Error(`Shopify no devolvió los pedidos abandonados${r.errors.length ? `: ${deniedText(r.errors).slice(0, 200)}` : ''}.`);
+    }
+    if (r.errors.length && isDenied(r.errors)) hidden = true;
+    checkouts.push(...(conn.nodes || []).map(restShape));
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
   }
-  // Who bought in Shopify since then (by checkout or by phone).
+  // Who bought in Shopify since then (by phone). If Shopify doesn't let us read orders, Konnexa's own orders
+  // and the "Creación de pedido" webhook still avoid writing to buyers.
   const boughtTokens = new Set<string>();
   const boughtPhones = new Set<string>();
-  next = `orders.json?status=any&limit=250&fields=checkout_token,cart_token,phone,shipping_address,billing_address,customer&created_at_min=${encodeURIComponent(since)}`;
-  for (let page = 0; next && page < 8; page++) {
-    const r: { data: any; next: string | null } = await shopifyGet(s, next);
-    for (const o of r.data?.orders || []) {
-      if (o.checkout_token) boughtTokens.add(String(o.checkout_token));
-      if (o.cart_token) boughtTokens.add(String(o.cart_token));
-      const p = phoneOf(o);
+  after = null;
+  for (let page = 0; page < 8; page++) {
+    const r: { data: any; errors: any[] } = await shopifyGraphQL(s, ORDERS_Q, { q: `created_at:>=${sinceDay}`, after }).catch(() => ({ data: null, errors: [] }));
+    const conn = r.data?.orders;
+    if (!conn) break;
+    for (const o of conn.nodes || []) {
+      const p = phoneOf({ phone: o.phone || o.customer?.defaultPhoneNumber?.phoneNumber, shipping_address: { phone: o.shippingAddress?.phone }, billing_address: { phone: o.billingAddress?.phone } });
       if (p) boughtPhones.add(p);
     }
-    next = r.next;
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
   }
   const all = await getCarts();
   const now = new Date().toISOString();
-  const out = { found: checkouts.length, added: 0, noPhone: 0, bought: 0, hasOrder: 0, already: 0 };
+  const out = { found: checkouts.length, added: 0, noPhone: 0, bought: 0, hasOrder: 0, already: 0, hidden };
   const seenPhones = new Set(Object.values(all).map((c) => c.phone));
   // Newest first: one cart per customer (the latest one).
   checkouts.sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
   for (const ch of checkouts) {
     const token = clean(ch?.token || ch?.cart_token || ch?.id, 80);
     if (!token) continue;
-    if (all[token] || seenPhones.has(phoneOf(ch))) {
+    const ph = phoneOf(ch);
+    if (all[token] || (ph && seenPhones.has(ph))) {
       out.already++;
       continue;
     }
