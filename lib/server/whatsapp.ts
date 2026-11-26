@@ -188,6 +188,25 @@ export function sendAppointmentTemplate(to: string, t: { name: string; lang: str
   });
 }
 
+// Abandoned-cart template ("recuperar_carrito"): {{1}} name, {{2}} products, {{3}} total, {{4}} city.
+// Its buttons carry the Shopify checkout token.
+export function sendCartTemplate(to: string, t: { name?: string; lang: string }, vars: string[], token: string): Promise<SendResult> {
+  if (social(to)) return Promise.resolve(NOT_WHATSAPP);
+  return send({
+    to,
+    type: 'template',
+    template: {
+      name: t.name || 'recuperar_carrito',
+      language: { code: t.lang || 'es' },
+      components: [
+        { type: 'body', parameters: vars.map(param) },
+        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: `cart_confirm:${token}` }] },
+        { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: `cart_cancel:${token}` }] },
+      ],
+    },
+  });
+}
+
 // Any approved template with body variables (its quick-reply buttons send their own text back).
 export function sendTemplate(to: string, t: { name: string; lang: string }, vars: string[], headerImage?: string): Promise<SendResult> {
   if (social(to)) return Promise.resolve(NOT_WHATSAPP);
@@ -278,6 +297,7 @@ export interface InboundMessage {
   orderId?: string; // from a button payload like "confirm:<orderId>"
   orderNumber?: string; // "LP-12345" written in the message (e.g. the landing's pre-filled text)
   appt?: { action: 'confirm' | 'cancel'; id: string }; // tapped Confirmar cita / Cancelar cita
+  cart?: { action: 'confirm' | 'cancel'; token: string }; // tapped a button on the Shopify abandoned-cart template
   phoneNumberId?: string; // the store's number that received it (routes the notice to its store)
   ad?: AdRef; // the customer wrote from a click-to-WhatsApp ad
   raw: unknown;
@@ -302,7 +322,7 @@ const norm = (v: string) =>
 
 // Reads a button payload ("confirm:<id>") or a reply text ("Confirmar pedido" / "Cancelar").
 export function detectIntent(payload: string, text: string, isButton: boolean): { intent: Intent; orderId?: string; orderNumber?: string } {
-  if (/^appt_(confirm|cancel):/.test(payload || '')) return { intent: null }; // appointment buttons (handled apart)
+  if (/^(appt|cart)_(confirm|cancel):/.test(payload || '')) return { intent: null }; // appointment and cart buttons (handled apart)
   const p = /^(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
   if (p) return { intent: p[1] as Intent, orderId: p[2] };
   // The landing's pre-filled message: "Quiero confirmar mi pedido ... *Pedido:* LP-12345 ...".
@@ -369,6 +389,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
         }
         const { intent, orderId, orderNumber } = detectIntent(payload, text, isButton);
         const ap = /^appt_(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
+        const cp = /^cart_(confirm|cancel):([\w-]{1,80})$/.exec(payload || '');
         messages.push({
           waMessageId: m.id,
           from: String(m.from).replace(/\D/g, ''),
@@ -380,6 +401,7 @@ export function parseWebhook(body: any): { messages: InboundMessage[]; statuses:
           orderId,
           orderNumber,
           ...(ap ? { appt: { action: ap[1] as 'confirm' | 'cancel', id: ap[2] } } : {}),
+          ...(cp ? { cart: { action: cp[1] as 'confirm' | 'cancel', token: cp[2] } } : {}),
           phoneNumberId,
           ad: adFromReferral(m.referral, iso(m.timestamp)) || undefined,
           raw: m,

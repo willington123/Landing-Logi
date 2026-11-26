@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import WhatsAppProfile from '@/components/integrations/WhatsAppProfile';
 import DropiConnection from '@/components/integrations/DropiConnection';
+import ShopifyCarts from '@/components/integrations/ShopifyCarts';
 import { KeyConnection, ConversionsCard, MetaAdsConnection, VapiConnection, WhatsAppConnection, loadIntegrations, type IntegrationsInfo } from '@/components/integrations/Connections';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -735,6 +736,7 @@ export default function IntegrationsPage() {
               <MetaAdsConnection info={integ} onChanged={reload} />
               <ConversionsCard info={integ} />
               <DropiConnection />
+              <ShopifyCarts />
             </div>
           )}
 

@@ -174,3 +174,14 @@ export function readCarrierText(raw: string, carriers: readonly string[]): Parti
   else if (/ausente|cerrado|nadie/i.test(out.novelty || '')) out.summary = NOVELTY_REASONS[3].summary;
   return out;
 }
+
+// Shopify abandoned cart (marketing: Meta counts cart reminders as marketing): {{1}} name, {{2}} products,
+// {{3}} total, {{4}} city. Buttons carry the checkout: "Confirmar pedido" creates the order in Konnexa.
+export const CART_PRESET = {
+  name: 'recuperar_carrito',
+  language: 'es',
+  category: 'MARKETING' as const,
+  body: 'Hola {{1}} 👋 Vimos que dejaste tu pedido de {{2}} por {{3}} sin terminar. Te lo podemos enviar a {{4}} y pagas al recibir 🚚 ¿Confirmas tu pedido?',
+  examples: ['Laura', 'Bálsamo Rosa', '$79.900', 'Medellín'],
+  buttons: ['Confirmar pedido', 'No, gracias'],
+};

@@ -5,7 +5,7 @@ import { updateIntegrations, waConfig } from '@/lib/server/integrations';
 import { currentOrgId } from '@/lib/server/tenant';
 import { Forbidden, requireManager } from '@/lib/server/integrations-api';
 import { fail, failFrom, ok } from '@/lib/server/http';
-import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET, NOVELTY_PRESET } from '@/lib/wa-templates';
+import { CONFIRM_PRESET, APPOINTMENT_PRESET, COME_BACK_PRESET, GUIDE_PRESET, GUIDE_PHOTO_PRESET, PROCESS_PRESET, NOVELTY_PRESET, CART_PRESET } from '@/lib/wa-templates';
 import { GUIDE_SAMPLE_JPEG_BASE64 } from '@/lib/server/guide-sample';
 import { metaUploadHandle } from '@/lib/server/wa-profile';
 
@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
                   ? PROCESS_PRESET
                   : b.preset === 'novelty'
                     ? NOVELTY_PRESET
+                  : b.preset === 'cart'
+                    ? CART_PRESET
                   : {
             name: String(b.name || '').trim().toLowerCase(),
             language: String(b.language || 'es').trim(),
