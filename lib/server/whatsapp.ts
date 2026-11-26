@@ -514,6 +514,7 @@ export interface NumberHealth {
   // Meta's own answer to "can this number send?" (health_status): AVAILABLE | LIMITED | BLOCKED, with its reasons.
   canSend: string | null;
   sendProblems: { where: string; code: number | null; text: string; solution: string | null; kind?: 'payment' }[];
+  callingOnly?: boolean;
   // Permissions of the connection's token (null = Meta didn't say, e.g. some business tokens).
   permissions: string[] | null;
 }
@@ -536,6 +537,9 @@ export async function numberHealth(): Promise<{ ok: true; health: NumberHealth }
     const hs = await get('health_status').catch(() => ({}) as Record<string, any>);
     const entities: any[] = Array.isArray(hs.health_status?.entities) ? hs.health_status.entities : [];
     const WHERE: Record<string, string> = { PHONE_NUMBER: 'Número', WABA: 'Cuenta de WhatsApp', BUSINESS: 'Portafolio de Meta', APP: 'App de Meta', MESSAGE_TEMPLATE: 'Plantilla' };
+    const allProblems = entities.flatMap((e) => (Array.isArray(e.errors) ? e.errors : []));
+    const isCalling = (x: any) => /\b(SIP|calling)\b/i.test(String(x.error_description || '')) || (Number(x.error_code) >= 138000 && Number(x.error_code) < 139000);
+    const callingOnly = allProblems.length > 0 && allProblems.every(isCalling);
     const sendProblems = entities
       .flatMap((e) =>
         (Array.isArray(e.errors) ? e.errors : []).map((x: any) => ({
@@ -576,6 +580,7 @@ export async function numberHealth(): Promise<{ ok: true; health: NumberHealth }
         throughput: extra.throughput?.level || null,
         status: extra.status || null,
         canSend: hs.health_status?.can_send_message || null,
+        callingOnly, // every notice Meta gave is about WhatsApp calling (not messages)
         sendProblems,
         permissions,
       },
