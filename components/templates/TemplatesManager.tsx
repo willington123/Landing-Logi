@@ -33,6 +33,7 @@ interface Limits {
   used24h?: number | null;
   canSend?: string | null;
   sendProblems?: { where: string; code: number | null; text: string; solution: string | null; kind?: 'payment' }[];
+  callingOnly?: boolean;
   permissions?: string[] | null;
 }
 
@@ -49,6 +50,13 @@ const fmt = (n: number) => n.toLocaleString('es-CO');
 function SendCheck({ l }: { l: Limits }) {
   const noSendPerm = Array.isArray(l.permissions) && !l.permissions.includes('whatsapp_business_messaging');
   const blocked = l.canSend === 'BLOCKED' || l.canSend === 'LIMITED';
+  // Meta only complains about WhatsApp calling (voice calls), which Konnexa doesn't use: messages are fine.
+  if (!noSendPerm && blocked && l.callingOnly)
+    return (
+      <p className="text-xs text-emerald-800 bg-emerald-50 rounded-lg p-2.5 flex gap-1.5">
+        <ShieldCheck className="w-4 h-4 shrink-0" /> Este número puede enviar mensajes. Meta solo marca algo pendiente de las llamadas de WhatsApp, que Konnexa no usa.
+      </p>
+    );
   if (!noSendPerm && !blocked) {
     if (l.canSend === 'AVAILABLE')
       return (
@@ -74,6 +82,9 @@ function SendCheck({ l }: { l: Limits }) {
           whatsapp_business_messaging y whatsapp_business_management, y pégalo en Integraciones → WhatsApp. Si la conectaste con «Conectar con Facebook», desconéctala y vuelve a
           conectarla aceptando todos los permisos.
         </p>
+      )}
+      {!noSendPerm && !(l.sendProblems || []).length && (
+        <p>Meta no dice el motivo. Suele pasar con números nuevos mientras revisa el nombre visible o el método de pago. Crea tus plantillas y prueba enviar una: si sale, no hay problema.</p>
       )}
       {(l.sendProblems || []).map((p, i) => (
         <p key={i}>
