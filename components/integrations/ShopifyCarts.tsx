@@ -43,6 +43,9 @@ const STATUS: Record<Cart['status'], { label: string; cls: string }> = {
   failed: { label: 'Error', cls: 'bg-red-50 text-red-700' },
 };
 const DELAYS = [
+  [2, '2 minutos'],
+  [5, '5 minutos'],
+  [10, '10 minutos'],
   [15, '15 minutos'],
   [30, '30 minutos'],
   [60, '1 hora'],
