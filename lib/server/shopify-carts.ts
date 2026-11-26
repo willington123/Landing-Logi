@@ -1,5 +1,6 @@
 // Shopify abandoned carts → WhatsApp. The store adds a webhook in Shopify (Configuración → Notificaciones →
-// Webhooks: "Creación de pago" / "Actualización de pago" and "Creación de pedido") pointing to
+// Webhooks: "Creación de pago" / "Actualización de pago", "Creación de pedido preliminar" for contraentrega forms like
+// Releasit, and "Creación de pedido") pointing to
 // /api/shopify/webhook/<org>. Each checkout with a phone is kept here; if it isn't paid after the store's delay,
 // Konnexa sends the "recuperar_carrito" template with Confirmar pedido / No, gracias. "Confirmar pedido" creates the
 // order in Konnexa (contraentrega), like any other.
@@ -104,6 +105,44 @@ function phoneOf(c: any): string {
 }
 
 
+// Cities that forms leave as placeholders ("Toca Para Seleccionar", "-", "S", "Ciudad").
+function cleanCity(v: unknown): string {
+  const c = clean(v, 80);
+  if (/^(toca para seleccionar|selecciona.*|ciudad|municipio|-+|\.+|.)$/i.test(c)) return '';
+  // "VILLAVICENCIO" → "Villavicencio" (all caps only; "Bogotá D.C." stays).
+  return c === c.toUpperCase() && /[A-ZÁÉÍÓÚÑ]{3}/.test(c) ? c.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()) : c;
+}
+
+// Releasit (contraentrega form) saves an abandoned form as a draft order tagged "abandoned_checkout_releasit_cod_form",
+// with the form's answers in note_attributes. As the checkout shape cartFromCheckout reads, or null if it isn't one.
+function draftAsCheckout(d: any): any | null {
+  if (!/abandon/i.test(String(d?.tags || ''))) return null; // a draft order the store made by hand
+  const attrs: Record<string, string> = {};
+  for (const a of Array.isArray(d?.note_attributes) ? d.note_attributes : []) attrs[String(a?.name || '').toLowerCase()] = String(a?.value ?? '');
+  const ship = d?.shipping_address || d?.billing_address || {};
+  const fullName = attrs['nombre completo'] || ship.name || '';
+  return {
+    token: `draft-${d?.id}`,
+    created_at: d?.created_at,
+    completed_at: d?.completed_at || (d?.status === 'completed' ? d?.updated_at || new Date().toISOString() : null),
+    phone: ship.phone || attrs['número celular'] || attrs['numero celular'] || attrs['celular'] || d?.customer?.phone || '',
+    email: d?.email,
+    customer: d?.customer,
+    shipping_address: {
+      ...ship,
+      first_name: ship.first_name || fullName,
+      last_name: ship.first_name ? ship.last_name : '',
+      city: ship.city || attrs['ciudad'],
+      province: ship.province || attrs['departamento'],
+      address1: ship.address1 || attrs['dirección'] || attrs['direccion'],
+    },
+    line_items: d?.line_items,
+    total_price: d?.total_price,
+    currency: d?.currency,
+    abandoned_checkout_url: attrs['recovery url'] || '',
+  };
+}
+
 // A Shopify checkout (webhook or Admin API) as a cart, or null without a phone or products.
 function cartFromCheckout(body: any, prev: ShopifyCart | undefined, now: string): ShopifyCart | null {
   const token = clean(body?.token || body?.cart_token || body?.id, 80);
@@ -111,6 +150,9 @@ function cartFromCheckout(body: any, prev: ShopifyCart | undefined, now: string)
   if (!token || !phone) return null;
   const ship = body?.shipping_address || body?.billing_address || {};
   const name = clean([ship.first_name || body?.customer?.first_name, ship.last_name || body?.customer?.last_name].filter(Boolean).join(' '), 120)
+    .replace(/(^|\s)['-]+(?=\s|$)/g, ' ') // forms fill the last name with "-"
+    .replace(/\s+/g, ' ')
+    .trim()
     .toLowerCase()
     .replace(/(^|\s)\S/g, (m) => m.toUpperCase());
   const items = (Array.isArray(body?.line_items) ? body.line_items : [])
@@ -128,7 +170,7 @@ function cartFromCheckout(body: any, prev: ShopifyCart | undefined, now: string)
     total: money(body?.total_price) || items.reduce((s: number, i: { qty: number; price: number }) => s + i.qty * i.price, 0),
     currency: clean(body?.presentment_currency || body?.currency, 5) || 'COP',
     address: clean([ship.address1, ship.address2].filter(Boolean).join(', ')),
-    city: clean(ship.city, 80),
+    city: cleanCity(ship.city),
     department: clean(ship.province, 80),
     url: clean(body?.abandoned_checkout_url, 500) || undefined,
     updatedAt: now,
@@ -150,7 +192,12 @@ export async function handleShopifyEvent(topic: string, body: any) {
     await saveCarts(all);
     return { kept: false };
   }
-  if (!/^checkouts\//.test(topic)) return { kept: false };
+  // Releasit's abandoned forms arrive as draft orders.
+  if (/^draft_orders\//.test(topic)) {
+    const asCheckout = draftAsCheckout(body);
+    if (!asCheckout) return { kept: false };
+    body = asCheckout;
+  } else if (!/^checkouts\//.test(topic)) return { kept: false };
   const token = clean(body?.token || body?.cart_token || body?.id, 80);
   if (!token) return { kept: false };
   const prev = all[token];
@@ -162,6 +209,9 @@ export async function handleShopifyEvent(topic: string, body: any) {
   const cart = cartFromCheckout(body, prev, now);
   if (!cart) return { kept: false }; // no phone or no products: nobody / nothing to write about
   all[token] = cart;
+  // One message per customer: an older cart of the same phone still waiting is replaced by this one.
+  for (const c of Object.values(all))
+    if (c.token !== token && c.phone === cart.phone && c.status === 'waiting') all[c.token] = { ...c, status: 'skipped', note: 'Tiene un carrito más reciente.' };
   await saveCarts(all);
   return { kept: true };
 }
@@ -210,6 +260,8 @@ export async function processCarts(now = new Date()) {
     let patch: Partial<ShopifyCart>;
     if (now.getTime() - Date.parse(c.updatedAt) > MAX_AGE_TO_WRITE_H * 3600000) patch = { status: 'skipped', note: 'Pasaron más de 48 horas.' };
     else if (await orderedLately(c.phone, Date.parse(c.createdAt) - 3600000).catch(() => false)) patch = { status: 'skipped', note: 'Ya tiene un pedido en Konnexa.' };
+    else if (Object.values(all).some((o) => o.token !== c.token && o.phone === c.phone && o.sentAt && now.getTime() - Date.parse(o.sentAt) < 3 * 86400000))
+      patch = { status: 'skipped', note: 'Ya se le escribió por otro carrito hace poco.' };
     else {
       const r = await sendCart(c);
       patch = r.ok ? { status: 'sent', sentAt: new Date().toISOString(), note: undefined } : { status: 'failed', note: r.error };
