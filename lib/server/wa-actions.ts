@@ -150,25 +150,29 @@ export async function handleInbound(m: InboundMessage) {
     const named = await findOrderByNumber(m.orderNumber);
     if (named) await linkConversationOrder(m.from, named.id);
   }
-  if (!m.intent) {
+  // A normal chat message (the assistant, automatic replies and flows).
+  const asChat = async (msg: InboundMessage) => {
     // A normal chat message: answer it automatically if a rule or the out-of-hours message applies.
     // The AI assistant answers if it's on; otherwise (or if it fails) the keyword / out-of-hours replies.
-    const fallback = () => autoReply(m).catch((e) => console.error('WhatsApp: respuesta automática falló', e));
-    const byBot = await botTakesMessage(m, fallback).catch((e) => {
+    const fallback = () => autoReply(msg).catch((e) => console.error('WhatsApp: respuesta automática falló', e));
+    const byBot = await botTakesMessage(msg, fallback).catch((e) => {
       console.error('Asistente IA: no se pudo iniciar', e);
       return false;
     });
     if (!byBot) {
       await fallback();
       // Nobody but a person will answer this one: tell them on their phone.
-      await (await import('@/lib/server/push')).pushToStore({ kind: 'message', chatId: m.from, title: m.profileName || 'Nuevo mensaje', body: m.text || 'Te envió un archivo.' });
+      await (await import('@/lib/server/push')).pushToStore({ kind: 'message', chatId: msg.from, title: msg.profileName || 'Nuevo mensaje', body: msg.text || 'Te envió un archivo.' });
     }
     // The store's own flows ("un cliente escribe una palabra clave"), after the reply.
-    if (m.text) await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'message', phone: m.from, text: m.text, name: m.profileName });
-    return;
-  }
+    if (msg.text) await (await import('@/lib/server/flows')).emitFlowEvent({ type: 'message', phone: msg.from, text: msg.text, name: msg.profileName });
+  };
+  if (!m.intent) return asChat(m);
 
   const order = m.orderNumber ? await findOrderByNumber(m.orderNumber, true) : await findPendingOrder(m.from, m.orderId);
+  // A "Confirmar pedido" / "Cancelar" tap with no order behind it (e.g. a template from a mass send) is a chat
+  // message: the assistant (or a person) answers it.
+  if (!order && !m.orderId && !m.orderNumber) return asChat({ ...m, intent: null });
   if (!order) {
     await reply(
       m.from,
