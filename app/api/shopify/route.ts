@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { currentOrgId } from '@/lib/server/tenant';
 import { requireManager } from '@/lib/server/integrations-api';
 import { publicBaseUrl } from '@/lib/server/vapi';
-import { CART_DELAYS, DEFAULT_SHOPIFY, getCarts, getShopifySettings, saveShopifySettings, sendCarts } from '@/lib/server/shopify-carts';
+import { CART_DELAYS, DEFAULT_SHOPIFY, getCarts, getDeliveries, getShopifySettings, saveShopifySettings, sendCarts } from '@/lib/server/shopify-carts';
 import { fail, failFrom, ok } from '@/lib/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const org = await currentOrgId();
-    const [s, carts] = await Promise.all([getShopifySettings(), getCarts()]);
+    const [s, carts, deliveries] = await Promise.all([getShopifySettings(), getCarts(), getDeliveries().catch(() => [])]);
     const list = Object.values(carts)
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
       .slice(0, 300)
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       settings: { enabled: s.enabled, delayMinutes: s.delayMinutes, hasSecret: Boolean(s.secret) },
       webhookUrl: `${publicBaseUrl(req.nextUrl.origin)}/api/shopify/webhook/${org}`,
       carts: list,
+      deliveries: deliveries.slice(0, 15),
     });
   } catch (e) {
     return failFrom(e);
