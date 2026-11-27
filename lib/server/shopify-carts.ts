@@ -118,10 +118,13 @@ function cleanCity(v: unknown): string {
 
 // Releasit (contraentrega form) saves an abandoned form as a draft order tagged "abandoned_checkout_releasit_cod_form",
 // with the form's answers in note_attributes. As the checkout shape cartFromCheckout reads, or null if it isn't one.
-function draftAsCheckout(d: any): any | null {
-  if (!/abandon/i.test(String(d?.tags || ''))) return null; // a draft order the store made by hand
+export function draftAsCheckout(d: any): any | null {
   const attrs: Record<string, string> = {};
   for (const a of Array.isArray(d?.note_attributes) ? d.note_attributes : []) attrs[String(a?.name || '').toLowerCase()] = String(a?.value ?? '');
+  // A form's abandoned order: Releasit's tag (it may only arrive in a later update), or the form's own answers
+  // ("Recovery URL", "Número celular"). A draft the store makes by hand has none of these.
+  const fromForm = /abandon|releasit|cod.?form/i.test(String(d?.tags || '')) || 'recovery url' in attrs || 'número celular' in attrs || 'numero celular' in attrs;
+  if (!fromForm) return null;
   const ship = d?.shipping_address || d?.billing_address || {};
   const fullName = attrs['nombre completo'] || ship.name || '';
   return {
@@ -181,7 +184,7 @@ function cartFromCheckout(body: any, prev: ShopifyCart | undefined, now: string)
 }
 
 // checkouts/create and checkouts/update: keep the cart (or mark it paid); orders/create: the customer bought.
-export async function handleShopifyEvent(topic: string, body: any) {
+export async function handleShopifyEvent(topic: string, body: any): Promise<{ kept: boolean; why: string }> {
   const all = await getCarts();
   const now = new Date().toISOString();
   if (/^orders\//.test(topic)) {
@@ -193,30 +196,47 @@ export async function handleShopifyEvent(topic: string, body: any) {
       }
     }
     await saveCarts(all);
-    return { kept: false };
+    return { kept: false, why: 'Pedido: si tenía carrito pendiente, quedó como comprado.' };
   }
   // Releasit's abandoned forms arrive as draft orders.
   if (/^draft_orders\//.test(topic)) {
     const asCheckout = draftAsCheckout(body);
-    if (!asCheckout) return { kept: false };
+    if (!asCheckout) return { kept: false, why: 'Borrador hecho a mano (no es de un formulario): se ignora.' };
     body = asCheckout;
-  } else if (!/^checkouts\//.test(topic)) return { kept: false };
+  } else if (!/^checkouts\//.test(topic)) return { kept: false, why: `Aviso «${topic}» que Konnexa no usa.` };
   const token = clean(body?.token || body?.cart_token || body?.id, 80);
-  if (!token) return { kept: false };
+  if (!token) return { kept: false, why: 'Sin identificador.' };
   const prev = all[token];
   if (body?.completed_at) {
     if (prev) all[token] = { ...prev, status: prev.status === 'sent' ? 'recovered' : 'purchased', note: 'Compró en Shopify.', updatedAt: now };
     await saveCarts(all);
-    return { kept: false };
+    return { kept: false, why: 'Ya terminó la compra.' };
   }
   const cart = cartFromCheckout(body, prev, now);
-  if (!cart) return { kept: false }; // no phone or no products: nobody / nothing to write about
+  if (!cart) return { kept: false, why: phoneOf(body) ? 'Sin productos.' : 'Sin celular.' }; // nobody / nothing to write about
   all[token] = cart;
   // One message per customer: an older cart of the same phone still waiting is replaced by this one.
   for (const c of Object.values(all))
     if (c.token !== token && c.phone === cart.phone && c.status === 'waiting') all[c.token] = { ...c, status: 'skipped', note: 'Tiene un carrito más reciente.' };
   await saveCarts(all);
-  return { kept: true };
+  return { kept: true, why: `Carrito guardado (${cart.name || `+${cart.phone}`}).` };
+}
+
+// ---------- what Shopify sent (to check the setup) ----------
+
+export interface Delivery {
+  at: string;
+  topic: string;
+  ref: string; // #D25, the checkout token…
+  result: string;
+  ok: boolean;
+}
+export async function getDeliveries(): Promise<Delivery[]> {
+  return (await read<{ items?: Delivery[] }>('shopify_log'))?.items || [];
+}
+export async function logDelivery(d: Omit<Delivery, 'at'>) {
+  const items = [{ ...d, at: new Date().toISOString() }, ...(await getDeliveries())].slice(0, 30);
+  await write('shopify_log', { items });
 }
 
 // ---------- sending ----------

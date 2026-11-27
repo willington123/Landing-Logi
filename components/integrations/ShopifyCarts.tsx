@@ -24,7 +24,15 @@ interface Info {
   settings: { enabled: boolean; delayMinutes: number; hasSecret: boolean };
   webhookUrl: string;
   carts: Cart[];
+  deliveries?: { at: string; topic: string; ref: string; result: string; ok: boolean }[];
 }
+const TOPICS: Record<string, string> = {
+  'checkouts/create': 'Pago creado',
+  'checkouts/update': 'Pago actualizado',
+  'orders/create': 'Pedido creado',
+  'draft_orders/create': 'Pedido preliminar creado',
+  'draft_orders/update': 'Pedido preliminar actualizado',
+};
 
 async function call<T = any>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json' } });
@@ -133,7 +141,7 @@ export default function ShopifyCarts() {
             {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Copy className="w-4 h-4 text-slate-400 shrink-0" />}
           </button>
           Crea estos, todos con la misma URL: <b>Creación de pago</b> (Checkout creation), <b>Actualización de pago</b> (Checkout update), <b>Creación de pedido</b> (Order creation)
-          y, si usas un formulario contraentrega como <b>Releasit</b>, <b>Creación de pedido preliminar</b> (Draft order creation): ahí guardan los formularios que el cliente no terminó.
+          y, si usas un formulario contraentrega como <b>Releasit</b>, <b>Creación de pedido preliminar</b> (Draft order creation) y <b>Actualización de pedido preliminar</b> (Draft order update): ahí guardan los formularios que el cliente no terminó.
         </li>
         <li>
           Debajo de la lista de webhooks Shopify dice «Tus webhooks se firmarán con …». Copia esa clave y pégala aquí:
@@ -179,6 +187,28 @@ export default function ShopifyCarts() {
         No se escribe a quien ya compró en Shopify, a quien ya tiene un pedido en Konnexa, ni a carritos de más de 48 horas. Cada carrito recibe un solo mensaje.
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <details className="rounded-xl border border-slate-200 p-3" open={!info.carts.length}>
+        <summary className="cursor-pointer text-[13px] font-semibold text-slate-900">Avisos recibidos de Shopify ({(info.deliveries || []).length})</summary>
+        <p className="mt-1 text-[12px] text-slate-500">Cada vez que Shopify le avisa algo a Konnexa aparece aquí, con lo que Konnexa hizo. Sirve para revisar que los webhooks estén bien.</p>
+        {!(info.deliveries || []).length ? (
+          <p className="mt-2 text-[12.5px] text-amber-700">
+            Shopify todavía no ha enviado ningún aviso. Revisa en Shopify (Configuración → Notificaciones → Webhooks) que estén creados con la URL de arriba, en formato JSON. Si usas
+            Releasit, el que importa es «Creación de pedido preliminar».
+          </p>
+        ) : (
+          <div className="mt-2 divide-y divide-slate-100">
+            {(info.deliveries || []).map((d, i) => (
+              <div key={i} className="py-1.5 text-[12px] flex flex-wrap gap-x-2">
+                <span className="text-slate-400">{when(d.at)}</span>
+                <span className="font-medium text-slate-700">{TOPICS[d.topic] || d.topic || 'Aviso'}</span>
+                {d.ref && <span className="font-mono text-slate-500">{d.ref}</span>}
+                <span className={d.ok ? 'text-slate-600' : 'text-red-600'}>{d.result}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </details>
 
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
